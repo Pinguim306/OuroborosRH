@@ -20,11 +20,13 @@ contract Deploy is Script {
         address router = vm.envOr("DEX_ROUTER", 0x89e5DB8B5aA49aA85AC63f691524311AEB649eba);
 
         // Total per-trade fee 1.5%: 0.5% dev + 0.6% liquidity + 0.4% holders.
-        // 1B supply, 30 native virtual seed, graduate at 4 ETH raised, and an
-        // anti-whale cap of 2% of supply per buy during the curve.
+        // 1B supply; 1 ETH virtual seed paired with the 4 ETH graduation target so the
+        // DEX price at graduation stays close to the curve's final price (a large
+        // virtual seed relative to the target would crash the price on migration).
+        // Anti-whale cap of 2% of supply per buy during the curve.
         Launchpad.CurveParams memory params = Launchpad.CurveParams({
             totalSupply: 1_000_000_000 ether,
-            virtualNative: 30 ether,
+            virtualNative: 1 ether,
             devFeeBps: 50,
             liqFeeBps: 60,
             holderFeeBps: 40,
