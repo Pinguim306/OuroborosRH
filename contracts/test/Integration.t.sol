@@ -27,7 +27,8 @@ contract IntegrationTest is Test {
             devFeeBps: DEV_BPS,
             liqFeeBps: 60,
             holderFeeBps: 40,
-            graduationTarget: 400 ether
+            graduationTarget: 400 ether,
+            maxBuyBps: 0
         });
         MockDexRouter router = new MockDexRouter(address(new MockDexFactory()), address(new MockWETH()));
         launchpad = new Launchpad(address(this), dev, address(router), CREATION_FEE, p);

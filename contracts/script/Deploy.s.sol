@@ -20,14 +20,16 @@ contract Deploy is Script {
         address router = vm.envOr("DEX_ROUTER", 0x89e5DB8B5aA49aA85AC63f691524311AEB649eba);
 
         // Total per-trade fee 1.5%: 0.5% dev + 0.6% liquidity + 0.4% holders.
-        // 1B supply, 30 native virtual seed, graduate at 400 native raised.
+        // 1B supply, 30 native virtual seed, graduate at 4 ETH raised, and an
+        // anti-whale cap of 2% of supply per buy during the curve.
         Launchpad.CurveParams memory params = Launchpad.CurveParams({
             totalSupply: 1_000_000_000 ether,
             virtualNative: 30 ether,
             devFeeBps: 50,
             liqFeeBps: 60,
             holderFeeBps: 40,
-            graduationTarget: 400 ether
+            graduationTarget: 4 ether,
+            maxBuyBps: 200
         });
 
         // Creation fee charged on every launch (native coin = ETH on Robinhood Chain).

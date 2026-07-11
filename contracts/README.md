@@ -31,6 +31,10 @@ Per-trade fee **1.5%**, split three ways between permanent liquidity, holder
 rewards, and a platform fee. Plus a fixed **creation fee** in the native coin (ETH)
 charged on every launch — `0.01 ETH` by default.
 
+Launch defaults also include a **graduation target of 4 ETH** raised and an
+**anti-whale max buy of 2% of supply per transaction** during the curve
+(`maxBuyBps = 200`; set 0 to disable). All configurable via `setParams`.
+
 The exact per-destination split (`devFeeBps` / `liqFeeBps` / `holderFeeBps`) and the
 fee recipient are set at deploy time (see `script/Deploy.s.sol`) and are
 owner-configurable on-chain via `setParams`, `setFeeRecipient`, and

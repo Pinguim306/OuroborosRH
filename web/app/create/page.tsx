@@ -110,7 +110,8 @@ export default function CreatePage() {
             <ul className="grid grid-cols-2 gap-y-1">
               <li>Supply: <span className="text-white/70">1,000,000,000</span></li>
               <li>Trade fee: <span className="text-white/70">1.5%</span></li>
-              <li>Graduation: <span className="text-white/70">400 {NATIVE_SYMBOL} raised</span></li>
+              <li>Graduation: <span className="text-white/70">4 {NATIVE_SYMBOL} raised</span></li>
+              <li>Max buy: <span className="text-white/70">2% of supply</span></li>
               <li>Rewards: <span className="text-venom-400">to holders, no staking</span></li>
             </ul>
             <p className="mt-2 text-white/40">

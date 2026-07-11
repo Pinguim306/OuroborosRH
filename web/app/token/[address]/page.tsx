@@ -78,7 +78,7 @@ export default function TokenPage() {
             <div className="mb-4 flex items-center justify-between">
               <h3 className="font-semibold">Bonding curve</h3>
               <span className="text-xs text-white/40">
-                Graduates at 400 {NATIVE_SYMBOL} of real liquidity
+                Graduates at 4 {NATIVE_SYMBOL} raised · max buy 2%
               </span>
             </div>
             {token.graduated ? (

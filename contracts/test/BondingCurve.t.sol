@@ -31,7 +31,8 @@ contract BondingCurveTest is Test {
             devFeeBps: DEV_BPS,
             liqFeeBps: LIQ_BPS,
             holderFeeBps: HOLDER_BPS,
-            graduationTarget: TARGET
+            graduationTarget: TARGET,
+            maxBuyBps: 0
         });
         launchpad = new Launchpad(address(this), dev, address(router), CREATION_FEE, p);
         vm.deal(alice, 100 ether);
@@ -153,7 +154,8 @@ contract BondingCurveTest is Test {
             devFeeBps: DEV_BPS,
             liqFeeBps: LIQ_BPS,
             holderFeeBps: HOLDER_BPS,
-            graduationTarget: 5 ether
+            graduationTarget: 5 ether,
+            maxBuyBps: 0
         });
         Launchpad lp = new Launchpad(address(this), dev, address(router), 0, p);
         (address t, address c) = lp.createToken("Grad", "GRAD", "");
@@ -180,5 +182,36 @@ contract BondingCurveTest is Test {
         curve.buy{value: 1 ether}(0);
     }
 
+    function testMaxBuyCapEnforced() public {
+        Launchpad.CurveParams memory p = Launchpad.CurveParams({
+            totalSupply: SUPPLY,
+            virtualNative: VIRTUAL,
+            devFeeBps: DEV_BPS,
+            liqFeeBps: LIQ_BPS,
+            holderFeeBps: HOLDER_BPS,
+            graduationTarget: TARGET,
+            maxBuyBps: 200 // 2%
+        });
+        Launchpad lp = new Launchpad(address(this), dev, address(router), 0, p);
+        (address t, address c) = lp.createToken("Cap", "CAP", "");
+        OuroToken token = OuroToken(payable(t));
+        BondingCurve curve = BondingCurve(payable(c));
+
+        assertEq(curve.maxBuyTokens(), (SUPPLY * 200) / 10_000); // 2% of supply
+
+        // A large buy would receive more than 2% of supply -> reverts.
+        vm.prank(alice);
+        vm.expectRevert(BondingCurve.MaxBuyExceeded.selector);
+        curve.buy{value: 5 ether}(0);
+
+        // A small buy stays under the cap and succeeds.
+        vm.prank(alice);
+        uint256 out = curve.buy{value: 0.1 ether}(0);
+        assertLe(out, curve.maxBuyTokens());
+        assertGt(out, 0);
+        assertEq(token.balanceOf(alice), out);
+    }
+
     receive() external payable {}
 }
+

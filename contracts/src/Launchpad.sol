@@ -21,6 +21,7 @@ contract Launchpad is Ownable, ReentrancyGuard {
         uint256 liqFeeBps; // per-trade fee that becomes permanent liquidity
         uint256 holderFeeBps; // per-trade fee streamed to holders
         uint256 graduationTarget; // real native raised that graduates the curve
+        uint256 maxBuyBps; // anti-whale: max tokens per buy as bps of supply (0 = off)
     }
 
     CurveParams public params;
@@ -131,7 +132,8 @@ contract Launchpad is Ownable, ReentrancyGuard {
             p.devFeeBps,
             p.liqFeeBps,
             p.holderFeeBps,
-            p.graduationTarget
+            p.graduationTarget,
+            p.maxBuyBps
         );
 
         // 3. Exclude the curve from dividends, then hand it the supply to sell.

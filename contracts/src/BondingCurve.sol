@@ -40,6 +40,12 @@ contract BondingCurve is ReentrancyGuard {
     uint256 public immutable holderFeeBps;
     uint256 public immutable graduationTarget;
 
+    /// @notice Anti-whale cap: max tokens a single buy may receive, as bps of total
+    ///         supply (e.g. 200 = 2%). 0 disables the cap. Applies during the curve
+    ///         only — once graduated, trading is on the DEX with no cap.
+    uint256 public immutable maxBuyBps;
+    uint256 public immutable maxBuyTokens;
+
     bool public graduated;
     /// @notice The DEX pair created at graduation (0 until graduated).
     address public pair;
@@ -58,6 +64,7 @@ contract BondingCurve is ReentrancyGuard {
     error SlippageExceeded();
     error ZeroAmount();
     error NativeTransferFailed();
+    error MaxBuyExceeded();
 
     constructor(
         address _token,
@@ -68,7 +75,8 @@ contract BondingCurve is ReentrancyGuard {
         uint256 _devFeeBps,
         uint256 _liqFeeBps,
         uint256 _holderFeeBps,
-        uint256 _graduationTarget
+        uint256 _graduationTarget,
+        uint256 _maxBuyBps
     ) {
         token = OuroToken(payable(_token));
         feeRecipient = _feeRecipient;
@@ -79,6 +87,8 @@ contract BondingCurve is ReentrancyGuard {
         liqFeeBps = _liqFeeBps;
         holderFeeBps = _holderFeeBps;
         graduationTarget = _graduationTarget;
+        maxBuyBps = _maxBuyBps;
+        maxBuyTokens = (_curveSupply * _maxBuyBps) / BPS;
     }
 
     // --------------------------------------------------------------------- //
@@ -133,6 +143,7 @@ contract BondingCurve is ReentrancyGuard {
 
         tokensOut = getAmountOut(netIn, nativeReserve, tokenReserve);
         if (tokensOut < minTokensOut) revert SlippageExceeded();
+        if (maxBuyTokens != 0 && tokensOut > maxBuyTokens) revert MaxBuyExceeded();
 
         nativeReserve += netIn + liqPart;
         tokenReserve -= tokensOut;
