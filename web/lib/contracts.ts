@@ -52,6 +52,51 @@ export const launchpadAbi = [
     inputs: [],
     outputs: [{ type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "marketIndexByToken",
+    stateMutability: "view",
+    inputs: [{ name: "token", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "markets",
+    stateMutability: "view",
+    inputs: [{ name: "index", type: "uint256" }],
+    outputs: [
+      { name: "token", type: "address" },
+      { name: "curve", type: "address" },
+      { name: "creator", type: "address" },
+      { name: "name", type: "string" },
+      { name: "symbol", type: "string" },
+      { name: "metadataURI", type: "string" },
+      { name: "createdAt", type: "uint256" },
+    ],
+  },
+  {
+    type: "function",
+    name: "getMarkets",
+    stateMutability: "view",
+    inputs: [
+      { name: "offset", type: "uint256" },
+      { name: "limit", type: "uint256" },
+    ],
+    outputs: [
+      {
+        type: "tuple[]",
+        components: [
+          { name: "token", type: "address" },
+          { name: "curve", type: "address" },
+          { name: "creator", type: "address" },
+          { name: "name", type: "string" },
+          { name: "symbol", type: "string" },
+          { name: "metadataURI", type: "string" },
+          { name: "createdAt", type: "uint256" },
+        ],
+      },
+    ],
+  },
 ] as const;
 
 export const curveAbi = [
@@ -74,6 +119,26 @@ export const curveAbi = [
   },
   {
     type: "function",
+    name: "quoteBuy",
+    stateMutability: "view",
+    inputs: [{ name: "nativeIn", type: "uint256" }],
+    outputs: [
+      { name: "tokensOut", type: "uint256" },
+      { name: "totalFee", type: "uint256" },
+    ],
+  },
+  {
+    type: "function",
+    name: "quoteSell",
+    stateMutability: "view",
+    inputs: [{ name: "tokenIn", type: "uint256" }],
+    outputs: [
+      { name: "nativeOut", type: "uint256" },
+      { name: "totalFee", type: "uint256" },
+    ],
+  },
+  {
+    type: "function",
     name: "currentPrice",
     stateMutability: "view",
     inputs: [],
@@ -82,6 +147,22 @@ export const curveAbi = [
   {
     type: "function",
     name: "graduationProgress",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  { type: "function", name: "graduated", stateMutability: "view", inputs: [], outputs: [{ type: "bool" }] },
+  { type: "function", name: "pair", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  {
+    type: "function",
+    name: "realNativeRaised",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "graduationTarget",
     stateMutability: "view",
     inputs: [],
     outputs: [{ type: "uint256" }],
@@ -116,6 +197,30 @@ export const tokenAbi = [
     name: "totalRewardsDistributed",
     stateMutability: "view",
     inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  { type: "function", name: "totalSupply", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "name", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
+  { type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
+  { type: "function", name: "metadataURI", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "allowance",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
     outputs: [{ type: "uint256" }],
   },
 ] as const;

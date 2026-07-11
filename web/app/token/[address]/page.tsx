@@ -5,6 +5,9 @@ import Link from "next/link";
 import { getToken, mockTrades, mockHolders } from "@/lib/mock/data";
 import { compact, rh, pct, shortAddr, timeAgo } from "@/lib/format";
 import { NATIVE_SYMBOL } from "@/lib/chain";
+import { LIVE } from "@/lib/contracts";
+import { useLiveToken } from "@/lib/useMarkets";
+import type { Address } from "@/lib/types";
 import { StatTile } from "@/components/StatTile";
 import { ProgressBar } from "@/components/ProgressBar";
 import { TradeWidget } from "@/components/TradeWidget";
@@ -13,7 +16,12 @@ import { RewardsPanel } from "@/components/RewardsPanel";
 export default function TokenPage() {
   const params = useParams();
   const address = Array.isArray(params.address) ? params.address[0] : params.address;
-  const token = address ? getToken(address) : undefined;
+  const live = useLiveToken(address as Address | undefined);
+  const token = LIVE ? live.token : address ? getToken(address) : undefined;
+
+  if (LIVE && live.isLoading && !token) {
+    return <div className="mx-auto max-w-md px-4 py-32 text-center text-white/50">Loading token…</div>;
+  }
 
   if (!token) {
     return (
@@ -28,8 +36,9 @@ export default function TokenPage() {
     );
   }
 
-  const trades = mockTrades(token);
-  const holders = mockHolders(token);
+  // Trades/holders feeds need an off-chain indexer; shown from mock data in demo mode.
+  const trades = LIVE ? [] : mockTrades(token);
+  const holders = LIVE ? [] : mockHolders(token);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -95,6 +104,11 @@ export default function TokenPage() {
           {/* Trades */}
           <div className="glass overflow-hidden">
             <div className="border-b border-white/5 px-5 py-3 text-sm font-semibold">Recent trades</div>
+            {trades.length === 0 ? (
+              <div className="px-5 py-8 text-center text-xs text-white/35">
+                Live trade history needs an indexer — coming soon. Trades still settle on-chain.
+              </div>
+            ) : (
             <div className="max-h-80 overflow-y-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-obsidian-850/90 text-left text-xs text-white/40">
@@ -121,6 +135,7 @@ export default function TokenPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </div>
 
           {/* Holders */}
@@ -129,18 +144,24 @@ export default function TokenPage() {
               <span className="text-sm font-semibold">Top holders</span>
               <span className="text-xs text-white/40">Fees claimable (accrued, no staking)</span>
             </div>
-            <div className="divide-y divide-white/5">
-              {holders.map((h, i) => (
-                <div key={h.address} className="flex items-center gap-3 px-5 py-3 text-sm">
-                  <span className="w-5 text-white/30">{i + 1}</span>
-                  <span className="flex-1 font-mono text-white/60">{shortAddr(h.address)}</span>
-                  <span className="w-16 text-right text-white/50">{pct(h.sharePct / 100)}</span>
-                  <span className="w-28 text-right font-mono font-semibold text-venom-400">
-                    {rh(h.claimableRh, 3)}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {holders.length === 0 ? (
+              <div className="px-5 py-8 text-center text-xs text-white/35">
+                Holder rankings need an indexer — coming soon.
+              </div>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {holders.map((h, i) => (
+                  <div key={h.address} className="flex items-center gap-3 px-5 py-3 text-sm">
+                    <span className="w-5 text-white/30">{i + 1}</span>
+                    <span className="flex-1 font-mono text-white/60">{shortAddr(h.address)}</span>
+                    <span className="w-16 text-right text-white/50">{pct(h.sharePct / 100)}</span>
+                    <span className="w-28 text-right font-mono font-semibold text-venom-400">
+                      {rh(h.claimableRh, 3)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
