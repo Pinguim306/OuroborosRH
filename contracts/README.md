@@ -58,10 +58,13 @@ exclusions); every expectation in `test/OuroToken.t.sol` was verified against it
 ## Deploy
 
 ```bash
-export PRIVATE_KEY=0x...
-export RPC=https://rpc.robinhood-chain...   # Robinhood Chain RPC
+export PRIVATE_KEY=0x...                              # a funded deployer key
+export RPC=https://rpc.mainnet.chain.robinhood.com    # Robinhood Chain (id 4663)
 forge script script/Deploy.s.sol --rpc-url $RPC --broadcast
 ```
+
+> Tip: deploy to the **testnet first** (faucet at
+> `faucet.testnet.chain.robinhood.com`) — these contracts are unaudited.
 
 The deploy script sets `feeRecipient` to the developer wallet
 `0x1c06a7dE6951d62CbaD36FC449770BEE2d8c2b23` and a creation fee of `0.01 ETH`.

@@ -1,19 +1,20 @@
 import { defineChain } from "viem";
 
 /**
- * Robinhood Chain network config. Values are placeholders where public constants
- * are not yet finalized — update `id`, `rpcUrls`, and `blockExplorers` for the
- * network you deploy to (testnet or mainnet).
+ * Robinhood Chain mainnet — an Arbitrum L2 with ETH as the native gas token.
+ * Source: chainlist.org/chain/4663 and docs.robinhood.com/chain.
+ * For the testnet, swap in its chain id + RPC (faucet at
+ * faucet.testnet.chain.robinhood.com) — recommended for first deploys.
  */
 export const robinhoodChain = defineChain({
-  id: 42070,
+  id: 4663,
   name: "Robinhood Chain",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: {
-    default: { http: ["https://rpc.robinhoodchain.example"] },
+    default: { http: ["https://rpc.mainnet.chain.robinhood.com"] },
   },
   blockExplorers: {
-    default: { name: "Robinhood Explorer", url: "https://explorer.robinhoodchain.example" },
+    default: { name: "Blockscout", url: "https://robinhoodchain.blockscout.com" },
   },
   testnet: false,
 });
