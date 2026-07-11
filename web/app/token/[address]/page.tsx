@@ -79,10 +79,11 @@ export default function TokenPage() {
             ) : (
               <ProgressBar value={token.graduationProgress} label="Progress to graduation" />
             )}
-            <div className="mt-5 grid grid-cols-3 gap-3 text-center">
-              <MiniStat label="Fee → liquidity" value="60%" accent />
-              <MiniStat label="Fee → rewards" value="40%" accent />
-              <MiniStat label="Trade fee" value="1%" />
+            <div className="mt-5 grid grid-cols-4 gap-3 text-center">
+              <MiniStat label="→ Liquidity" value="0.6%" accent />
+              <MiniStat label="→ Holders" value="0.4%" accent />
+              <MiniStat label="→ Developer" value="0.5%" />
+              <MiniStat label="Total fee" value="1.5%" />
             </div>
           </div>
 
@@ -119,8 +120,9 @@ export default function TokenPage() {
 
           {/* Holders */}
           <div className="glass overflow-hidden">
-            <div className="border-b border-white/5 px-5 py-3 text-sm font-semibold">
-              Top holders & loyalty
+            <div className="flex items-center justify-between border-b border-white/5 px-5 py-3">
+              <span className="text-sm font-semibold">Top holders</span>
+              <span className="text-xs text-white/40">Fees claimable (accrued, no staking)</span>
             </div>
             <div className="divide-y divide-white/5">
               {holders.map((h, i) => (
@@ -128,10 +130,9 @@ export default function TokenPage() {
                   <span className="w-5 text-white/30">{i + 1}</span>
                   <span className="flex-1 font-mono text-white/60">{shortAddr(h.address)}</span>
                   <span className="w-16 text-right text-white/50">{pct(h.sharePct / 100)}</span>
-                  <span className="w-24 text-right text-xs text-white/40">
-                    {h.stakedPct}% staked
+                  <span className="w-28 text-right font-mono font-semibold text-venom-400">
+                    {rh(h.claimableRh, 3)}
                   </span>
-                  <span className="w-14 text-right font-semibold text-acid">{h.multiplier.toFixed(1)}×</span>
                 </div>
               ))}
             </div>

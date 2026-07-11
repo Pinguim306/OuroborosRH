@@ -13,10 +13,6 @@ export default function RewardsPage() {
   const [flash, setFlash] = useState<string | null>(null);
 
   const totalClaimable = positions.reduce((s, p) => s + p.claimableRh, 0);
-  const avgMultiplier =
-    positions.length > 0
-      ? positions.reduce((s, p) => s + p.multiplier, 0) / positions.length
-      : 0;
 
   function claimAll() {
     if (totalClaimable <= 0) return;
@@ -45,8 +41,8 @@ export default function RewardsPage() {
 
       <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3">
         <StatTile label="Total claimable" value={rh(totalClaimable, 4)} accent />
-        <StatTile label="Positions" value={String(positions.length)} />
-        <StatTile label="Avg loyalty multiplier" value={`${avgMultiplier.toFixed(2)}×`} />
+        <StatTile label="Tokens held" value={String(positions.length)} />
+        <StatTile label="Staking required" value="None" sub="Rewards accrue automatically" />
       </div>
 
       {positions.length === 0 ? (
@@ -65,16 +61,10 @@ export default function RewardsPage() {
                 <div className="min-w-0">
                   <div className="truncate font-semibold text-white">{p.token.name}</div>
                   <div className="text-xs text-white/40">
-                    {compact(p.staked, 0)} {p.token.symbol} staked
+                    {compact(p.balance, 0)} {p.token.symbol} held
                   </div>
                 </div>
               </Link>
-
-              <div className="text-center">
-                <div className="label">Loyalty</div>
-                <div className="text-sm font-semibold text-acid">{p.multiplier.toFixed(2)}×</div>
-                <div className="text-[11px] text-white/35">{p.loyaltyDays}d</div>
-              </div>
 
               <div className="text-center">
                 <div className="label">Claimable</div>
@@ -104,11 +94,12 @@ export default function RewardsPage() {
       <div className="glass mt-10 p-6 text-sm text-white/55">
         <h3 className="font-semibold text-white">How your rewards are calculated</h3>
         <p className="mt-2 leading-relaxed">
-          Every trade on a token you&apos;ve staked sends 40% of its fee into that token&apos;s rewards
-          vault. Your slice of each inflow is your <span className="text-venom-400">staked share</span>{" "}
-          multiplied by your <span className="text-acid">loyalty multiplier</span> — which climbs from
-          1.0× to 3.0× over 90 days of uninterrupted staking. Unstake and the streak resets, so the
-          longer you hold, the larger your cut of every future fee.
+          Every trade sends <span className="text-venom-400">0.4% of its volume</span> into the
+          token&apos;s reward pool. Your slice of each inflow is simply your{" "}
+          <span className="text-venom-400">share of the supply</span> at that moment — credited
+          on-chain by a dividend accumulator. <span className="text-white">No staking, no lock-ups:</span>{" "}
+          rewards accrue to your wallet just for holding, and you claim them in {" "}
+          {"RH"} whenever you connect. Hold longer and you&apos;re simply present for more inflows.
         </p>
       </div>
     </div>

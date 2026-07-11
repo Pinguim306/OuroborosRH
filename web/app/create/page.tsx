@@ -86,12 +86,16 @@ export default function CreatePage() {
             <div className="mb-2 font-semibold text-white/70">Launch parameters</div>
             <ul className="grid grid-cols-2 gap-y-1">
               <li>Supply: <span className="text-white/70">1,000,000,000</span></li>
-              <li>Trade fee: <span className="text-white/70">1%</span></li>
-              <li>Fee → liquidity: <span className="text-venom-400">60%</span></li>
-              <li>Fee → rewards: <span className="text-venom-400">40%</span></li>
+              <li>Trade fee: <span className="text-white/70">1.5%</span></li>
+              <li>Fee → liquidity: <span className="text-venom-400">0.6%</span></li>
+              <li>Fee → holders: <span className="text-venom-400">0.4%</span></li>
+              <li>Fee → developer: <span className="text-white/70">0.5%</span></li>
               <li>Graduation: <span className="text-white/70">400 {NATIVE_SYMBOL} raised</span></li>
-              <li>Loyalty boost: <span className="text-acid">up to 3×</span></li>
             </ul>
+            <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-3">
+              <span className="text-white/60">One-time creation fee</span>
+              <span className="font-mono font-semibold text-acid">~$15 in {NATIVE_SYMBOL}</span>
+            </div>
           </div>
 
           {status === "done" ? (

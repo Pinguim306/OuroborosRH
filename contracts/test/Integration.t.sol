@@ -4,63 +4,65 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {Launchpad} from "src/Launchpad.sol";
 import {BondingCurve} from "src/BondingCurve.sol";
-import {HolderRewards} from "src/HolderRewards.sol";
 import {OuroToken} from "src/OuroToken.sol";
 
-/// @notice End-to-end walk of the Ouroboros loop: launch -> trade -> fees become
-///         liquidity + rewards -> holder stakes -> holder claims.
+/// @notice End-to-end walk of the reworked loop: launch (creation fee → dev) →
+///         trade (dev fee + fees become liquidity + fees stream to holders) →
+///         holder claims by just holding, no staking.
 contract IntegrationTest is Test {
     Launchpad internal launchpad;
 
+    address internal dev = address(0xDE0);
     address internal alice = address(0xA11CE);
     address internal bob = address(0xB0B);
+
+    uint256 internal constant CREATION_FEE = 0.01 ether;
+    uint256 internal constant DEV_BPS = 50;
 
     function setUp() public {
         Launchpad.CurveParams memory p = Launchpad.CurveParams({
             totalSupply: 1_000_000_000 ether,
             virtualNative: 30 ether,
-            feeBps: 100,
-            liqShareBps: 6000,
+            devFeeBps: DEV_BPS,
+            liqFeeBps: 60,
+            holderFeeBps: 40,
             graduationTarget: 400 ether
         });
-        launchpad = new Launchpad(address(this), p);
+        launchpad = new Launchpad(address(this), dev, CREATION_FEE, p);
         vm.deal(alice, 100 ether);
         vm.deal(bob, 100 ether);
     }
 
     function testFullLoop() public {
-        (address t, address c, address r) = launchpad.createToken("Loop Coin", "LOOP", "ipfs://x");
-        OuroToken token = OuroToken(t);
+        uint256 devStart = dev.balance;
+
+        // 1. Launch — creation fee goes to the developer wallet.
+        (address t, address c) = launchpad.createToken{value: CREATION_FEE}("Loop Coin", "LOOP", "ipfs://x");
+        OuroToken token = OuroToken(payable(t));
         BondingCurve curve = BondingCurve(payable(c));
-        HolderRewards rewards = HolderRewards(payable(r));
+        assertEq(dev.balance - devStart, CREATION_FEE);
 
-        // 1. Alice buys and becomes a holder.
-        vm.startPrank(alice);
+        // 2. Alice buys and becomes a holder (no staking needed to earn).
+        vm.prank(alice);
         curve.buy{value: 50 ether}(0);
-        uint256 aliceTokens = token.balanceOf(alice);
-        assertGt(aliceTokens, 0);
+        assertGt(token.balanceOf(alice), 0);
+        assertGt(curve.realNativeRaised(), 0); // liquidity deepened
 
-        // 2. Alice stakes to join the rewards side of the loop.
-        token.approve(address(rewards), aliceTokens);
-        rewards.stake(aliceTokens);
-        vm.stopPrank();
+        uint256 devAfterAlice = dev.balance;
+        assertEq(devAfterAlice - devStart, CREATION_FEE + (50 ether * DEV_BPS) / 10_000);
 
-        // Liquidity deepened: real native retained by the curve exceeds the virtual seed.
-        assertGt(curve.realNativeRaised(), 0);
-
-        // 3. Bob trades; his fee streams to the rewards vault and accrues to Alice.
-        uint256 rewardsBalBefore = address(rewards).balance;
+        // 3. Bob trades; his dev fee goes to the dev, his holder fee accrues to holders.
         vm.prank(bob);
         curve.buy{value: 20 ether}(0);
-        assertGt(address(rewards).balance, rewardsBalBefore);
-        assertGt(rewards.earned(alice), 0);
+        assertEq(dev.balance - devAfterAlice, (20 ether * DEV_BPS) / 10_000);
+        assertGt(token.claimableRewardOf(alice), 0);
 
-        // 4. Alice claims her share of the fees in native coin.
+        // 4. Alice claims her fee share in native coin — just by holding.
         uint256 before = alice.balance;
         vm.prank(alice);
-        rewards.claim();
+        token.claim();
         assertGt(alice.balance, before);
-        assertEq(rewards.earned(alice), 0);
+        assertEq(token.claimableRewardOf(alice), 0);
     }
 
     receive() external payable {}

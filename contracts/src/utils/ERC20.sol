@@ -4,6 +4,8 @@ pragma solidity ^0.8.24;
 import {IERC20} from "src/interfaces/IERC20.sol";
 
 /// @notice Minimal, gas-lean ERC20 implementation (self-contained, no external deps).
+///         All balance movement funnels through the virtual `_update` hook so
+///         subclasses (e.g. the dividend token) can react to every transfer/mint/burn.
 abstract contract ERC20 is IERC20 {
     string public name;
     string public symbol;
@@ -16,6 +18,7 @@ abstract contract ERC20 is IERC20 {
     error InsufficientBalance();
     error InsufficientAllowance();
     error TransferToZero();
+    error TransferFromZero();
 
     constructor(string memory _name, string memory _symbol) {
         name = _name;
@@ -44,22 +47,37 @@ abstract contract ERC20 is IERC20 {
     }
 
     function _transfer(address from, address to, uint256 amount) internal {
+        if (from == address(0)) revert TransferFromZero();
         if (to == address(0)) revert TransferToZero();
-        uint256 fromBal = balanceOf[from];
-        if (fromBal < amount) revert InsufficientBalance();
-        unchecked {
-            balanceOf[from] = fromBal - amount;
-            balanceOf[to] += amount;
-        }
-        emit Transfer(from, to, amount);
+        _update(from, to, amount);
     }
 
     function _mint(address to, uint256 amount) internal {
         if (to == address(0)) revert TransferToZero();
-        totalSupply += amount;
-        unchecked {
-            balanceOf[to] += amount;
+        _update(address(0), to, amount);
+    }
+
+    /// @dev Single choke point for supply/balance changes. `from == 0` mints,
+    ///      `to == 0` burns. Subclasses override to add behaviour, calling super first.
+    function _update(address from, address to, uint256 amount) internal virtual {
+        if (from == address(0)) {
+            totalSupply += amount;
+        } else {
+            uint256 fromBal = balanceOf[from];
+            if (fromBal < amount) revert InsufficientBalance();
+            unchecked {
+                balanceOf[from] = fromBal - amount;
+            }
         }
-        emit Transfer(address(0), to, amount);
+        if (to == address(0)) {
+            unchecked {
+                totalSupply -= amount;
+            }
+        } else {
+            unchecked {
+                balanceOf[to] += amount;
+            }
+        }
+        emit Transfer(from, to, amount);
     }
 }

@@ -1,40 +1,37 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IERC20} from "src/interfaces/IERC20.sol";
 import {ReentrancyGuard} from "src/utils/ReentrancyGuard.sol";
-import {HolderRewards} from "src/HolderRewards.sol";
+import {OuroToken} from "src/OuroToken.sol";
 
 /// @title BondingCurve
-/// @notice The trading + "Fees → Liquidity" legs of the Ouroboros loop.
+/// @notice The trading + fee-routing legs of the Ouroboros loop.
 ///
-///         A constant-product virtual-reserve curve (pump.fun style). Buyers send
-///         native coin and receive tokens; sellers do the reverse. Every trade
-///         charges `feeBps`. Instead of skimming the fee to a treasury:
-///           - `liqShareBps` of the fee stays in the curve as **permanent liquidity**
-///             (deepening the market and lifting the floor), and
-///           - the remainder is streamed to `rewards` for holders.
+///         A constant-product virtual-reserve curve (pump.fun style). Every trade
+///         charges three fee components, each a fraction of the trade in basis points:
+///           - `devFeeBps`     → the developer / platform (`feeRecipient`)
+///           - `liqFeeBps`     → stays in the curve as **permanent liquidity**
+///           - `holderFeeBps`  → streamed to the token so **holders can claim it**
+///                               (no staking — see OuroToken)
 ///
 ///         When cumulative real native raised reaches `graduationTarget`, the curve
-///         locks and "graduates" — in production this migrates liquidity to a DEX;
-///         here the reserves are locked and trading on the curve stops.
+///         locks and "graduates".
 contract BondingCurve is ReentrancyGuard {
     uint256 private constant BPS = 10_000;
     uint256 private constant WAD = 1e18;
 
-    IERC20 public immutable token;
-    HolderRewards public immutable rewards;
+    OuroToken public immutable token;
+    /// @notice Developer / platform address that receives the dev fee.
+    address public immutable feeRecipient;
 
-    /// @notice Native reserve (virtual seed + real accumulated), used for pricing.
-    uint256 public nativeReserve;
-    /// @notice Token reserve remaining for sale on the curve.
-    uint256 public tokenReserve;
-    /// @notice Real native coin actually held by the curve (excludes the virtual seed).
-    uint256 public realNativeRaised;
+    uint256 public nativeReserve; // virtual seed + real, used for pricing
+    uint256 public tokenReserve; // tokens remaining for sale
+    uint256 public realNativeRaised; // real native held by the curve (excl. virtual seed)
 
-    uint256 public immutable feeBps; // e.g. 100 = 1%
-    uint256 public immutable liqShareBps; // share of the fee that becomes liquidity
-    uint256 public immutable graduationTarget; // real native raised that triggers graduation
+    uint256 public immutable devFeeBps;
+    uint256 public immutable liqFeeBps;
+    uint256 public immutable holderFeeBps;
+    uint256 public immutable graduationTarget;
 
     bool public graduated;
 
@@ -43,10 +40,9 @@ contract BondingCurve is ReentrancyGuard {
         bool isBuy,
         uint256 nativeAmount,
         uint256 tokenAmount,
-        uint256 feePaid,
         uint256 newPrice
     );
-    event FeeToLiquidity(uint256 liquidityAdded, uint256 rewardStreamed);
+    event FeeRouted(uint256 toDev, uint256 toLiquidity, uint256 toHolders);
     event Graduated(uint256 nativeLocked, uint256 tokensLocked);
 
     error AlreadyGraduated();
@@ -56,19 +52,21 @@ contract BondingCurve is ReentrancyGuard {
 
     constructor(
         address _token,
-        address payable _rewards,
+        address _feeRecipient,
         uint256 _virtualNative,
         uint256 _curveSupply,
-        uint256 _feeBps,
-        uint256 _liqShareBps,
+        uint256 _devFeeBps,
+        uint256 _liqFeeBps,
+        uint256 _holderFeeBps,
         uint256 _graduationTarget
     ) {
-        token = IERC20(_token);
-        rewards = HolderRewards(_rewards);
+        token = OuroToken(payable(_token));
+        feeRecipient = _feeRecipient;
         nativeReserve = _virtualNative;
         tokenReserve = _curveSupply;
-        feeBps = _feeBps;
-        liqShareBps = _liqShareBps;
+        devFeeBps = _devFeeBps;
+        liqFeeBps = _liqFeeBps;
+        holderFeeBps = _holderFeeBps;
         graduationTarget = _graduationTarget;
     }
 
@@ -76,20 +74,21 @@ contract BondingCurve is ReentrancyGuard {
     //  Views                                                                //
     // --------------------------------------------------------------------- //
 
-    /// @notice Spot price in native per token, WAD-scaled.
+    function totalFeeBps() public view returns (uint256) {
+        return devFeeBps + liqFeeBps + holderFeeBps;
+    }
+
     function currentPrice() public view returns (uint256) {
         if (tokenReserve == 0) return 0;
         return (nativeReserve * WAD) / tokenReserve;
     }
 
-    /// @notice Progress toward graduation, WAD-scaled (1e18 = 100%).
     function graduationProgress() external view returns (uint256) {
         if (graduationTarget == 0) return 0;
         uint256 p = (realNativeRaised * WAD) / graduationTarget;
         return p > WAD ? WAD : p;
     }
 
-    /// @notice Constant-product output: amountIn * reserveOut / (reserveIn + amountIn).
     function getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut)
         public
         pure
@@ -99,21 +98,15 @@ contract BondingCurve is ReentrancyGuard {
         return (amountIn * reserveOut) / (reserveIn + amountIn);
     }
 
-    /// @notice Quote tokens received for `nativeIn` (after fee).
-    function quoteBuy(uint256 nativeIn) external view returns (uint256 tokensOut, uint256 fee) {
-        fee = (nativeIn * feeBps) / BPS;
-        uint256 liqPart = (fee * liqShareBps) / BPS;
-        uint256 netIn = nativeIn - fee;
-        tokensOut = getAmountOut(netIn, nativeReserve, tokenReserve);
-        // liqPart deepens the reserve after the swap; reflected on the next quote.
-        liqPart;
+    function quoteBuy(uint256 nativeIn) external view returns (uint256 tokensOut, uint256 totalFee) {
+        totalFee = (nativeIn * totalFeeBps()) / BPS;
+        tokensOut = getAmountOut(nativeIn - totalFee, nativeReserve, tokenReserve);
     }
 
-    /// @notice Quote native received for `tokenIn` (after fee).
-    function quoteSell(uint256 tokenIn) external view returns (uint256 nativeOut, uint256 fee) {
+    function quoteSell(uint256 tokenIn) external view returns (uint256 nativeOut, uint256 totalFee) {
         uint256 gross = getAmountOut(tokenIn, tokenReserve, nativeReserve);
-        fee = (gross * feeBps) / BPS;
-        nativeOut = gross - fee;
+        totalFee = (gross * totalFeeBps()) / BPS;
+        nativeOut = gross - totalFee;
     }
 
     // --------------------------------------------------------------------- //
@@ -124,24 +117,21 @@ contract BondingCurve is ReentrancyGuard {
         if (graduated) revert AlreadyGraduated();
         if (msg.value == 0) revert ZeroAmount();
 
-        uint256 fee = (msg.value * feeBps) / BPS;
-        uint256 liqPart = (fee * liqShareBps) / BPS;
-        uint256 rewardPart = fee - liqPart;
-        uint256 netIn = msg.value - fee;
+        (uint256 devPart, uint256 liqPart, uint256 holderPart) = _feeParts(msg.value);
+        uint256 netIn = msg.value - devPart - liqPart - holderPart;
 
         tokensOut = getAmountOut(netIn, nativeReserve, tokenReserve);
         if (tokensOut < minTokensOut) revert SlippageExceeded();
 
-        // netIn drives the swap; liqPart is folded back in as permanent liquidity.
         nativeReserve += netIn + liqPart;
         tokenReserve -= tokensOut;
         realNativeRaised += netIn + liqPart;
 
-        _streamRewards(rewardPart);
-        emit FeeToLiquidity(liqPart, rewardPart);
-
+        // Deliver tokens first so the buyer is part of the dividend base before their
+        // own holder-fee is streamed.
         require(token.transfer(msg.sender, tokensOut), "token transfer failed");
-        emit Trade(msg.sender, true, msg.value, tokensOut, fee, currentPrice());
+        _routeFees(devPart, liqPart, holderPart);
+        emit Trade(msg.sender, true, msg.value, tokensOut, currentPrice());
 
         _maybeGraduate();
     }
@@ -157,30 +147,38 @@ contract BondingCurve is ReentrancyGuard {
         require(token.transferFrom(msg.sender, address(this), tokenIn), "token transferFrom failed");
 
         uint256 gross = getAmountOut(tokenIn, tokenReserve, nativeReserve);
-        uint256 fee = (gross * feeBps) / BPS;
-        uint256 liqPart = (fee * liqShareBps) / BPS;
-        uint256 rewardPart = fee - liqPart;
-        nativeOut = gross - fee;
+        (uint256 devPart, uint256 liqPart, uint256 holderPart) = _feeParts(gross);
+        nativeOut = gross - devPart - liqPart - holderPart;
         if (nativeOut < minNativeOut) revert SlippageExceeded();
 
         tokenReserve += tokenIn;
-        // Reserve drops by the gross payout, but liqPart is retained as liquidity.
         nativeReserve = nativeReserve - gross + liqPart;
         realNativeRaised -= (gross - liqPart);
 
-        _streamRewards(rewardPart);
-        emit FeeToLiquidity(liqPart, rewardPart);
-
         _sendNative(msg.sender, nativeOut);
-        emit Trade(msg.sender, false, nativeOut, tokenIn, fee, currentPrice());
+        _routeFees(devPart, liqPart, holderPart);
+        emit Trade(msg.sender, false, nativeOut, tokenIn, currentPrice());
     }
 
     // --------------------------------------------------------------------- //
     //  Internals                                                            //
     // --------------------------------------------------------------------- //
 
-    function _streamRewards(uint256 amount) internal {
-        if (amount > 0) _sendNative(payable(address(rewards)), amount);
+    function _feeParts(uint256 amount)
+        internal
+        view
+        returns (uint256 devPart, uint256 liqPart, uint256 holderPart)
+    {
+        devPart = (amount * devFeeBps) / BPS;
+        liqPart = (amount * liqFeeBps) / BPS;
+        holderPart = (amount * holderFeeBps) / BPS;
+    }
+
+    function _routeFees(uint256 devPart, uint256 liqPart, uint256 holderPart) internal {
+        if (devPart > 0) _sendNative(feeRecipient, devPart);
+        if (holderPart > 0) token.distributeRewards{value: holderPart}();
+        // liqPart already retained in nativeReserve as permanent liquidity.
+        emit FeeRouted(devPart, liqPart, holderPart);
     }
 
     function _maybeGraduate() internal {

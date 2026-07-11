@@ -107,31 +107,22 @@ export function mockTrades(token: TokenMarket, count = 12): Trade[] {
 export function mockHolders(token: TokenMarket, count = 8): Holder[] {
   return Array.from({ length: count }, (_, i) => {
     const sharePct = Math.max(0.4, 22 / (i + 1) - i * 0.8);
-    const loyaltyDays = Math.floor(90 / (i + 1)) + (i % 5);
-    const multiplier = 1 + Math.min(2, (loyaltyDays / 90) * 2);
     return {
       address: addr(token.symbol + "holder" + i),
       balance: (token.marketCapRh / token.priceRh) * (sharePct / 100),
       sharePct,
-      stakedPct: Math.min(100, 40 + i * 6),
-      loyaltyDays,
-      multiplier,
+      // Fees accrued to this holder so far, ~proportional to their share of the pool.
+      claimableRh: (token.rewardsPoolRh * sharePct) / 100,
     } satisfies Holder;
   });
 }
 
 export function mockRewardPositions(): RewardPosition[] {
-  return [MOCK_TOKENS[0], MOCK_TOKENS[3], MOCK_TOKENS[6]].map((token, i) => {
-    const loyaltyDays = [67, 41, 88][i];
-    const multiplier = 1 + Math.min(2, (loyaltyDays / 90) * 2);
-    return {
-      token,
-      staked: (token.marketCapRh / token.priceRh) * [0.012, 0.004, 0.02][i],
-      claimableRh: [3.42, 1.18, 6.71][i],
-      loyaltyDays,
-      multiplier,
-    } satisfies RewardPosition;
-  });
+  return [MOCK_TOKENS[0], MOCK_TOKENS[3], MOCK_TOKENS[6]].map((token, i) => ({
+    token,
+    balance: (token.marketCapRh / token.priceRh) * [0.012, 0.004, 0.02][i],
+    claimableRh: [3.42, 1.18, 6.71][i],
+  }) satisfies RewardPosition);
 }
 
 export function globalStats() {

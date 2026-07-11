@@ -35,15 +35,11 @@ export interface Holder {
   address: Address;
   balance: number;
   sharePct: number;
-  stakedPct: number;
-  loyaltyDays: number;
-  multiplier: number; // 1..3
+  claimableRh: number; // fees accrued to this holder, no staking
 }
 
 export interface RewardPosition {
   token: TokenMarket;
-  staked: number;
-  claimableRh: number;
-  loyaltyDays: number;
-  multiplier: number;
+  balance: number; // tokens held
+  claimableRh: number; // native fees claimable right now
 }

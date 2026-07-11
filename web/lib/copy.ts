@@ -26,36 +26,36 @@ export const copy = {
     steps: [
       {
         label: "Trade",
-        text: "Buy and sell on a transparent bonding curve. A flat 1% fee on every trade.",
+        text: "Buy and sell on a transparent bonding curve. A flat 1.5% fee on every trade.",
       },
       {
         label: "Fees → Liquidity",
-        text: "The majority of every fee is locked as permanent liquidity — deepening the market and lifting the floor.",
+        text: "Part of every fee is locked as permanent liquidity — deepening the market and lifting the floor.",
       },
       {
         label: "Liquidity → Rewards",
-        text: "The rest streams into a rewards vault, paid in RH, the chain's native coin.",
+        text: "Another slice streams straight into the token, pooled in RH, the chain's native coin.",
       },
       {
         label: "Rewards → Holders",
-        text: "Stake your tokens and collect fees weighted by amount × time, boosted up to 3× for loyalty.",
+        text: "Just hold the token. Your share of the fees accrues automatically — connect your wallet and claim anytime. No staking.",
       },
     ],
   },
   differentiator: {
-    title: "Hold more. Hold longer. Earn more.",
+    title: "Hold the token. Claim the fees. That's it.",
     points: [
       {
+        title: "No staking — just hold",
+        text: "Rewards accrue to your wallet automatically, proportional to your balance. Nothing to lock, nothing to unstake — connect and claim whenever you want. Hold longer and you're simply present for more fee inflows.",
+      },
+      {
         title: "Fees become liquidity",
-        text: "60% of every trading fee is folded back into the curve as permanent, locked liquidity. The market gets deeper with every swap — it can never be rug-pulled out.",
+        text: "A share of every trading fee is folded back into the curve as permanent, locked liquidity. The market gets deeper with every swap — it can never be rug-pulled out.",
       },
       {
-        title: "Loyalty multiplier",
-        text: "Your reward weight ramps from 1.0× to 3.0× over 90 days of continuous staking. Diamond hands are paid for their patience.",
-      },
-      {
-        title: "Amount × time, on-chain",
-        text: "A Synthetix-style accumulator splits fees by your staked share across every inflow. No snapshots to game, no team switch to flip.",
+        title: "Paid on-chain, in RH",
+        text: "A dividend accumulator credits your fee share on every inflow and keeps it correct as balances move. No snapshots to game, no team switch to flip.",
       },
     ],
   },
@@ -78,8 +78,6 @@ export const copy = {
   token: {
     buy: "Buy",
     sell: "Sell",
-    stake: "Stake",
-    unstake: "Unstake",
     claim: "Claim rewards",
     graduated: "Graduated to DEX",
     progress: "Bonding curve progress",
@@ -87,9 +85,9 @@ export const copy = {
   rewards: {
     title: "Your rewards",
     subtitle:
-      "Fees you've earned across every token you hold, weighted by how much and how long you've staked.",
+      "Fees you've earned across every token you hold — accrued automatically, no staking. Connect and claim.",
     claimAll: "Claim all",
-    empty: "You're not staking anything yet. Buy a token and stake it to start earning.",
+    empty: "You're not holding any Ouroboros tokens yet. Buy one and fees start accruing to your wallet automatically.",
   },
   footer: {
     disclaimer:

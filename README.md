@@ -11,15 +11,23 @@ turns every trade into deeper liquidity and loyalty rewards.
 
 ## The loop (what makes it different)
 
-1. **Trade** — every buy/sell on the bonding curve charges a small fee (default 1%).
-2. **Fees → Liquidity** — the fee is *not* skimmed to a treasury. It is converted
-   into **permanent, locked liquidity**, deepening the market and lifting the floor.
-3. **Liquidity → Rewards** — a stream of that fee inflow funds a per-token rewards
-   vault paid in the chain's native coin.
-4. **Rewards → Holders** — holders stake their tokens and earn from the vault via a
-   Synthetix-style accumulator (amount × time), **boosted by a loyalty multiplier**
-   that ramps from **1.0× to 3.0× over 90 days** of continuous staking. Hold more,
-   hold longer, earn more.
+1. **Trade** — every buy/sell on the bonding curve charges a flat **1.5% fee**,
+   split three ways (defaults, all configurable): **0.5% developer**, **0.6%
+   liquidity**, **0.4% holders**.
+2. **Fees → Liquidity** — the liquidity slice is folded back into the curve as
+   **permanent, locked liquidity**, deepening the market and lifting the floor.
+3. **Liquidity → Rewards** — the holder slice streams straight into the token,
+   pooled in the chain's native coin (RH).
+4. **Rewards → Holders** — **no staking.** The token is a dividend token: fees
+   accrue to every holder automatically, proportional to balance. Connect your
+   wallet and **claim anytime**. Hold longer and you're simply present for more
+   inflows.
+
+### Developer revenue
+Two streams accrue to the developer wallet: a **per-trade dev fee** (0.5% by
+default) and a **fixed creation fee** (native coin, ~$10–20 worth) charged on
+every token launch. Both are owner-configurable (`setFeeRecipient`,
+`setCreationFee`, `setParams`).
 
 ## Monorepo layout
 

@@ -8,8 +8,11 @@ import { compact, rh } from "@/lib/format";
 import { NATIVE_SYMBOL } from "@/lib/chain";
 import { LIVE } from "@/lib/contracts";
 
-const FEE = 0.01;
-const LIQ_SHARE = 0.6;
+// Per-trade fee split (fractions of trade volume): total 1.5%.
+const DEV_FEE = 0.005; // 0.5% to the developer
+const LIQ_FEE = 0.006; // 0.6% becomes permanent liquidity
+const HOLDER_FEE = 0.004; // 0.4% streamed to holders
+const FEE = DEV_FEE + LIQ_FEE + HOLDER_FEE; // 1.5%
 
 export function TradeWidget({ token }: { token: TokenMarket }) {
   const { isConnected } = useAccount();
@@ -48,8 +51,10 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
     setTimeout(() => setFlash(null), 2600);
   }
 
-  const feeToLiq = quote.fee * LIQ_SHARE;
-  const feeToRewards = quote.fee * (1 - LIQ_SHARE);
+  const base = mode === "buy" ? num : num * token.priceRh;
+  const feeToDev = base * DEV_FEE;
+  const feeToLiq = base * LIQ_FEE;
+  const feeToRewards = base * HOLDER_FEE;
 
   return (
     <div className="glass-strong p-5">
@@ -101,10 +106,11 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
 
       <div className="mt-4 space-y-2 rounded-xl bg-obsidian-900/60 p-3 text-xs">
         <Row label="You receive" value={quote.outLabel} strong />
-        <Row label={`Fee (1%)`} value={mode === "buy" ? rh(quote.fee, 4) : rh(quote.fee, 4)} />
-        <div className="border-t border-white/5 pt-2">
+        <Row label="Fee (1.5%)" value={rh(quote.fee, 4)} />
+        <div className="space-y-2 border-t border-white/5 pt-2">
           <Row label="→ Permanent liquidity" value={rh(feeToLiq, 4)} accent />
           <Row label="→ Holder rewards" value={rh(feeToRewards, 4)} accent />
+          <Row label="→ Developer" value={rh(feeToDev, 4)} />
         </div>
       </div>
 
