@@ -4,16 +4,16 @@ pragma solidity ^0.8.24;
 import {OuroToken} from "src/OuroToken.sol";
 import {BondingCurve} from "src/BondingCurve.sol";
 import {Ownable} from "src/utils/Ownable.sol";
+import {ReentrancyGuard} from "src/utils/ReentrancyGuard.sol";
 
 /// @title Launchpad
 /// @notice Factory that spins up a full Ouroboros market in one transaction:
 ///         the dividend token and its bonding curve, wired so trading fees flow
-///         Trade → Dev + Liquidity + Holders automatically.
+///         Trade → protocol / liquidity / holders automatically.
 ///
-///         Two revenue streams accrue to `feeRecipient` (the developer):
-///           - a fixed **creation fee** (native) charged on every launch, and
-///           - the per-trade **dev fee** (`devFeeBps`) charged by each curve.
-contract Launchpad is Ownable {
+///         `feeRecipient` collects the per-trade platform fee (`devFeeBps`) and a
+///         fixed creation fee charged on every launch.
+contract Launchpad is Ownable, ReentrancyGuard {
     struct CurveParams {
         uint256 totalSupply; // full token supply, all sold via the curve
         uint256 virtualNative; // virtual native seed for the starting price
@@ -96,6 +96,7 @@ contract Launchpad is Ownable {
     function createToken(string calldata name, string calldata symbol, string calldata metadataURI)
         external
         payable
+        nonReentrant
         returns (address token, address curve)
     {
         if (msg.value < creationFee) revert InsufficientCreationFee();
@@ -121,11 +122,13 @@ contract Launchpad is Ownable {
         t.setExcludedFromDividends(address(c), true);
         require(t.transfer(address(c), p.totalSupply), "supply transfer failed");
 
-        // 4. Pass dividend-exclusion authority to the owner (e.g. to exclude a DEX
-        //    pair at graduation), and forward the creation fee to the developer.
-        t.transferAuthority(owner);
-        _payCreationFee();
+        // 4. Renounce dividend authority so exclusions are frozen (only the curve is
+        //    ever excluded). No one — not even the owner — can later exclude a holder
+        //    and freeze their rewards. (M2 fix.)
+        t.renounceAuthority();
 
+        // 5. Record the market BEFORE any external value transfer (checks-effects-
+        //    interactions), then forward the creation fee. (L2 fix.)
         uint256 id = markets.length;
         markets.push(
             Market({
@@ -139,8 +142,9 @@ contract Launchpad is Ownable {
             })
         );
         marketIndexByToken[address(t)] = id + 1;
-
         emit TokenLaunched(id, msg.sender, address(t), address(c), name, symbol);
+
+        _payCreationFee();
         return (address(t), address(c));
     }
 

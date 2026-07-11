@@ -19,19 +19,22 @@ Holders  ◄── claim (native) ──  OuroToken (dividend token)
 
 | File | Role |
 |------|------|
-| `src/Launchpad.sol` | Factory. `createToken()` (payable — charges the creation fee) deploys token + curve, wired together. Holds `feeRecipient` (developer) + `creationFee`, both owner-configurable. |
-| `src/BondingCurve.sol` | Constant-product virtual-reserve curve. `buy`/`sell` with a 3-way fee split: developer / permanent liquidity / holders. Graduates at a native-raised target. |
+| `src/Launchpad.sol` | Factory. `createToken()` (payable — charges the creation fee) deploys token + curve, wired together. Holds `feeRecipient` + `creationFee`, both owner-configurable. |
+| `src/BondingCurve.sol` | Constant-product virtual-reserve curve. `buy`/`sell` with a 3-way fee split: liquidity / holders / platform. Graduates at a native-raised target. |
 | `src/OuroToken.sol` | **Dividend token.** Holders earn a share of trading fees (native coin) **just by holding — no staking** — and `claim()` anytime. Dividend-paying-token accumulator with per-transfer corrections and address exclusions (the curve is excluded). |
 | `src/interfaces/` | `IERC20`, `IDexRouter` (graduation target interface). |
 | `src/utils/` | Minimal `ERC20` (with a virtual `_update` hook), `Ownable`, `ReentrancyGuard` (no external deps). |
 
-## Fee model (defaults, all configurable)
+## Fee model
 
-Per-trade fee **1.5%**, as basis points of trade volume:
-`devFeeBps = 50` (0.5% → developer), `liqFeeBps = 60` (0.6% → permanent liquidity),
-`holderFeeBps = 40` (0.4% → holders). Plus a fixed **creation fee** in the native
-coin (ETH) charged on every launch — `0.01 ETH` by default, adjustable via
-`setCreationFee`. The developer wallet is `feeRecipient` (`setFeeRecipient`).
+Per-trade fee **1.5%**, split three ways between permanent liquidity, holder
+rewards, and a platform fee. Plus a fixed **creation fee** in the native coin (ETH)
+charged on every launch — `0.01 ETH` by default.
+
+The exact per-destination split (`devFeeBps` / `liqFeeBps` / `holderFeeBps`) and the
+fee recipient are set at deploy time (see `script/Deploy.s.sol`) and are
+owner-configurable on-chain via `setParams`, `setFeeRecipient`, and
+`setCreationFee`.
 
 ## Build & test
 
@@ -59,6 +62,7 @@ exclusions); every expectation in `test/OuroToken.t.sol` was verified against it
 
 ```bash
 export PRIVATE_KEY=0x...                              # a funded deployer key
+export FEE_RECIPIENT=0x...                            # wallet that collects fees
 export RPC=https://rpc.mainnet.chain.robinhood.com    # Robinhood Chain (id 4663)
 forge script script/Deploy.s.sol --rpc-url $RPC --broadcast
 ```
@@ -66,7 +70,6 @@ forge script script/Deploy.s.sol --rpc-url $RPC --broadcast
 > Tip: deploy to the **testnet first** (faucet at
 > `faucet.testnet.chain.robinhood.com`) — these contracts are unaudited.
 
-The deploy script sets `feeRecipient` to the developer wallet
-`0x1c06a7dE6951d62CbaD36FC449770BEE2d8c2b23` and a creation fee of `0.01 ETH`.
-Copy the printed `Launchpad` address into `web/lib/contracts.ts` (or
-`NEXT_PUBLIC_LAUNCHPAD_ADDRESS`).
+The deploy script reads `FEE_RECIPIENT` from the environment (falling back to the
+deployer) and sets a creation fee of `0.01 ETH`. Copy the printed `Launchpad`
+address into `web/lib/contracts.ts` (or `NEXT_PUBLIC_LAUNCHPAD_ADDRESS`).

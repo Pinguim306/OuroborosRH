@@ -11,8 +11,9 @@ contract Deploy is Script {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address owner = vm.addr(pk);
 
-        // Developer wallet that receives the creation fee and per-trade dev fee.
-        address feeRecipient = 0x1c06a7dE6951d62CbaD36FC449770BEE2d8c2b23;
+        // Wallet that collects the creation fee and per-trade platform fee.
+        // Set FEE_RECIPIENT in the environment; falls back to the deployer.
+        address feeRecipient = vm.envOr("FEE_RECIPIENT", owner);
 
         // Total per-trade fee 1.5%: 0.5% dev + 0.6% liquidity + 0.4% holders.
         // 1B supply, 30 native virtual seed, graduate at 400 native raised.

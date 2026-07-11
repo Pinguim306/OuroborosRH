@@ -94,7 +94,7 @@ export default function RewardsPage() {
       <div className="glass mt-10 p-6 text-sm text-white/55">
         <h3 className="font-semibold text-white">How your rewards are calculated</h3>
         <p className="mt-2 leading-relaxed">
-          Every trade sends <span className="text-venom-400">0.4% of its volume</span> into the
+          Every trade sends <span className="text-venom-400">a share of its fee</span> into the
           token&apos;s reward pool. Your slice of each inflow is simply your{" "}
           <span className="text-venom-400">share of the supply</span> at that moment — credited
           on-chain by a dividend accumulator. <span className="text-white">No staking, no lock-ups:</span>{" "}

@@ -79,11 +79,15 @@ export default function TokenPage() {
             ) : (
               <ProgressBar value={token.graduationProgress} label="Progress to graduation" />
             )}
-            <div className="mt-5 grid grid-cols-4 gap-3 text-center">
-              <MiniStat label="→ Liquidity" value="0.6%" accent />
-              <MiniStat label="→ Holders" value="0.4%" accent />
-              <MiniStat label="→ Developer" value="0.5%" />
-              <MiniStat label="Total fee" value="1.5%" />
+            <div className="mt-5 rounded-xl bg-obsidian-900/60 p-4">
+              <div className="flex items-center justify-between">
+                <span className="label">Trade fee</span>
+                <span className="font-semibold text-white">1.5%</span>
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-white/45">
+                Every trade deepens permanent liquidity and streams rewards to holders — the loop
+                feeds itself.
+              </p>
             </div>
           </div>
 
@@ -149,11 +153,3 @@ export default function TokenPage() {
   );
 }
 
-function MiniStat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="rounded-xl bg-obsidian-900/60 p-3">
-      <div className="label">{label}</div>
-      <div className={`mt-0.5 font-semibold ${accent ? "text-venom-400" : "text-white"}`}>{value}</div>
-    </div>
-  );
-}

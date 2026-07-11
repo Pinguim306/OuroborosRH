@@ -11,23 +11,21 @@ turns every trade into deeper liquidity and loyalty rewards.
 
 ## The loop (what makes it different)
 
-1. **Trade** — every buy/sell on the bonding curve charges a flat **1.5% fee**,
-   split three ways (defaults, all configurable): **0.5% developer**, **0.6%
-   liquidity**, **0.4% holders**.
-2. **Fees → Liquidity** — the liquidity slice is folded back into the curve as
-   **permanent, locked liquidity**, deepening the market and lifting the floor.
-3. **Liquidity → Rewards** — the holder slice streams straight into the token,
-   pooled in the chain's native coin (ETH).
+1. **Trade** — every buy/sell on the bonding curve charges a flat **1.5% fee**.
+2. **Fees → Liquidity** — a portion is folded back into the curve as **permanent,
+   locked liquidity**, deepening the market and lifting the floor.
+3. **Liquidity → Rewards** — a portion streams straight into the token, pooled in
+   the chain's native coin (ETH).
 4. **Rewards → Holders** — **no staking.** The token is a dividend token: fees
    accrue to every holder automatically, proportional to balance. Connect your
    wallet and **claim anytime**. Hold longer and you're simply present for more
    inflows.
 
-### Developer revenue
-Two streams accrue to the developer wallet: a **per-trade dev fee** (0.5% by
-default) and a **fixed creation fee** (0.01 ETH by default) charged on every
-token launch. Both are owner-configurable (`setFeeRecipient`, `setCreationFee`,
-`setParams`).
+### Protocol fees
+A small protocol fee (part of the 1.5% trade fee) and a fixed **creation fee**
+(0.01 ETH by default) support the platform. The fee split and recipient are
+owner-configurable (`setParams`, `setFeeRecipient`, `setCreationFee`); the exact
+per-destination split lives on-chain in the contract.
 
 ## Monorepo layout
 

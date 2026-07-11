@@ -45,7 +45,7 @@ contract BondingCurveTest is Test {
         assertEq(token.balanceOf(address(curve)), SUPPLY);
         assertTrue(token.isExcludedFromDividends(address(curve)));
         assertEq(token.dividendSupply(), 0);
-        assertEq(token.authority(), address(this)); // handed to launchpad owner
+        assertEq(token.authority(), address(0)); // renounced at launch (M2 fix)
         assertEq(curve.tokenReserve(), SUPPLY);
         assertEq(curve.nativeReserve(), VIRTUAL);
         assertEq(curve.totalFeeBps(), DEV_BPS + LIQ_BPS + HOLDER_BPS);

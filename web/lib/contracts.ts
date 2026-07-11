@@ -10,10 +10,6 @@ export const CONTRACTS = {
     "0x0000000000000000000000000000000000000000") as Address,
 };
 
-/** Developer wallet that receives the creation fee and per-trade dev fee. */
-export const FEE_RECIPIENT =
-  "0x1c06a7dE6951d62CbaD36FC449770BEE2d8c2b23" as Address;
-
 export const isDeployed = (a: Address) =>
   a !== "0x0000000000000000000000000000000000000000";
 
