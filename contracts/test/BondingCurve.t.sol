@@ -182,6 +182,49 @@ contract BondingCurveTest is Test {
         curve.buy{value: 1 ether}(0);
     }
 
+    function testGraduationSurvivesRouterRefund() public {
+        // Simulates the griefing scenario: the pair pre-exists at a skewed ratio, so
+        // the real router only uses part of the amounts and refunds excess ETH.
+        // Graduation must succeed, and leftovers must be swept (ETH -> holders as
+        // rewards, tokens -> burned to DEAD and excluded from dividends).
+        Launchpad.CurveParams memory p = Launchpad.CurveParams({
+            totalSupply: SUPPLY,
+            virtualNative: VIRTUAL,
+            devFeeBps: DEV_BPS,
+            liqFeeBps: LIQ_BPS,
+            holderFeeBps: HOLDER_BPS,
+            graduationTarget: 5 ether,
+            maxBuyBps: 0
+        });
+        Launchpad lp = new Launchpad(address(this), dev, address(router), 0, p);
+        (address t, address c) = lp.createToken("Grief", "GRF", "");
+        OuroToken token = OuroToken(payable(t));
+        BondingCurve curve = BondingCurve(payable(c));
+
+        router.setRefundBps(2000); // router uses only 80%, refunds 20% of the ETH
+
+        uint256 rewardsBefore = token.totalRewardsDistributed() + token.pendingRewards();
+        vm.prank(alice);
+        curve.buy{value: 10 ether}(0); // crosses the target -> graduates
+
+        assertTrue(curve.graduated());
+        assertEq(address(curve).balance, 0); // refund swept, nothing stranded
+        assertEq(token.balanceOf(address(curve)), 0); // leftover tokens swept
+        address dead = 0x000000000000000000000000000000000000dEaD;
+        assertGt(token.balanceOf(dead), 0); // burned
+        assertTrue(token.isExcludedFromDividends(dead)); // never dilutes holders
+        // The refunded ETH became holder rewards instead of bricking the launch.
+        assertGt(token.totalRewardsDistributed() + token.pendingRewards(), rewardsBefore);
+        assertEq(token.authority(), address(0)); // still renounced at the end
+    }
+
+    function testCurveRejectsStrayNative() public {
+        (, BondingCurve curve) = _launch();
+        vm.prank(alice);
+        (bool ok,) = address(curve).call{value: 1 ether}("");
+        assertFalse(ok); // only the router may send plain ETH to the curve
+    }
+
     function testMaxBuyCapEnforced() public {
         Launchpad.CurveParams memory p = Launchpad.CurveParams({
             totalSupply: SUPPLY,

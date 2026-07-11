@@ -65,6 +65,7 @@ contract BondingCurve is ReentrancyGuard {
     error ZeroAmount();
     error NativeTransferFailed();
     error MaxBuyExceeded();
+    error UnexpectedNative();
 
     constructor(
         address _token,
@@ -223,13 +224,36 @@ contract BondingCurve is ReentrancyGuard {
         token.setExcludedFromDividends(_pair, true);
 
         // Migrate all remaining tokens + real ETH as permanent liquidity; LP is burned.
+        // If a griefer pre-created the pair at a skewed ratio, the router adds at that
+        // ratio and refunds the excess ETH here (see `receive`), instead of reverting.
         token.approve(address(router), tokenLiq);
         router.addLiquidityETH{value: ethLiq}(address(token), tokenLiq, 0, 0, DEAD, block.timestamp);
+        token.approve(address(router), 0);
+
+        // Sweep leftovers so a pre-seeded pair can't strand value: leftover tokens are
+        // burned to DEAD (excluded from dividends first, so they never dilute holders).
+        uint256 tokLeft = token.balanceOf(address(this));
+        if (tokLeft > 0) {
+            token.setExcludedFromDividends(DEAD, true);
+            require(token.transfer(DEAD, tokLeft), "sweep transfer failed");
+        }
 
         // Freeze exclusions forever — no one can exclude a holder afterwards.
         token.renounceAuthority();
 
+        // Any refunded ETH is streamed to holders as rewards — the griefer's skew ends
+        // up paying the community rather than bricking the launch.
+        uint256 ethLeft = address(this).balance;
+        if (ethLeft > 0) token.distributeRewards{value: ethLeft}();
+
         emit Graduated(_pair, ethLiq, tokenLiq);
+    }
+
+    /// @dev Accept native ONLY from the router (its `addLiquidityETH` refunds excess
+    ///      ETH when the pair pre-exists at a different ratio). Rejecting everyone
+    ///      else protects users from accidentally sending ETH here.
+    receive() external payable {
+        if (msg.sender != address(router)) revert UnexpectedNative();
     }
 
     function _sendNative(address to, uint256 amount) internal {
