@@ -85,5 +85,24 @@ contract OuroTokenTest is Test {
         token.setExcludedFromDividends(bob, true);
     }
 
+    function testRenounceAuthorityLocksExclusions() public {
+        token.renounceAuthority(); // this contract is the authority
+        assertEq(token.authority(), address(0));
+        vm.expectRevert(OuroToken.NotAuthority.selector);
+        token.setExcludedFromDividends(alice, true);
+    }
+
+    function testClaimableClampsAfterReinclude() public {
+        // L1: re-including a previously-withdrawn account must not underflow.
+        token.transfer(alice, 100 ether);
+        token.distributeRewards{value: 30 ether}();
+        vm.prank(alice);
+        token.claim(); // withdrawnRewards[alice] = 30
+
+        token.setExcludedFromDividends(alice, true);
+        token.setExcludedFromDividends(alice, false); // accumulative reset below withdrawn
+        assertEq(token.claimableRewardOf(alice), 0); // clamped, no revert
+    }
+
     receive() external payable {}
 }

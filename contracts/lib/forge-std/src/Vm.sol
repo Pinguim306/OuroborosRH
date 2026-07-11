@@ -15,6 +15,7 @@ interface Vm {
     function expectRevert(bytes calldata revertData) external;
     function addr(uint256 privateKey) external pure returns (address keyAddr);
     function envUint(string calldata name) external view returns (uint256 value);
+    function envOr(string calldata name, address defaultValue) external view returns (address value);
     function startBroadcast(uint256 privateKey) external;
     function stopBroadcast() external;
     function label(address account, string calldata newLabel) external;

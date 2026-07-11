@@ -11,18 +11,27 @@ contract Deploy is Script {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address owner = vm.addr(pk);
 
-        // Developer wallet that receives the creation fee and per-trade dev fee.
-        address feeRecipient = 0x1c06a7dE6951d62CbaD36FC449770BEE2d8c2b23;
+        // Wallet that collects the creation fee and per-trade platform fee.
+        // Set FEE_RECIPIENT in the environment; falls back to the deployer.
+        address feeRecipient = vm.envOr("FEE_RECIPIENT", owner);
+
+        // Uniswap V2 Router02 on Robinhood Chain (from @uniswap/sdk-core) — curves
+        // migrate liquidity here at graduation. Override with DEX_ROUTER if needed.
+        address router = vm.envOr("DEX_ROUTER", 0x89e5DB8B5aA49aA85AC63f691524311AEB649eba);
 
         // Total per-trade fee 1.5%: 0.5% dev + 0.6% liquidity + 0.4% holders.
-        // 1B supply, 30 native virtual seed, graduate at 400 native raised.
+        // 1B supply; 1 ETH virtual seed paired with the 4 ETH graduation target so the
+        // DEX price at graduation stays close to the curve's final price (a large
+        // virtual seed relative to the target would crash the price on migration).
+        // Anti-whale cap of 2% of supply per buy during the curve.
         Launchpad.CurveParams memory params = Launchpad.CurveParams({
             totalSupply: 1_000_000_000 ether,
-            virtualNative: 30 ether,
+            virtualNative: 1 ether,
             devFeeBps: 50,
             liqFeeBps: 60,
             holderFeeBps: 40,
-            graduationTarget: 400 ether
+            graduationTarget: 4 ether,
+            maxBuyBps: 200
         });
 
         // Creation fee charged on every launch (native coin = ETH on Robinhood Chain).
@@ -30,7 +39,7 @@ contract Deploy is Script {
         uint256 creationFee = 0.01 ether;
 
         vm.startBroadcast(pk);
-        Launchpad launchpad = new Launchpad(owner, feeRecipient, creationFee, params);
+        Launchpad launchpad = new Launchpad(owner, feeRecipient, router, creationFee, params);
         vm.stopBroadcast();
 
         console2.log("Launchpad deployed at:", address(launchpad));

@@ -84,8 +84,12 @@ contract OuroToken is ERC20, ReentrancyGuard {
     }
 
     /// @notice Native rewards `account` can claim right now.
+    /// @dev Clamped at 0: an admin re-inclusion can reset an account's accumulative
+    ///      below what it already withdrew, and the subtraction must not underflow.
     function claimableRewardOf(address account) public view returns (uint256) {
-        return accumulativeRewardOf(account) - withdrawnRewards[account];
+        uint256 acc = accumulativeRewardOf(account);
+        uint256 withdrawn = withdrawnRewards[account];
+        return acc > withdrawn ? acc - withdrawn : 0;
     }
 
     // --------------------------------------------------------------------- //

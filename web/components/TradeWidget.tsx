@@ -1,60 +1,166 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useAccount } from "wagmi";
+import { useEffect, useMemo, useState } from "react";
+import { formatEther, maxUint256, parseEther } from "viem";
+import {
+  useAccount,
+  useReadContract,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from "wagmi";
 import type { TokenMarket } from "@/lib/types";
 import { copy } from "@/lib/copy";
 import { compact, rh } from "@/lib/format";
 import { NATIVE_SYMBOL } from "@/lib/chain";
-import { LIVE } from "@/lib/contracts";
+import { LIVE, curveAbi, tokenAbi } from "@/lib/contracts";
 
-// Per-trade fee split (fractions of trade volume): total 1.5%.
-const DEV_FEE = 0.005; // 0.5% to the developer
-const LIQ_FEE = 0.006; // 0.6% becomes permanent liquidity
-const HOLDER_FEE = 0.004; // 0.4% streamed to holders
-const FEE = DEV_FEE + LIQ_FEE + HOLDER_FEE; // 1.5%
+// Total per-trade fee. The internal split (liquidity / holders / platform) lives
+// in the contract and is intentionally not itemized in the UI.
+const FEE = 0.015; // 1.5%
+const SLIPPAGE_BPS = 500n; // 5% max slippage on live trades
+
+function safeParseEther(v: string): bigint {
+  try {
+    return v ? parseEther(v) : 0n;
+  } catch {
+    return 0n;
+  }
+}
 
 export function TradeWidget({ token }: { token: TokenMarket }) {
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const [mode, setMode] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
-  const [balance, setBalance] = useState(0); // simulated token balance
+  const [simBalance, setSimBalance] = useState(0); // demo-mode balance
   const [flash, setFlash] = useState<string | null>(null);
 
   const num = parseFloat(amount) || 0;
+  const amountWei = safeParseEther(amount);
+
+  // --- Live reads (gated; hooks always run) ---
+  const balanceQ = useReadContract({
+    address: token.address,
+    abi: tokenAbi,
+    functionName: "balanceOf",
+    args: [address ?? "0x0000000000000000000000000000000000000000"],
+    query: { enabled: LIVE && !!address },
+  });
+  const allowanceQ = useReadContract({
+    address: token.address,
+    abi: tokenAbi,
+    functionName: "allowance",
+    args: [address ?? "0x0000000000000000000000000000000000000000", token.curve],
+    query: { enabled: LIVE && !!address && mode === "sell" },
+  });
+  const quoteBuyQ = useReadContract({
+    address: token.curve,
+    abi: curveAbi,
+    functionName: "quoteBuy",
+    args: [amountWei],
+    query: { enabled: LIVE && mode === "buy" && amountWei > 0n },
+  });
+  const quoteSellQ = useReadContract({
+    address: token.curve,
+    abi: curveAbi,
+    functionName: "quoteSell",
+    args: [amountWei],
+    query: { enabled: LIVE && mode === "sell" && amountWei > 0n },
+  });
+
+  const { writeContract, data: hash, isPending, error, reset } = useWriteContract();
+  const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  const liveBalance = LIVE ? Number(formatEther((balanceQ.data as bigint) ?? 0n)) : simBalance;
+  const balanceWei = (balanceQ.data as bigint) ?? 0n;
+  const allowance = (allowanceQ.data as bigint) ?? 0n;
+  const needsApproval = mode === "sell" && amountWei > 0n && allowance < amountWei;
+
+  // Refresh + notify on a confirmed tx.
+  useEffect(() => {
+    if (!isSuccess) return;
+    setFlash(mode === "buy" ? "Buy confirmed" : needsApproval ? "Approved" : "Sell confirmed");
+    if (!needsApproval) setAmount("");
+    balanceQ.refetch?.();
+    allowanceQ.refetch?.();
+    const t = setTimeout(() => {
+      setFlash(null);
+      reset();
+    }, 2600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuccess]);
 
   const quote = useMemo(() => {
     if (mode === "buy") {
-      const fee = num * FEE;
-      const net = num - fee;
-      const tokensOut = net / token.priceRh;
-      return { fee, out: tokensOut, outLabel: `${compact(tokensOut, 2)} ${token.symbol}` };
+      const net = num * (1 - FEE);
+      const tokensOut = token.priceRh > 0 ? net / token.priceRh : 0;
+      return { fee: num * FEE, outLabel: `${compact(tokensOut, 2)} ${token.symbol}` };
     }
     const gross = num * token.priceRh;
-    const fee = gross * FEE;
-    const net = gross - fee;
-    return { fee, out: net, outLabel: rh(net, 4) };
+    return { fee: gross * FEE, outLabel: rh(gross * (1 - FEE), 4) };
   }, [mode, num, token.priceRh, token.symbol]);
 
-  function submit() {
-    if (num <= 0) return;
-    // In a live deployment this calls curve.buy / curve.sell via wagmi's
-    // useWriteContract. Here we simulate so the flow is fully demoable.
-    if (mode === "buy") {
-      setBalance((b) => b + quote.out);
-      setFlash(`Bought ${quote.outLabel}`);
-    } else {
-      setBalance((b) => Math.max(0, b - num));
-      setFlash(`Sold for ${quote.outLabel}`);
-    }
-    setAmount("");
-    setTimeout(() => setFlash(null), 2600);
+  function minusSlippage(x: bigint): bigint {
+    return (x * (10_000n - SLIPPAGE_BPS)) / 10_000n;
   }
 
-  const base = mode === "buy" ? num : num * token.priceRh;
-  const feeToDev = base * DEV_FEE;
-  const feeToLiq = base * LIQ_FEE;
-  const feeToRewards = base * HOLDER_FEE;
+  function submit() {
+    if (num <= 0 || token.graduated) return;
+
+    if (!LIVE) {
+      if (mode === "buy") {
+        const out = num * (1 - FEE) / (token.priceRh || 1);
+        setSimBalance((b) => b + out);
+        setFlash(`Bought ${compact(out, 2)} ${token.symbol}`);
+      } else {
+        setSimBalance((b) => Math.max(0, b - num));
+        setFlash(`Sold for ${rh(num * token.priceRh * (1 - FEE), 4)}`);
+      }
+      setAmount("");
+      setTimeout(() => setFlash(null), 2600);
+      return;
+    }
+
+    if (mode === "buy") {
+      const expected = (quoteBuyQ.data as readonly [bigint, bigint] | undefined)?.[0] ?? 0n;
+      writeContract({
+        address: token.curve,
+        abi: curveAbi,
+        functionName: "buy",
+        args: [minusSlippage(expected)],
+        value: amountWei,
+      });
+      return;
+    }
+
+    // sell: approve first if needed, else sell.
+    if (needsApproval) {
+      writeContract({
+        address: token.address,
+        abi: tokenAbi,
+        functionName: "approve",
+        args: [token.curve, maxUint256],
+      });
+      return;
+    }
+    const expectedOut = (quoteSellQ.data as readonly [bigint, bigint] | undefined)?.[0] ?? 0n;
+    writeContract({
+      address: token.curve,
+      abi: curveAbi,
+      functionName: "sell",
+      args: [amountWei, minusSlippage(expectedOut)],
+    });
+  }
+
+  const busy = LIVE && (isPending || confirming);
+
+  function actionLabel(): string {
+    if (token.graduated) return copy.token.graduated;
+    if (busy) return "Confirming…";
+    if (mode === "buy") return `${copy.token.buy} ${token.symbol}`;
+    if (needsApproval) return `Approve ${token.symbol}`;
+    return `${copy.token.sell} ${token.symbol}`;
+  }
 
   return (
     <div className="glass-strong p-5">
@@ -95,7 +201,13 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
           <button
             key={v}
             onClick={() =>
-              setAmount(mode === "buy" ? String(v) : String((balance * v) / 100))
+              setAmount(
+                mode === "buy"
+                  ? String(v)
+                  : LIVE
+                    ? formatEther((balanceWei * BigInt(v)) / 100n)
+                    : String((simBalance * v) / 100),
+              )
             }
             className="flex-1 rounded-lg border border-white/10 py-1 text-xs text-white/50 hover:border-venom-500/40 hover:text-white"
           >
@@ -105,25 +217,19 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
       </div>
 
       <div className="mt-4 space-y-2 rounded-xl bg-obsidian-900/60 p-3 text-xs">
-        <Row label="You receive" value={quote.outLabel} strong />
-        <Row label="Fee (1.5%)" value={rh(quote.fee, 4)} />
-        <div className="space-y-2 border-t border-white/5 pt-2">
-          <Row label="→ Permanent liquidity" value={rh(feeToLiq, 4)} accent />
-          <Row label="→ Holder rewards" value={rh(feeToRewards, 4)} accent />
-          <Row label="→ Developer" value={rh(feeToDev, 4)} />
-        </div>
+        <Row label="You receive (est.)" value={quote.outLabel} strong />
+        <Row label="Trade fee" value={rh(quote.fee, 4)} />
+        <p className="border-t border-white/5 pt-2 text-white/40">
+          Fees fund permanent liquidity and holder rewards.
+        </p>
       </div>
 
       <button
         onClick={submit}
-        disabled={num <= 0 || token.graduated}
+        disabled={num <= 0 || token.graduated || busy || (LIVE && !isConnected)}
         className={`mt-4 w-full ${mode === "buy" ? "btn-primary" : "btn-danger"}`}
       >
-        {token.graduated
-          ? copy.token.graduated
-          : mode === "buy"
-            ? `${copy.token.buy} ${token.symbol}`
-            : `${copy.token.sell} ${token.symbol}`}
+        {actionLabel()}
       </button>
 
       {flash && (
@@ -131,11 +237,16 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
           ✓ {flash}
         </div>
       )}
+      {LIVE && error && (
+        <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-center text-xs text-red-400">
+          {(error as { shortMessage?: string }).shortMessage ?? "Transaction failed."}
+        </div>
+      )}
 
       <div className="mt-3 flex justify-between text-xs text-white/40">
         <span>Your balance</span>
         <span className="font-mono">
-          {compact(balance, 2)} {token.symbol}
+          {compact(liveBalance, 2)} {token.symbol}
         </span>
       </div>
       {!isConnected && (
@@ -153,21 +264,15 @@ function Row({
   label,
   value,
   strong,
-  accent,
 }: {
   label: string;
   value: string;
   strong?: boolean;
-  accent?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between">
       <span className="text-white/45">{label}</span>
-      <span
-        className={`font-mono ${
-          strong ? "text-sm font-semibold text-white" : accent ? "text-venom-400" : "text-white/70"
-        }`}
-      >
+      <span className={`font-mono ${strong ? "text-sm font-semibold text-white" : "text-white/70"}`}>
         {value}
       </span>
     </div>

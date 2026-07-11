@@ -4,12 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { copy } from "@/lib/copy";
 import { rh, compact } from "@/lib/format";
-import {
-  globalStats,
-  trendingTokens,
-  newestTokens,
-  graduatingTokens,
-} from "@/lib/mock/data";
+import { MOCK_TOKENS } from "@/lib/mock/data";
+import { LIVE } from "@/lib/contracts";
+import { useLiveMarkets } from "@/lib/useMarkets";
+import type { TokenMarket } from "@/lib/types";
 import { StatTile } from "@/components/StatTile";
 import { TokenCard } from "@/components/TokenCard";
 import { LoopDiagram } from "@/components/LoopDiagram";
@@ -17,10 +15,24 @@ import { LoopDiagram } from "@/components/LoopDiagram";
 type Tab = "trending" | "new" | "graduating";
 
 export default function HomePage() {
-  const stats = globalStats();
   const [tab, setTab] = useState<Tab>("trending");
+  const { tokens: liveTokens, isLoading } = useLiveMarkets();
+  const all: TokenMarket[] = LIVE ? liveTokens : MOCK_TOKENS;
+
+  const stats = {
+    liquidityLocked: all.reduce((s, t) => s + t.liquidityRh, 0),
+    rewardsPaid: all.reduce((s, t) => s + t.rewardsPoolRh, 0),
+    volume24h: all.reduce((s, t) => s + t.volume24hRh, 0),
+    tokens: all.length,
+    graduated: all.filter((t) => t.graduated).length,
+  };
+
   const tokens =
-    tab === "trending" ? trendingTokens() : tab === "new" ? newestTokens() : graduatingTokens();
+    tab === "trending"
+      ? [...all].sort((a, b) => b.volume24hRh - a.volume24hRh || b.liquidityRh - a.liquidityRh)
+      : tab === "new"
+        ? [...all].sort((a, b) => b.createdAt - a.createdAt)
+        : all.filter((t) => !t.graduated).sort((a, b) => b.graduationProgress - a.graduationProgress);
 
   return (
     <div className="mx-auto max-w-6xl px-4">
@@ -117,11 +129,22 @@ export default function HomePage() {
             ))}
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {tokens.map((t) => (
-            <TokenCard key={t.address} token={t} />
-          ))}
-        </div>
+        {LIVE && isLoading && tokens.length === 0 ? (
+          <div className="glass p-10 text-center text-white/50">Loading markets…</div>
+        ) : tokens.length === 0 ? (
+          <div className="glass p-10 text-center text-white/50">
+            No tokens yet.{" "}
+            <Link href="/create" className="text-venom-400 hover:underline">
+              Be the first to launch one →
+            </Link>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {tokens.map((t) => (
+              <TokenCard key={t.address} token={t} />
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

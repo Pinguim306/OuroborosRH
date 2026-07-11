@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useAccount } from "wagmi";
+import { parseEther } from "viem";
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { copy } from "@/lib/copy";
 import { NATIVE_SYMBOL } from "@/lib/chain";
-import { LIVE } from "@/lib/contracts";
+import { LIVE, CONTRACTS, launchpadAbi } from "@/lib/contracts";
 import { ProgressBar } from "@/components/ProgressBar";
 
 export default function CreatePage() {
@@ -21,13 +22,35 @@ export default function CreatePage() {
   });
   const [status, setStatus] = useState<"idle" | "deploying" | "done">("idle");
 
+  const { data: creationFee } = useReadContract({
+    address: CONTRACTS.launchpad,
+    abi: launchpadAbi,
+    functionName: "creationFee",
+    query: { enabled: LIVE },
+  });
+  const { writeContract, data: hash, isPending, error } = useWriteContract();
+  const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  // Live: real createToken tx (metadataURI carries the image). Demo: simulate.
+  const busy = LIVE ? isPending || confirming : status === "deploying";
+  const done = LIVE ? isSuccess : status === "done";
+
   function deploy() {
     if (!form.name || !form.symbol) return;
+    if (LIVE) {
+      writeContract({
+        address: CONTRACTS.launchpad,
+        abi: launchpadAbi,
+        functionName: "createToken",
+        args: [form.name, form.symbol, form.image],
+        value: (creationFee as bigint | undefined) ?? parseEther("0.01"),
+      });
+      return;
+    }
     setStatus("deploying");
-    // Live: launchpad.createToken(name, symbol, metadataURI) via useWriteContract.
     setTimeout(() => setStatus("done"), 1800);
   }
 
@@ -87,18 +110,20 @@ export default function CreatePage() {
             <ul className="grid grid-cols-2 gap-y-1">
               <li>Supply: <span className="text-white/70">1,000,000,000</span></li>
               <li>Trade fee: <span className="text-white/70">1.5%</span></li>
-              <li>Fee → liquidity: <span className="text-venom-400">0.6%</span></li>
-              <li>Fee → holders: <span className="text-venom-400">0.4%</span></li>
-              <li>Fee → developer: <span className="text-white/70">0.5%</span></li>
-              <li>Graduation: <span className="text-white/70">400 {NATIVE_SYMBOL} raised</span></li>
+              <li>Graduation: <span className="text-white/70">4 {NATIVE_SYMBOL} raised</span></li>
+              <li>Max buy: <span className="text-white/70">2% of supply</span></li>
+              <li>Rewards: <span className="text-venom-400">to holders, no staking</span></li>
             </ul>
+            <p className="mt-2 text-white/40">
+              Fees fund permanent liquidity and holder rewards automatically.
+            </p>
             <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-3">
               <span className="text-white/60">One-time creation fee</span>
               <span className="font-mono font-semibold text-acid">0.01 {NATIVE_SYMBOL}</span>
             </div>
           </div>
 
-          {status === "done" ? (
+          {done ? (
             <div className="mt-6 rounded-xl border border-venom-500/30 bg-venom-500/10 p-4 text-center">
               <div className="text-2xl">🎉</div>
               <p className="mt-1 font-semibold text-venom-400">
@@ -111,14 +136,23 @@ export default function CreatePage() {
           ) : (
             <button
               onClick={deploy}
-              disabled={!form.name || !form.symbol || status === "deploying"}
+              disabled={!form.name || !form.symbol || busy || (LIVE && !isConnected)}
               className="btn-primary mt-6 w-full text-base"
             >
-              {status === "deploying" ? copy.create.submitting : copy.create.submit}
+              {busy ? copy.create.submitting : copy.create.submit}
             </button>
           )}
 
-          {status === "deploying" && <div className="mt-3"><ProgressBar value={0.66} /></div>}
+          {busy && (
+            <div className="mt-3">
+              <ProgressBar value={confirming ? 0.85 : 0.4} />
+            </div>
+          )}
+          {LIVE && error && (
+            <p className="mt-3 text-center text-[11px] text-red-400">
+              {(error as { shortMessage?: string }).shortMessage ?? "Transaction failed."}
+            </p>
+          )}
           {!isConnected && (
             <p className="mt-3 text-center text-[11px] text-white/30">
               {LIVE ? "Connect a wallet to deploy." : "Demo mode — this simulates the deploy transaction."}

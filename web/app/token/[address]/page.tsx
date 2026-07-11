@@ -5,6 +5,9 @@ import Link from "next/link";
 import { getToken, mockTrades, mockHolders } from "@/lib/mock/data";
 import { compact, rh, pct, shortAddr, timeAgo } from "@/lib/format";
 import { NATIVE_SYMBOL } from "@/lib/chain";
+import { LIVE } from "@/lib/contracts";
+import { useLiveToken } from "@/lib/useMarkets";
+import type { Address } from "@/lib/types";
 import { StatTile } from "@/components/StatTile";
 import { ProgressBar } from "@/components/ProgressBar";
 import { TradeWidget } from "@/components/TradeWidget";
@@ -13,7 +16,12 @@ import { RewardsPanel } from "@/components/RewardsPanel";
 export default function TokenPage() {
   const params = useParams();
   const address = Array.isArray(params.address) ? params.address[0] : params.address;
-  const token = address ? getToken(address) : undefined;
+  const live = useLiveToken(address as Address | undefined);
+  const token = LIVE ? live.token : address ? getToken(address) : undefined;
+
+  if (LIVE && live.isLoading && !token) {
+    return <div className="mx-auto max-w-md px-4 py-32 text-center text-white/50">Loading token…</div>;
+  }
 
   if (!token) {
     return (
@@ -28,8 +36,9 @@ export default function TokenPage() {
     );
   }
 
-  const trades = mockTrades(token);
-  const holders = mockHolders(token);
+  // Trades/holders feeds need an off-chain indexer; shown from mock data in demo mode.
+  const trades = LIVE ? [] : mockTrades(token);
+  const holders = LIVE ? [] : mockHolders(token);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -69,27 +78,37 @@ export default function TokenPage() {
             <div className="mb-4 flex items-center justify-between">
               <h3 className="font-semibold">Bonding curve</h3>
               <span className="text-xs text-white/40">
-                Graduates at 400 {NATIVE_SYMBOL} of real liquidity
+                Graduates at 4 {NATIVE_SYMBOL} raised · max buy 2%
               </span>
             </div>
             {token.graduated ? (
               <div className="rounded-xl bg-venom-500/10 p-4 text-center text-sm text-venom-400">
-                This token filled its curve and graduated to a DEX. Liquidity is permanent and locked.
+                This token filled its curve and graduated to Uniswap V2. The migrated liquidity is
+                permanent — its LP tokens were burned — and trading now happens on the DEX pair.
               </div>
             ) : (
               <ProgressBar value={token.graduationProgress} label="Progress to graduation" />
             )}
-            <div className="mt-5 grid grid-cols-4 gap-3 text-center">
-              <MiniStat label="→ Liquidity" value="0.6%" accent />
-              <MiniStat label="→ Holders" value="0.4%" accent />
-              <MiniStat label="→ Developer" value="0.5%" />
-              <MiniStat label="Total fee" value="1.5%" />
+            <div className="mt-5 rounded-xl bg-obsidian-900/60 p-4">
+              <div className="flex items-center justify-between">
+                <span className="label">Trade fee</span>
+                <span className="font-semibold text-white">1.5%</span>
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-white/45">
+                Every trade deepens permanent liquidity and streams rewards to holders — the loop
+                feeds itself.
+              </p>
             </div>
           </div>
 
           {/* Trades */}
           <div className="glass overflow-hidden">
             <div className="border-b border-white/5 px-5 py-3 text-sm font-semibold">Recent trades</div>
+            {trades.length === 0 ? (
+              <div className="px-5 py-8 text-center text-xs text-white/35">
+                Live trade history needs an indexer — coming soon. Trades still settle on-chain.
+              </div>
+            ) : (
             <div className="max-h-80 overflow-y-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-obsidian-850/90 text-left text-xs text-white/40">
@@ -116,6 +135,7 @@ export default function TokenPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </div>
 
           {/* Holders */}
@@ -124,18 +144,24 @@ export default function TokenPage() {
               <span className="text-sm font-semibold">Top holders</span>
               <span className="text-xs text-white/40">Fees claimable (accrued, no staking)</span>
             </div>
-            <div className="divide-y divide-white/5">
-              {holders.map((h, i) => (
-                <div key={h.address} className="flex items-center gap-3 px-5 py-3 text-sm">
-                  <span className="w-5 text-white/30">{i + 1}</span>
-                  <span className="flex-1 font-mono text-white/60">{shortAddr(h.address)}</span>
-                  <span className="w-16 text-right text-white/50">{pct(h.sharePct / 100)}</span>
-                  <span className="w-28 text-right font-mono font-semibold text-venom-400">
-                    {rh(h.claimableRh, 3)}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {holders.length === 0 ? (
+              <div className="px-5 py-8 text-center text-xs text-white/35">
+                Holder rankings need an indexer — coming soon.
+              </div>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {holders.map((h, i) => (
+                  <div key={h.address} className="flex items-center gap-3 px-5 py-3 text-sm">
+                    <span className="w-5 text-white/30">{i + 1}</span>
+                    <span className="flex-1 font-mono text-white/60">{shortAddr(h.address)}</span>
+                    <span className="w-16 text-right text-white/50">{pct(h.sharePct / 100)}</span>
+                    <span className="w-28 text-right font-mono font-semibold text-venom-400">
+                      {rh(h.claimableRh, 3)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -149,11 +175,3 @@ export default function TokenPage() {
   );
 }
 
-function MiniStat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="rounded-xl bg-obsidian-900/60 p-3">
-      <div className="label">{label}</div>
-      <div className={`mt-0.5 font-semibold ${accent ? "text-venom-400" : "text-white"}`}>{value}</div>
-    </div>
-  );
-}

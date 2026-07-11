@@ -5,7 +5,9 @@ import Link from "next/link";
 import { copy } from "@/lib/copy";
 import { compact, rh } from "@/lib/format";
 import { mockRewardPositions } from "@/lib/mock/data";
+import { LIVE } from "@/lib/contracts";
 import { StatTile } from "@/components/StatTile";
+import { LivePortfolio } from "@/components/LivePortfolio";
 
 export default function RewardsPage() {
   const initial = useMemo(() => mockRewardPositions(), []);
@@ -28,9 +30,11 @@ export default function RewardsPage() {
           <h1 className="font-display text-4xl font-extrabold tracking-tight">{copy.rewards.title}</h1>
           <p className="mt-2 max-w-xl text-white/55">{copy.rewards.subtitle}</p>
         </div>
-        <button onClick={claimAll} disabled={totalClaimable <= 0} className="btn-primary text-base">
-          {copy.rewards.claimAll} · {rh(totalClaimable, 3)}
-        </button>
+        {!LIVE && (
+          <button onClick={claimAll} disabled={totalClaimable <= 0} className="btn-primary text-base">
+            {copy.rewards.claimAll} · {rh(totalClaimable, 3)}
+          </button>
+        )}
       </div>
 
       {flash && (
@@ -39,6 +43,10 @@ export default function RewardsPage() {
         </div>
       )}
 
+      {LIVE && <LivePortfolio />}
+
+      {!LIVE && (
+      <>
       <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3">
         <StatTile label="Total claimable" value={rh(totalClaimable, 4)} accent />
         <StatTile label="Tokens held" value={String(positions.length)} />
@@ -90,11 +98,13 @@ export default function RewardsPage() {
           ))}
         </div>
       )}
+      </>
+      )}
 
       <div className="glass mt-10 p-6 text-sm text-white/55">
         <h3 className="font-semibold text-white">How your rewards are calculated</h3>
         <p className="mt-2 leading-relaxed">
-          Every trade sends <span className="text-venom-400">0.4% of its volume</span> into the
+          Every trade sends <span className="text-venom-400">a share of its fee</span> into the
           token&apos;s reward pool. Your slice of each inflow is simply your{" "}
           <span className="text-venom-400">share of the supply</span> at that moment — credited
           on-chain by a dividend accumulator. <span className="text-white">No staking, no lock-ups:</span>{" "}

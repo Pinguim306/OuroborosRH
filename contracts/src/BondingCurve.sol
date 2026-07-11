@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {ReentrancyGuard} from "src/utils/ReentrancyGuard.sol";
 import {OuroToken} from "src/OuroToken.sol";
+import {IDexRouter, IDexFactory} from "src/interfaces/IDexRouter.sol";
 
 /// @title BondingCurve
 /// @notice The trading + fee-routing legs of the Ouroboros loop.
@@ -15,14 +16,20 @@ import {OuroToken} from "src/OuroToken.sol";
 ///                               (no staking — see OuroToken)
 ///
 ///         When cumulative real native raised reaches `graduationTarget`, the curve
-///         locks and "graduates".
+///         **graduates**: it migrates the remaining tokens + all real ETH into a
+///         Uniswap-V2-style pair as permanent liquidity, burns the LP, and locks the
+///         curve (trading then happens on the DEX).
 contract BondingCurve is ReentrancyGuard {
     uint256 private constant BPS = 10_000;
     uint256 private constant WAD = 1e18;
+    /// @dev LP tokens are sent here at graduation → liquidity is permanently locked.
+    address private constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
     OuroToken public immutable token;
     /// @notice Developer / platform address that receives the dev fee.
     address public immutable feeRecipient;
+    /// @notice Uniswap-V2-style router used to migrate liquidity at graduation.
+    IDexRouter public immutable router;
 
     uint256 public nativeReserve; // virtual seed + real, used for pricing
     uint256 public tokenReserve; // tokens remaining for sale
@@ -33,7 +40,15 @@ contract BondingCurve is ReentrancyGuard {
     uint256 public immutable holderFeeBps;
     uint256 public immutable graduationTarget;
 
+    /// @notice Anti-whale cap: max tokens a single buy may receive, as bps of total
+    ///         supply (e.g. 200 = 2%). 0 disables the cap. Applies during the curve
+    ///         only — once graduated, trading is on the DEX with no cap.
+    uint256 public immutable maxBuyBps;
+    uint256 public immutable maxBuyTokens;
+
     bool public graduated;
+    /// @notice The DEX pair created at graduation (0 until graduated).
+    address public pair;
 
     event Trade(
         address indexed trader,
@@ -43,31 +58,37 @@ contract BondingCurve is ReentrancyGuard {
         uint256 newPrice
     );
     event FeeRouted(uint256 toDev, uint256 toLiquidity, uint256 toHolders);
-    event Graduated(uint256 nativeLocked, uint256 tokensLocked);
+    event Graduated(address indexed pair, uint256 nativeLiquidity, uint256 tokenLiquidity);
 
     error AlreadyGraduated();
     error SlippageExceeded();
     error ZeroAmount();
     error NativeTransferFailed();
+    error MaxBuyExceeded();
 
     constructor(
         address _token,
         address _feeRecipient,
+        address _router,
         uint256 _virtualNative,
         uint256 _curveSupply,
         uint256 _devFeeBps,
         uint256 _liqFeeBps,
         uint256 _holderFeeBps,
-        uint256 _graduationTarget
+        uint256 _graduationTarget,
+        uint256 _maxBuyBps
     ) {
         token = OuroToken(payable(_token));
         feeRecipient = _feeRecipient;
+        router = IDexRouter(_router);
         nativeReserve = _virtualNative;
         tokenReserve = _curveSupply;
         devFeeBps = _devFeeBps;
         liqFeeBps = _liqFeeBps;
         holderFeeBps = _holderFeeBps;
         graduationTarget = _graduationTarget;
+        maxBuyBps = _maxBuyBps;
+        maxBuyTokens = (_curveSupply * _maxBuyBps) / BPS;
     }
 
     // --------------------------------------------------------------------- //
@@ -122,6 +143,7 @@ contract BondingCurve is ReentrancyGuard {
 
         tokensOut = getAmountOut(netIn, nativeReserve, tokenReserve);
         if (tokensOut < minTokensOut) revert SlippageExceeded();
+        if (maxBuyTokens != 0 && tokensOut > maxBuyTokens) revert MaxBuyExceeded();
 
         nativeReserve += netIn + liqPart;
         tokenReserve -= tokensOut;
@@ -182,10 +204,32 @@ contract BondingCurve is ReentrancyGuard {
     }
 
     function _maybeGraduate() internal {
-        if (!graduated && realNativeRaised >= graduationTarget) {
-            graduated = true;
-            emit Graduated(realNativeRaised, tokenReserve);
-        }
+        if (graduated || realNativeRaised < graduationTarget) return;
+        graduated = true;
+
+        uint256 tokenLiq = tokenReserve;
+        uint256 ethLiq = realNativeRaised;
+        tokenReserve = 0;
+        realNativeRaised = 0;
+
+        // Resolve (or create) the pair and exclude it from dividends BEFORE it holds
+        // tokens, so pooled liquidity never accrues holder rewards. The curve is the
+        // token's dividend authority solely to perform this one exclusion.
+        address weth = router.WETH();
+        IDexFactory factory = IDexFactory(router.factory());
+        address _pair = factory.getPair(address(token), weth);
+        if (_pair == address(0)) _pair = factory.createPair(address(token), weth);
+        pair = _pair;
+        token.setExcludedFromDividends(_pair, true);
+
+        // Migrate all remaining tokens + real ETH as permanent liquidity; LP is burned.
+        token.approve(address(router), tokenLiq);
+        router.addLiquidityETH{value: ethLiq}(address(token), tokenLiq, 0, 0, DEAD, block.timestamp);
+
+        // Freeze exclusions forever — no one can exclude a holder afterwards.
+        token.renounceAuthority();
+
+        emit Graduated(_pair, ethLiq, tokenLiq);
     }
 
     function _sendNative(address to, uint256 amount) internal {
