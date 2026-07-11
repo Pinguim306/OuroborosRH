@@ -29,9 +29,9 @@ Holders  ◄── claim (native) ──  OuroToken (dividend token)
 
 Per-trade fee **1.5%**, as basis points of trade volume:
 `devFeeBps = 50` (0.5% → developer), `liqFeeBps = 60` (0.6% → permanent liquidity),
-`holderFeeBps = 40` (0.4% → holders). Plus a fixed **creation fee** in native coin
-charged on every launch (set it to ≈$10–20 for the current native price; adjust via
-`setCreationFee`). The developer wallet is `feeRecipient` (`setFeeRecipient`).
+`holderFeeBps = 40` (0.4% → holders). Plus a fixed **creation fee** in the native
+coin (ETH) charged on every launch — `0.01 ETH` by default, adjustable via
+`setCreationFee`. The developer wallet is `feeRecipient` (`setFeeRecipient`).
 
 ## Build & test
 
@@ -64,6 +64,6 @@ forge script script/Deploy.s.sol --rpc-url $RPC --broadcast
 ```
 
 The deploy script sets `feeRecipient` to the developer wallet
-`0x1c06a7dE6951d62CbaD36FC449770BEE2d8c2b23` and a creation fee of `0.006` native
-(≈$15 near $2.5k native). Copy the printed `Launchpad` address into
-`web/lib/contracts.ts` (or `NEXT_PUBLIC_LAUNCHPAD_ADDRESS`).
+`0x1c06a7dE6951d62CbaD36FC449770BEE2d8c2b23` and a creation fee of `0.01 ETH`.
+Copy the printed `Launchpad` address into `web/lib/contracts.ts` (or
+`NEXT_PUBLIC_LAUNCHPAD_ADDRESS`).

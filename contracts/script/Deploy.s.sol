@@ -25,9 +25,9 @@ contract Deploy is Script {
             graduationTarget: 400 ether
         });
 
-        // Creation fee: set to ~$10-20 worth of the native coin. Example assumes a
-        // native price near $2,500 -> ~0.006 native ≈ $15. Adjust via setCreationFee.
-        uint256 creationFee = 0.006 ether;
+        // Creation fee charged on every launch (native coin = ETH on Robinhood Chain).
+        // Adjustable later via setCreationFee.
+        uint256 creationFee = 0.01 ether;
 
         vm.startBroadcast(pk);
         Launchpad launchpad = new Launchpad(owner, feeRecipient, creationFee, params);

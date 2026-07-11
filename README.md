@@ -17,7 +17,7 @@ turns every trade into deeper liquidity and loyalty rewards.
 2. **Fees → Liquidity** — the liquidity slice is folded back into the curve as
    **permanent, locked liquidity**, deepening the market and lifting the floor.
 3. **Liquidity → Rewards** — the holder slice streams straight into the token,
-   pooled in the chain's native coin (RH).
+   pooled in the chain's native coin (ETH).
 4. **Rewards → Holders** — **no staking.** The token is a dividend token: fees
    accrue to every holder automatically, proportional to balance. Connect your
    wallet and **claim anytime**. Hold longer and you're simply present for more
@@ -25,9 +25,9 @@ turns every trade into deeper liquidity and loyalty rewards.
 
 ### Developer revenue
 Two streams accrue to the developer wallet: a **per-trade dev fee** (0.5% by
-default) and a **fixed creation fee** (native coin, ~$10–20 worth) charged on
-every token launch. Both are owner-configurable (`setFeeRecipient`,
-`setCreationFee`, `setParams`).
+default) and a **fixed creation fee** (0.01 ETH by default) charged on every
+token launch. Both are owner-configurable (`setFeeRecipient`, `setCreationFee`,
+`setParams`).
 
 ## Monorepo layout
 

@@ -8,12 +8,12 @@ import { defineChain } from "viem";
 export const robinhoodChain = defineChain({
   id: 42070,
   name: "Robinhood Chain",
-  nativeCurrency: { name: "Robinhood", symbol: "RH", decimals: 18 },
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: {
     default: { http: ["https://rpc.robinhoodchain.example"] },
   },
   blockExplorers: {
-    default: { name: "RH Explorer", url: "https://explorer.robinhoodchain.example" },
+    default: { name: "Robinhood Explorer", url: "https://explorer.robinhoodchain.example" },
   },
   testnet: false,
 });

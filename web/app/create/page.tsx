@@ -94,7 +94,7 @@ export default function CreatePage() {
             </ul>
             <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-3">
               <span className="text-white/60">One-time creation fee</span>
-              <span className="font-mono font-semibold text-acid">~$15 in {NATIVE_SYMBOL}</span>
+              <span className="font-mono font-semibold text-acid">0.01 {NATIVE_SYMBOL}</span>
             </div>
           </div>
 

@@ -34,7 +34,7 @@ export const copy = {
       },
       {
         label: "Liquidity → Rewards",
-        text: "Another slice streams straight into the token, pooled in RH, the chain's native coin.",
+        text: "Another slice streams straight into the token, pooled in ETH, the chain's native coin.",
       },
       {
         label: "Rewards → Holders",
@@ -54,7 +54,7 @@ export const copy = {
         text: "A share of every trading fee is folded back into the curve as permanent, locked liquidity. The market gets deeper with every swap — it can never be rug-pulled out.",
       },
       {
-        title: "Paid on-chain, in RH",
+        title: "Paid on-chain, in ETH",
         text: "A dividend accumulator credits your fee share on every inflow and keeps it correct as balances move. No snapshots to game, no team switch to flip.",
       },
     ],

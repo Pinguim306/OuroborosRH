@@ -99,7 +99,7 @@ export default function RewardsPage() {
           <span className="text-venom-400">share of the supply</span> at that moment — credited
           on-chain by a dividend accumulator. <span className="text-white">No staking, no lock-ups:</span>{" "}
           rewards accrue to your wallet just for holding, and you claim them in {" "}
-          {"RH"} whenever you connect. Hold longer and you&apos;re simply present for more inflows.
+          {"ETH"} whenever you connect. Hold longer and you&apos;re simply present for more inflows.
         </p>
       </div>
     </div>
