@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {Launchpad} from "src/Launchpad.sol";
 import {BondingCurve} from "src/BondingCurve.sol";
 import {OuroToken} from "src/OuroToken.sol";
+import {MockDexRouter, MockDexFactory, MockWETH} from "./mocks/MockDex.sol";
 
 /// @notice End-to-end walk of the reworked loop: launch (creation fee → dev) →
 ///         trade (dev fee + fees become liquidity + fees stream to holders) →
@@ -28,7 +29,8 @@ contract IntegrationTest is Test {
             holderFeeBps: 40,
             graduationTarget: 400 ether
         });
-        launchpad = new Launchpad(address(this), dev, CREATION_FEE, p);
+        MockDexRouter router = new MockDexRouter(address(new MockDexFactory()), address(new MockWETH()));
+        launchpad = new Launchpad(address(this), dev, address(router), CREATION_FEE, p);
         vm.deal(alice, 100 ether);
         vm.deal(bob, 100 ether);
     }

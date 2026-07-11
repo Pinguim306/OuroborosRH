@@ -74,7 +74,8 @@ export default function TokenPage() {
             </div>
             {token.graduated ? (
               <div className="rounded-xl bg-venom-500/10 p-4 text-center text-sm text-venom-400">
-                This token filled its curve and graduated to a DEX. Liquidity is permanent and locked.
+                This token filled its curve and graduated to Uniswap V2. The migrated liquidity is
+                permanent — its LP tokens were burned — and trading now happens on the DEX pair.
               </div>
             ) : (
               <ProgressBar value={token.graduationProgress} label="Progress to graduation" />

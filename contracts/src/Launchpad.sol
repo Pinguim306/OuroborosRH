@@ -31,6 +31,9 @@ contract Launchpad is Ownable, ReentrancyGuard {
     ///         roughly the desired USD amount for the current native price; adjustable.
     uint256 public creationFee;
 
+    /// @notice Uniswap-V2-style router each curve migrates liquidity to at graduation.
+    address public router;
+
     struct Market {
         address token;
         address curve;
@@ -50,15 +53,21 @@ contract Launchpad is Ownable, ReentrancyGuard {
     event ParamsUpdated(CurveParams params);
     event FeeRecipientUpdated(address indexed feeRecipient);
     event CreationFeeUpdated(uint256 creationFee);
+    event RouterUpdated(address indexed router);
 
     error InsufficientCreationFee();
     error NativeTransferFailed();
 
-    constructor(address initialOwner, address _feeRecipient, uint256 _creationFee, CurveParams memory _params)
-        Ownable(initialOwner)
-    {
+    constructor(
+        address initialOwner,
+        address _feeRecipient,
+        address _router,
+        uint256 _creationFee,
+        CurveParams memory _params
+    ) Ownable(initialOwner) {
         if (_feeRecipient == address(0)) revert ZeroAddress();
         feeRecipient = _feeRecipient;
+        router = _router;
         creationFee = _creationFee;
         params = _params;
     }
@@ -81,6 +90,12 @@ contract Launchpad is Ownable, ReentrancyGuard {
     function setCreationFee(uint256 _creationFee) external onlyOwner {
         creationFee = _creationFee;
         emit CreationFeeUpdated(_creationFee);
+    }
+
+    /// @notice Update the DEX router used by future launches' graduation.
+    function setRouter(address _router) external onlyOwner {
+        router = _router;
+        emit RouterUpdated(_router);
     }
 
     function marketsCount() external view returns (uint256) {
@@ -106,10 +121,11 @@ contract Launchpad is Ownable, ReentrancyGuard {
         //    Authority stays with the factory so it can exclude the curve below.
         OuroToken t = new OuroToken(name, symbol, p.totalSupply, address(this), address(this), metadataURI);
 
-        // 2. Deploy the bonding curve wired to the token + dev fee recipient.
+        // 2. Deploy the bonding curve wired to the token, fee recipient, and router.
         BondingCurve c = new BondingCurve(
             address(t),
             feeRecipient,
+            router,
             p.virtualNative,
             p.totalSupply,
             p.devFeeBps,
@@ -122,10 +138,10 @@ contract Launchpad is Ownable, ReentrancyGuard {
         t.setExcludedFromDividends(address(c), true);
         require(t.transfer(address(c), p.totalSupply), "supply transfer failed");
 
-        // 4. Renounce dividend authority so exclusions are frozen (only the curve is
-        //    ever excluded). No one — not even the owner — can later exclude a holder
-        //    and freeze their rewards. (M2 fix.)
-        t.renounceAuthority();
+        // 4. Hand dividend authority to the curve (trustless code, not a human). The
+        //    curve only uses it once — to exclude the DEX pair at graduation — then
+        //    renounces. No human can ever exclude a holder and freeze rewards. (M2)
+        t.transferAuthority(address(c));
 
         // 5. Record the market BEFORE any external value transfer (checks-effects-
         //    interactions), then forward the creation fee. (L2 fix.)

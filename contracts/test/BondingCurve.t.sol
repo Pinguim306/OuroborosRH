@@ -5,9 +5,11 @@ import {Test} from "forge-std/Test.sol";
 import {Launchpad} from "src/Launchpad.sol";
 import {BondingCurve} from "src/BondingCurve.sol";
 import {OuroToken} from "src/OuroToken.sol";
+import {MockDexRouter, MockDexFactory, MockWETH} from "./mocks/MockDex.sol";
 
 contract BondingCurveTest is Test {
     Launchpad internal launchpad;
+    MockDexRouter internal router;
 
     address internal dev = address(0xDE0);
     address internal alice = address(0xA11CE);
@@ -22,6 +24,7 @@ contract BondingCurveTest is Test {
     uint256 internal constant CREATION_FEE = 0.01 ether;
 
     function setUp() public {
+        router = new MockDexRouter(address(new MockDexFactory()), address(new MockWETH()));
         Launchpad.CurveParams memory p = Launchpad.CurveParams({
             totalSupply: SUPPLY,
             virtualNative: VIRTUAL,
@@ -30,7 +33,7 @@ contract BondingCurveTest is Test {
             holderFeeBps: HOLDER_BPS,
             graduationTarget: TARGET
         });
-        launchpad = new Launchpad(address(this), dev, CREATION_FEE, p);
+        launchpad = new Launchpad(address(this), dev, address(router), CREATION_FEE, p);
         vm.deal(alice, 100 ether);
         vm.deal(bob, 100 ether);
     }
@@ -45,7 +48,7 @@ contract BondingCurveTest is Test {
         assertEq(token.balanceOf(address(curve)), SUPPLY);
         assertTrue(token.isExcludedFromDividends(address(curve)));
         assertEq(token.dividendSupply(), 0);
-        assertEq(token.authority(), address(0)); // renounced at launch (M2 fix)
+        assertEq(token.authority(), address(curve)); // curve-scoped authority (M2)
         assertEq(curve.tokenReserve(), SUPPLY);
         assertEq(curve.nativeReserve(), VIRTUAL);
         assertEq(curve.totalFeeBps(), DEV_BPS + LIQ_BPS + HOLDER_BPS);
@@ -143,7 +146,7 @@ contract BondingCurveTest is Test {
         curve.buy{value: 1 ether}(type(uint256).max);
     }
 
-    function testGraduationLocksTrading() public {
+    function testGraduationMigratesLiquidityToDex() public {
         Launchpad.CurveParams memory p = Launchpad.CurveParams({
             totalSupply: SUPPLY,
             virtualNative: VIRTUAL,
@@ -152,15 +155,26 @@ contract BondingCurveTest is Test {
             holderFeeBps: HOLDER_BPS,
             graduationTarget: 5 ether
         });
-        Launchpad lp = new Launchpad(address(this), dev, 0, p);
-        (, address c) = lp.createToken("Grad", "GRAD", "");
+        Launchpad lp = new Launchpad(address(this), dev, address(router), 0, p);
+        (address t, address c) = lp.createToken("Grad", "GRAD", "");
+        OuroToken token = OuroToken(payable(t));
         BondingCurve curve = BondingCurve(payable(c));
 
         assertFalse(curve.graduated());
         vm.prank(alice);
-        curve.buy{value: 10 ether}(0);
-        assertTrue(curve.graduated());
+        curve.buy{value: 10 ether}(0); // crosses the 5 ETH target -> graduates
 
+        assertTrue(curve.graduated());
+        address pair = curve.pair();
+        assertTrue(pair != address(0));
+        assertTrue(token.isExcludedFromDividends(pair)); // pooled liquidity earns no dividends
+        assertGt(token.balanceOf(pair), 0); // remaining tokens migrated to the pair
+        assertEq(curve.tokenReserve(), 0);
+        assertEq(curve.realNativeRaised(), 0);
+        assertEq(address(curve).balance, 0); // all real ETH migrated
+        assertEq(token.authority(), address(0)); // curve renounced after excluding the pair
+
+        // Curve trading is locked; trading now happens on the DEX pair.
         vm.prank(alice);
         vm.expectRevert(BondingCurve.AlreadyGraduated.selector);
         curve.buy{value: 1 ether}(0);

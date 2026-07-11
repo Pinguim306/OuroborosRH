@@ -15,6 +15,10 @@ contract Deploy is Script {
         // Set FEE_RECIPIENT in the environment; falls back to the deployer.
         address feeRecipient = vm.envOr("FEE_RECIPIENT", owner);
 
+        // Uniswap-V2-style router on Robinhood Chain — curves migrate liquidity here
+        // at graduation. Set DEX_ROUTER to the live router address before mainnet.
+        address router = vm.envOr("DEX_ROUTER", address(0));
+
         // Total per-trade fee 1.5%: 0.5% dev + 0.6% liquidity + 0.4% holders.
         // 1B supply, 30 native virtual seed, graduate at 400 native raised.
         Launchpad.CurveParams memory params = Launchpad.CurveParams({
@@ -31,7 +35,7 @@ contract Deploy is Script {
         uint256 creationFee = 0.01 ether;
 
         vm.startBroadcast(pk);
-        Launchpad launchpad = new Launchpad(owner, feeRecipient, creationFee, params);
+        Launchpad launchpad = new Launchpad(owner, feeRecipient, router, creationFee, params);
         vm.stopBroadcast();
 
         console2.log("Launchpad deployed at:", address(launchpad));
