@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: #05070a;
+  color: #e6f0ea;
+}
+
+body {
+  min-height: 100vh;
+  background-image:
+    radial-gradient(60rem 40rem at 80% -10%, rgba(34, 229, 132, 0.1), transparent 60%),
+    radial-gradient(50rem 30rem at 0% 0%, rgba(200, 255, 77, 0.06), transparent 55%);
+  background-attachment: fixed;
+}
+
+/* Thin, on-brand scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(34, 229, 132, 0.25);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@layer components {
+  .glass {
+    @apply rounded-2xl border border-white/5 bg-obsidian-850/70 backdrop-blur-md;
+  }
+  .glass-strong {
+    @apply rounded-2xl border border-venom-500/20 bg-obsidian-850/80 backdrop-blur-md shadow-venom;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-venom-500 text-obsidian-950 hover:bg-venom-400 shadow-glow;
+  }
+  .btn-ghost {
+    @apply btn border border-white/10 text-white/80 hover:border-venom-500/40 hover:text-white;
+  }
+  .btn-danger {
+    @apply btn bg-red-500/90 text-white hover:bg-red-400;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/70;
+  }
+  .label {
+    @apply text-xs font-medium uppercase tracking-wider text-white/40;
+  }
+  .field {
+    @apply w-full rounded-xl border border-white/10 bg-obsidian-900/80 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-venom-500/60 focus:ring-2 focus:ring-venom-500/20;
+  }
+  .stat-value {
+    @apply font-display text-2xl font-bold tracking-tight text-white;
+  }
+}
+
+.text-gradient {
+  background: linear-gradient(120deg, #7dffb2 0%, #22e584 40%, #c8ff4d 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
