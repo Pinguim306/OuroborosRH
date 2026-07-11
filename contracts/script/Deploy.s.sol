@@ -15,9 +15,9 @@ contract Deploy is Script {
         // Set FEE_RECIPIENT in the environment; falls back to the deployer.
         address feeRecipient = vm.envOr("FEE_RECIPIENT", owner);
 
-        // Uniswap-V2-style router on Robinhood Chain — curves migrate liquidity here
-        // at graduation. Set DEX_ROUTER to the live router address before mainnet.
-        address router = vm.envOr("DEX_ROUTER", address(0));
+        // Uniswap V2 Router02 on Robinhood Chain (from @uniswap/sdk-core) — curves
+        // migrate liquidity here at graduation. Override with DEX_ROUTER if needed.
+        address router = vm.envOr("DEX_ROUTER", 0x89e5DB8B5aA49aA85AC63f691524311AEB649eba);
 
         // Total per-trade fee 1.5%: 0.5% dev + 0.6% liquidity + 0.4% holders.
         // 1B supply, 30 native virtual seed, graduate at 400 native raised.
