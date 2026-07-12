@@ -18,6 +18,25 @@ import { StatTile } from "./StatTile";
 
 const num = (x: unknown): number => Number(formatEther(typeof x === "bigint" ? x : 0n));
 
+function toHttp(uri: string): string {
+  return uri.startsWith("ipfs://") ? `https://ipfs.io/ipfs/${uri.slice(7)}` : uri;
+}
+
+/** Token avatar: renders an image for http/ipfs URIs, otherwise the emoji badge. */
+function TokenAvatar({ image, symbol }: { image: string; symbol: string }) {
+  const isImg = image.startsWith("http") || image.startsWith("ipfs");
+  return (
+    <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-obsidian-800 text-2xl">
+      {isImg ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={toHttp(image)} alt={symbol} className="h-full w-full object-cover" />
+      ) : (
+        image
+      )}
+    </div>
+  );
+}
+
 interface Position {
   token: TokenMarket;
   balance: number;
@@ -96,9 +115,7 @@ function PositionRow({ position: p, ethUsd }: { position: Position; ethUsd: numb
   return (
     <div className="glass flex flex-wrap items-center gap-4 p-4 md:flex-nowrap">
       <Link href={`/token/${p.token.address}`} className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-obsidian-800 text-2xl">
-          {p.token.image}
-        </div>
+        <TokenAvatar image={p.token.image} symbol={p.token.symbol} />
         <div className="min-w-0">
           <div className="truncate font-semibold text-white">{p.token.name}</div>
           <div className="text-xs text-white/40">
