@@ -167,6 +167,17 @@ export const curveAbi = [
     inputs: [],
     outputs: [{ type: "uint256" }],
   },
+  {
+    type: "event",
+    name: "Trade",
+    inputs: [
+      { name: "trader", type: "address", indexed: true },
+      { name: "isBuy", type: "bool", indexed: false },
+      { name: "nativeAmount", type: "uint256", indexed: false },
+      { name: "tokenAmount", type: "uint256", indexed: false },
+      { name: "newPrice", type: "uint256", indexed: false },
+    ],
+  },
 ] as const;
 
 /** The token itself pays dividends — holders claim by balance, no staking. */
@@ -222,5 +233,14 @@ export const tokenAbi = [
       { name: "spender", type: "address" },
     ],
     outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "event",
+    name: "Transfer",
+    inputs: [
+      { name: "from", type: "address", indexed: true },
+      { name: "to", type: "address", indexed: true },
+      { name: "value", type: "uint256", indexed: false },
+    ],
   },
 ] as const;

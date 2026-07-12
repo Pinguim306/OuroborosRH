@@ -1,17 +1,27 @@
 import Link from "next/link";
 import type { TokenMarket } from "@/lib/types";
-import { compact, rh } from "@/lib/format";
+import { compact, usdFromEth } from "@/lib/format";
 import { ProgressBar } from "./ProgressBar";
 
-export function TokenCard({ token }: { token: TokenMarket }) {
+function toHttp(uri: string): string {
+  return uri.startsWith("ipfs://") ? `https://ipfs.io/ipfs/${uri.slice(7)}` : uri;
+}
+
+export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: number }) {
+  const isImg = token.image.startsWith("http") || token.image.startsWith("ipfs");
   return (
     <Link
       href={`/token/${token.address}`}
       className="glass group block p-4 transition hover:border-venom-500/40 hover:shadow-venom"
     >
       <div className="flex items-start gap-3">
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-obsidian-800 text-2xl">
-          {token.image}
+        <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-obsidian-800 text-2xl">
+          {isImg ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={toHttp(token.image)} alt={token.symbol} className="h-full w-full object-cover" />
+          ) : (
+            token.image
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -24,18 +34,18 @@ export function TokenCard({ token }: { token: TokenMarket }) {
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+      <div className="mt-4 grid grid-cols-2 gap-2 text-center">
         <div>
-          <div className="label">MCap</div>
-          <div className="mt-0.5 text-sm font-semibold text-white">{rh(token.marketCapRh, 0)}</div>
+          <div className="label">Marketcap</div>
+          <div className="mt-0.5 text-sm font-semibold text-white">
+            {usdFromEth(token.marketCapRh, ethUsd, 0)}
+          </div>
         </div>
         <div>
           <div className="label">Liquidity</div>
-          <div className="mt-0.5 text-sm font-semibold text-venom-400">{rh(token.liquidityRh, 0)}</div>
-        </div>
-        <div>
-          <div className="label">APR</div>
-          <div className="mt-0.5 text-sm font-semibold text-acid">{token.aprPct}%</div>
+          <div className="mt-0.5 text-sm font-semibold text-venom-400">
+            {usdFromEth(token.liquidityRh, ethUsd, 0)}
+          </div>
         </div>
       </div>
 
@@ -50,8 +60,8 @@ export function TokenCard({ token }: { token: TokenMarket }) {
       </div>
 
       <div className="mt-3 flex justify-between text-xs text-white/40">
-        <span>👥 {compact(token.holders, 0)} holders</span>
-        <span>Vol {rh(token.volume24hRh, 0)}</span>
+        <span>Vol {usdFromEth(token.volume24hRh, ethUsd, 0)}</span>
+        <span>{token.graduated ? "Graduated" : `${Math.round(token.graduationProgress * 100)}% to grad`}</span>
       </div>
     </Link>
   );

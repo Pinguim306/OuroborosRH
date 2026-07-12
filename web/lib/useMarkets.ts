@@ -27,8 +27,10 @@ const bn = (x: unknown): bigint => (typeof x === "bigint" ? x : 0n);
 const num = (x: unknown): number => Number(formatEther(bn(x)));
 
 function imageFrom(metadataURI: string): string {
-  // Short metadata is treated as an emoji badge; otherwise a default coin.
-  if (metadataURI && metadataURI.length <= 6 && !metadataURI.startsWith("http")) return metadataURI;
+  // Image URLs (uploaded to IPFS or a remote host) render as an <img>; short
+  // metadata renders as an emoji badge; otherwise a default coin.
+  if (metadataURI.startsWith("http") || metadataURI.startsWith("ipfs://")) return metadataURI;
+  if (metadataURI && metadataURI.length <= 6) return metadataURI;
   return "🪙";
 }
 
