@@ -147,11 +147,26 @@ contract Launchpad is Ownable, ReentrancyGuard {
 
         // 5. Record the market BEFORE any external value transfer (checks-effects-
         //    interactions), then forward the creation fee. (L2 fix.)
+        token = address(t);
+        curve = address(c);
+        _recordMarket(token, curve, name, symbol, metadataURI);
+        _payCreationFee();
+    }
+
+    /// @dev Split out of createToken to keep its stack shallow (the combined locals
+    ///      were hitting solc's "stack too deep" on the legacy pipeline).
+    function _recordMarket(
+        address token,
+        address curve,
+        string calldata name,
+        string calldata symbol,
+        string calldata metadataURI
+    ) internal {
         uint256 id = markets.length;
         markets.push(
             Market({
-                token: address(t),
-                curve: address(c),
+                token: token,
+                curve: curve,
                 creator: msg.sender,
                 name: name,
                 symbol: symbol,
@@ -159,11 +174,8 @@ contract Launchpad is Ownable, ReentrancyGuard {
                 createdAt: block.timestamp
             })
         );
-        marketIndexByToken[address(t)] = id + 1;
-        emit TokenLaunched(id, msg.sender, address(t), address(c), name, symbol);
-
-        _payCreationFee();
-        return (address(t), address(c));
+        marketIndexByToken[token] = id + 1;
+        emit TokenLaunched(id, msg.sender, token, curve, name, symbol);
     }
 
     /// @notice Return a page of markets, newest first — convenient for the frontend.
