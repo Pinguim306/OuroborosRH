@@ -90,6 +90,8 @@ export const copy = {
     empty: "You're not holding any Ouroboros tokens yet. Buy one and fees start accruing to your wallet automatically.",
   },
   footer: {
+    docs: "Docs",
+    terms: "Terms",
     disclaimer:
       "Ouroboros is an unaudited reference protocol. Nothing here is financial advice. Trade responsibly.",
   },

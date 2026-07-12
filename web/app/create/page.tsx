@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { parseEther } from "viem";
+import { parseEther, parseEventLogs } from "viem";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { copy } from "@/lib/copy";
 import { NATIVE_SYMBOL } from "@/lib/chain";
@@ -37,7 +37,23 @@ export default function CreatePage() {
     query: { enabled: LIVE },
   });
   const { writeContract, data: hash, isPending, error } = useWriteContract();
-  const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+  const { data: receipt, isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  // Pull the freshly deployed token address out of the TokenLaunched event so we
+  // can link the creator straight to its launchpad page.
+  const newTokenAddress = useMemo(() => {
+    if (!receipt) return undefined;
+    try {
+      const logs = parseEventLogs({
+        abi: launchpadAbi,
+        eventName: "TokenLaunched",
+        logs: receipt.logs,
+      });
+      return (logs[0]?.args as { token?: string } | undefined)?.token;
+    } catch {
+      return undefined;
+    }
+  }, [receipt]);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -216,9 +232,21 @@ export default function CreatePage() {
               <p className="mt-1 font-semibold text-venom-400">
                 {form.name} (${form.symbol}) is live in the loop!
               </p>
-              <Link href="/discover" className="btn-ghost mt-3 inline-flex">
-                View on Discover
-              </Link>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                {LIVE && newTokenAddress ? (
+                  <Link href={`/token/${newTokenAddress}`} className="btn-primary inline-flex">
+                    Open your token
+                  </Link>
+                ) : null}
+                <Link href="/discover" className="btn-ghost inline-flex">
+                  View on Discover
+                </Link>
+              </div>
+              {LIVE && newTokenAddress && (
+                <p className="mt-2 break-all font-mono text-[11px] text-white/40">
+                  {newTokenAddress}
+                </p>
+              )}
             </div>
           ) : (
             <button

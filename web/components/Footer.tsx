@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { copy } from "@/lib/copy";
 import { Logo } from "./Logo";
 
@@ -16,7 +17,7 @@ export function Footer() {
   return (
     <footer className="border-t border-white/5 bg-obsidian-950/60">
       <div className="mx-auto max-w-6xl px-4 py-10">
-        <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
+        <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2.5">
             <Logo size={26} />
             <span className="font-display text-base font-bold">
@@ -24,7 +25,23 @@ export function Footer() {
               <span className="text-venom-400">.</span>
             </span>
           </div>
-          <div className="flex items-center gap-4">
+
+          {/* Docs & Terms on the left, X on the right. */}
+          <div className="flex w-full items-center justify-between gap-4 sm:w-auto sm:justify-end">
+            <nav className="flex items-center gap-5 text-sm">
+              <Link
+                href="/docs"
+                className="text-white/55 transition hover:text-venom-400"
+              >
+                {copy.footer.docs}
+              </Link>
+              <Link
+                href="/terms"
+                className="text-white/55 transition hover:text-venom-400"
+              >
+                {copy.footer.terms}
+              </Link>
+            </nav>
             {X_URL && (
               <a
                 href={X_URL}
@@ -36,13 +53,16 @@ export function Footer() {
                 <XIcon />
               </a>
             )}
-            <p className="max-w-sm text-xs leading-relaxed text-white/40">{copy.footer.disclaimer}</p>
           </div>
         </div>
-        <p className="mt-8 text-xs text-white/25">
-          © {new Date().getFullYear()} Ouroboros · Built on Robinhood Chain · Not affiliated with
-          Robinhood Markets, Inc.
-        </p>
+
+        <div className="mt-8 flex flex-col gap-4 border-t border-white/5 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-white/25">
+            © {new Date().getFullYear()} Ouroboros · Built on Robinhood Chain · Not affiliated with
+            Robinhood Markets, Inc.
+          </p>
+          <p className="max-w-md text-xs leading-relaxed text-white/40">{copy.footer.disclaimer}</p>
+        </div>
       </div>
     </footer>
   );
