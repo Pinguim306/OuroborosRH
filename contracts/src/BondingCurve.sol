@@ -136,6 +136,23 @@ contract BondingCurve is ReentrancyGuard {
     // --------------------------------------------------------------------- //
 
     function buy(uint256 minTokensOut) external payable nonReentrant returns (uint256 tokensOut) {
+        return _buy(msg.sender, minTokensOut);
+    }
+
+    /// @notice Buy on the curve and deliver the tokens to `to`. Used by the launchpad
+    ///         to execute a creator's "dev buy" in the same transaction as the launch,
+    ///         so the tokens (and their dividend accrual) land directly on the creator.
+    ///         The same anti-whale cap and fees apply as a normal buy.
+    function buyFor(address to, uint256 minTokensOut)
+        external
+        payable
+        nonReentrant
+        returns (uint256 tokensOut)
+    {
+        return _buy(to, minTokensOut);
+    }
+
+    function _buy(address to, uint256 minTokensOut) internal returns (uint256 tokensOut) {
         if (graduated) revert AlreadyGraduated();
         if (msg.value == 0) revert ZeroAmount();
 
@@ -152,9 +169,9 @@ contract BondingCurve is ReentrancyGuard {
 
         // Deliver tokens first so the buyer is part of the dividend base before their
         // own holder-fee is streamed.
-        require(token.transfer(msg.sender, tokensOut), "token transfer failed");
+        require(token.transfer(to, tokensOut), "token transfer failed");
         _routeFees(devPart, liqPart, holderPart);
-        emit Trade(msg.sender, true, msg.value, tokensOut, currentPrice());
+        emit Trade(to, true, msg.value, tokensOut, currentPrice());
 
         _maybeGraduate();
     }

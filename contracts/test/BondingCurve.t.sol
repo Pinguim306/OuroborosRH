@@ -40,7 +40,7 @@ contract BondingCurveTest is Test {
     }
 
     function _launch() internal returns (OuroToken token, BondingCurve curve) {
-        (address t, address c) = launchpad.createToken{value: CREATION_FEE}("Doge Loop", "DLOOP", "ipfs://meta");
+        (address t, address c) = launchpad.createToken{value: CREATION_FEE}("Doge Loop", "DLOOP", "ipfs://meta", 0);
         return (OuroToken(payable(t)), BondingCurve(payable(c)));
     }
 
@@ -63,14 +63,14 @@ contract BondingCurveTest is Test {
 
     function testCreationFeeRefundsExcess() public {
         uint256 before = address(this).balance;
-        launchpad.createToken{value: 1 ether}("X", "X", "");
+        launchpad.createToken{value: 1 ether}("X", "X", "", 0);
         // Only the creation fee is kept; the rest is refunded.
         assertEq(before - address(this).balance, CREATION_FEE);
     }
 
     function testCreationFeeRequired() public {
         vm.expectRevert(Launchpad.InsufficientCreationFee.selector);
-        launchpad.createToken{value: CREATION_FEE - 1}("X", "X", "");
+        launchpad.createToken{value: CREATION_FEE - 1}("X", "X", "", 0);
     }
 
     function testBuyRoutesThreeWayFee() public {
@@ -158,7 +158,7 @@ contract BondingCurveTest is Test {
             maxBuyBps: 0
         });
         Launchpad lp = new Launchpad(address(this), dev, address(router), 0, p);
-        (address t, address c) = lp.createToken("Grad", "GRAD", "");
+        (address t, address c) = lp.createToken("Grad", "GRAD", "", 0);
         OuroToken token = OuroToken(payable(t));
         BondingCurve curve = BondingCurve(payable(c));
 
@@ -197,7 +197,7 @@ contract BondingCurveTest is Test {
             maxBuyBps: 0
         });
         Launchpad lp = new Launchpad(address(this), dev, address(router), 0, p);
-        (address t, address c) = lp.createToken("Grief", "GRF", "");
+        (address t, address c) = lp.createToken("Grief", "GRF", "", 0);
         OuroToken token = OuroToken(payable(t));
         BondingCurve curve = BondingCurve(payable(c));
 
@@ -236,7 +236,7 @@ contract BondingCurveTest is Test {
             maxBuyBps: 200 // 2%
         });
         Launchpad lp = new Launchpad(address(this), dev, address(router), 0, p);
-        (address t, address c) = lp.createToken("Cap", "CAP", "");
+        (address t, address c) = lp.createToken("Cap", "CAP", "", 0);
         OuroToken token = OuroToken(payable(t));
         BondingCurve curve = BondingCurve(payable(c));
 
@@ -253,6 +253,68 @@ contract BondingCurveTest is Test {
         assertLe(out, curve.maxBuyTokens());
         assertGt(out, 0);
         assertEq(token.balanceOf(alice), out);
+    }
+
+    // --------------------------------------------------------------------- //
+    //  Dev buy                                                              //
+    // --------------------------------------------------------------------- //
+
+    function testDevBuyDeliversToCreatorAndPaysFee() public {
+        uint256 devBuy = 5 ether;
+        uint256 devBalBefore = dev.balance;
+
+        (address t, address c) =
+            launchpad.createToken{value: CREATION_FEE + devBuy}("Dev", "DEV", "", devBuy);
+        OuroToken token = OuroToken(payable(t));
+        BondingCurve curve = BondingCurve(payable(c));
+
+        // Creator (this test contract) received the dev-bought tokens straight away.
+        uint256 bal = token.balanceOf(address(this));
+        assertGt(bal, 0);
+        assertEq(curve.tokenReserve(), SUPPLY - bal);
+
+        // Fee split applied on the dev buy, exactly like a normal buy.
+        uint256 devPart = (devBuy * DEV_BPS) / 10_000;
+        uint256 liqPart = (devBuy * LIQ_BPS) / 10_000;
+        uint256 holderPart = (devBuy * HOLDER_BPS) / 10_000;
+        uint256 netIn = devBuy - devPart - liqPart - holderPart;
+
+        // Dev wallet got the creation fee plus the dev portion of the buy.
+        assertEq(dev.balance - devBalBefore, CREATION_FEE + devPart);
+        assertEq(curve.realNativeRaised(), netIn + liqPart);
+        // The creator, as the only holder, accrued the holder-fee slice.
+        assertApproxEqAbs(token.claimableRewardOf(address(this)), holderPart, 1e6);
+    }
+
+    function testDevBuyRespectsMaxBuyCap() public {
+        Launchpad.CurveParams memory p = Launchpad.CurveParams({
+            totalSupply: SUPPLY,
+            virtualNative: VIRTUAL,
+            devFeeBps: DEV_BPS,
+            liqFeeBps: LIQ_BPS,
+            holderFeeBps: HOLDER_BPS,
+            graduationTarget: TARGET,
+            maxBuyBps: 200 // 2%
+        });
+        Launchpad lp = new Launchpad(address(this), dev, address(router), 0, p);
+
+        // A dev buy large enough to exceed 2% of supply reverts the whole launch.
+        vm.expectRevert(BondingCurve.MaxBuyExceeded.selector);
+        lp.createToken{value: 5 ether}("Cap", "CAP", "", 5 ether);
+    }
+
+    function testDevBuyRequiresCreationFeePlusBuy() public {
+        // msg.value must cover creationFee + devBuy.
+        vm.expectRevert(Launchpad.InsufficientCreationFee.selector);
+        launchpad.createToken{value: CREATION_FEE + 1 ether}("X", "X", "", 2 ether);
+    }
+
+    function testZeroDevBuyBehavesLikePlainLaunch() public {
+        (address t, address c) = launchpad.createToken{value: CREATION_FEE}("Z", "Z", "", 0);
+        OuroToken token = OuroToken(payable(t));
+        BondingCurve curve = BondingCurve(payable(c));
+        assertEq(curve.tokenReserve(), SUPPLY); // nothing bought
+        assertEq(token.balanceOf(address(this)), 0);
     }
 
     receive() external payable {}

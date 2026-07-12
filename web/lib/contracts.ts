@@ -25,6 +25,7 @@ export const launchpadAbi = [
       { name: "name", type: "string" },
       { name: "symbol", type: "string" },
       { name: "metadataURI", type: "string" },
+      { name: "devBuy", type: "uint256" },
     ],
     outputs: [
       { name: "token", type: "address" },
@@ -37,6 +38,21 @@ export const launchpadAbi = [
     stateMutability: "view",
     inputs: [],
     outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "params",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [
+      { name: "totalSupply", type: "uint256" },
+      { name: "virtualNative", type: "uint256" },
+      { name: "devFeeBps", type: "uint256" },
+      { name: "liqFeeBps", type: "uint256" },
+      { name: "holderFeeBps", type: "uint256" },
+      { name: "graduationTarget", type: "uint256" },
+      { name: "maxBuyBps", type: "uint256" },
+    ],
   },
   {
     type: "function",
