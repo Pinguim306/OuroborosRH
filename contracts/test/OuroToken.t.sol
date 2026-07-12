@@ -13,7 +13,7 @@ contract OuroTokenTest is Test {
 
     function setUp() public {
         // Mint to this contract (auto-excluded), authority = this contract.
-        token = new OuroToken("Loop", "LOOP", 1_000_000 ether, address(this), address(this), "");
+        token = new OuroToken("Loop", "LOOP", 1_000_000 ether, address(this), address(this), "", 0, address(0));
     }
 
     function testEqualHoldersSplitEqually() public {

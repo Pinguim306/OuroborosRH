@@ -255,6 +255,12 @@ contract BondingCurve is ReentrancyGuard {
             require(token.transfer(DEAD, tokLeft), "sweep transfer failed");
         }
 
+        // Point the token at the pair so post-graduation DEX trades are taxed
+        // (fee-on-transfer → the protocol vault). Done before renouncing authority,
+        // so the pair can never be changed afterwards. Migration transfers above were
+        // from the curve, which is tax-exempt, so they were never taxed.
+        token.setDexPair(_pair);
+
         // Freeze exclusions forever — no one can exclude a holder afterwards.
         token.renounceAuthority();
 

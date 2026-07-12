@@ -13,13 +13,12 @@ export function useEthPrice(): number {
     let alive = true;
     async function load() {
       try {
-        const r = await fetch(
-          "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
-          { cache: "no-store" },
-        );
+        // Our own route (server-side, cached, with a fallback source) — avoids the
+        // browser CoinGecko rate limits/CORS that made $ values drop back to ETH.
+        const r = await fetch("/api/eth-price", { cache: "no-store" });
         const j = await r.json();
-        const p = j?.ethereum?.usd;
-        if (alive && typeof p === "number") setPrice(p);
+        const p = j?.usd;
+        if (alive && typeof p === "number" && p > 0) setPrice(p);
       } catch {
         // Ignore — callers fall back to showing ETH.
       }

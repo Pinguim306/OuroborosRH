@@ -46,7 +46,7 @@ abstract contract ERC20 is IERC20 {
         return true;
     }
 
-    function _transfer(address from, address to, uint256 amount) internal {
+    function _transfer(address from, address to, uint256 amount) internal virtual {
         if (from == address(0)) revert TransferFromZero();
         if (to == address(0)) revert TransferToZero();
         _update(from, to, amount);

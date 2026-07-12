@@ -2,3 +2,8 @@ out/
 cache/
 broadcast/
 .env
+node_modules/
+package.json
+package-lock.json
+compile-check.js
+compile-all.js

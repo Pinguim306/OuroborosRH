@@ -31,7 +31,10 @@ contract Deploy is Script {
             liqFeeBps: 60,
             holderFeeBps: 40,
             graduationTarget: 4 ether,
-            maxBuyBps: 200
+            maxBuyBps: 200,
+            // Post-graduation trade tax of 1% (fee-on-transfer on the DEX pair) → the
+            // protocol vault (feeRecipient). Capped at 2% in the token.
+            postGradTaxBps: 100
         });
 
         // Creation fee charged on every launch (native coin = ETH on Robinhood Chain).

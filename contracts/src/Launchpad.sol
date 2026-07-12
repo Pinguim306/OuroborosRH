@@ -22,6 +22,7 @@ contract Launchpad is Ownable, ReentrancyGuard {
         uint256 holderFeeBps; // per-trade fee streamed to holders
         uint256 graduationTarget; // real native raised that graduates the curve
         uint256 maxBuyBps; // anti-whale: max tokens per buy as bps of supply (0 = off)
+        uint256 postGradTaxBps; // fee-on-transfer taken on DEX trades after graduation (e.g. 100 = 1%)
     }
 
     CurveParams public params;
@@ -125,7 +126,9 @@ contract Launchpad is Ownable, ReentrancyGuard {
 
         // 1. Mint the full supply to this factory (temporary, excluded holder).
         //    Authority stays with the factory so it can exclude the curve below.
-        OuroToken t = new OuroToken(name, symbol, p.totalSupply, address(this), address(this), metadataURI);
+        OuroToken t = new OuroToken(
+            name, symbol, p.totalSupply, address(this), address(this), metadataURI, p.postGradTaxBps, feeRecipient
+        );
 
         // 2. Deploy the bonding curve wired to the token, fee recipient, and router.
         BondingCurve c = new BondingCurve(
@@ -141,8 +144,11 @@ contract Launchpad is Ownable, ReentrancyGuard {
             p.maxBuyBps
         );
 
-        // 3. Exclude the curve from dividends, then hand it the supply to sell.
+        // 3. Exclude the curve from dividends and from the trade tax (so the curve's
+        //    own transfers — including migrating liquidity at graduation — are never
+        //    taxed), then hand it the supply to sell.
         t.setExcludedFromDividends(address(c), true);
+        t.setTaxExempt(address(c), true);
         require(t.transfer(address(c), p.totalSupply), "supply transfer failed");
 
         // 4. Hand dividend authority to the curve (trustless code, not a human). The
