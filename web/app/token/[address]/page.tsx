@@ -45,7 +45,7 @@ export default function TokenPage() {
 
   const trades = LIVE ? activity.trades : mockTrades(token);
   const holders = LIVE ? holdersData.holders : mockHolders(token);
-  const volumeEth = LIVE ? activity.volumeEth : token.volume24hRh;
+  const vol24 = LIVE ? activity.volume24hEth : token.volume24hRh;
   // Chart series (ETH marketcap over trades). Demo mode uses a synthetic curve.
   const series = LIVE
     ? activity.series
@@ -79,7 +79,6 @@ export default function TokenPage() {
         <div className="text-right">
           <div className="label">Marketcap</div>
           <div className="stat-value text-gradient">{usdFromEth(token.marketCapRh, ethUsd)}</div>
-          <div className="mt-0.5 text-xs text-white/40">ATH {usdFromEth(athEth, ethUsd)}</div>
         </div>
       </div>
 
@@ -88,9 +87,9 @@ export default function TokenPage() {
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatTile label="Marketcap" value={usdFromEth(token.marketCapRh, ethUsd)} />
-            <StatTile label="Liquidity" value={usdFromEth(token.liquidityRh, ethUsd)} accent />
+            <StatTile label="ATH" value={usdFromEth(athEth, ethUsd)} accent />
             <StatTile label="Rewards pool" value={usdFromEth(token.rewardsPoolRh, ethUsd)} />
-            <StatTile label="Volume" value={usdFromEth(volumeEth, ethUsd)} />
+            <StatTile label="24h Volume" value={usdFromEth(vol24, ethUsd)} />
           </div>
 
           {/* Marketcap chart */}

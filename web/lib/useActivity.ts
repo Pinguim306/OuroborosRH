@@ -1,41 +1,54 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
+import type { PublicClient } from "viem";
 import { curveAbi, tokenAbi, LIVE } from "./contracts";
 import type { Address, Holder, TokenMarket, Trade } from "./types";
 
 /**
  * Reads on-chain activity directly from contract events (no indexer needed).
- * Best-effort over full history — for high-volume tokens a subgraph/indexer would
- * be faster; failures degrade to empty rather than crashing.
+ * Best-effort over full history; failures degrade to empty. An indexer/subgraph
+ * would scale better for many tokens / high volume.
  */
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 const DEAD = "0x000000000000000000000000000000000000dead";
+const DAY = 24 * 3600;
 
 function supplyOf(token: TokenMarket): number {
   return token.priceRh > 0 ? token.marketCapRh / token.priceRh : 1_000_000_000;
 }
 
+/** Estimate the block ~`secondsAgo` in the past by sampling recent block times. */
+async function cutoffBlock(client: PublicClient, secondsAgo: number): Promise<bigint> {
+  try {
+    const latestNum = await client.getBlockNumber();
+    const sample = latestNum > 5000n ? 5000n : latestNum;
+    const [latest, older] = await Promise.all([
+      client.getBlock({ blockNumber: latestNum }),
+      client.getBlock({ blockNumber: latestNum - sample }),
+    ]);
+    const dt = Number(latest.timestamp - older.timestamp);
+    const nblocks = Number(sample);
+    const spb = nblocks > 0 && dt > 0 ? dt / nblocks : 2;
+    const back = BigInt(Math.max(1, Math.floor(secondsAgo / spb)));
+    return latestNum > back ? latestNum - back : 0n;
+  } catch {
+    return 0n;
+  }
+}
+
 export interface Activity {
   trades: Trade[];
-  volumeEth: number;
-  lastTradeTime: number;
+  volume24hEth: number;
   athMcapEth: number;
-  series: number[]; // marketcap (ETH) per trade, chronological — for the chart
+  series: number[]; // marketcap (ETH) per trade — for the chart
   isLoading: boolean;
 }
 
-const EMPTY: Activity = {
-  trades: [],
-  volumeEth: 0,
-  lastTradeTime: 0,
-  athMcapEth: 0,
-  series: [],
-  isLoading: LIVE,
-};
+const EMPTY: Activity = { trades: [], volume24hEth: 0, athMcapEth: 0, series: [], isLoading: LIVE };
 
 export function useTokenActivity(token?: TokenMarket): Activity {
   const client = usePublicClient();
@@ -50,15 +63,18 @@ export function useTokenActivity(token?: TokenMarket): Activity {
     let alive = true;
     (async () => {
       try {
-        const logs = await client.getContractEvents({
-          address: curve,
-          abi: curveAbi,
-          eventName: "Trade",
-          fromBlock: 0n,
-          toBlock: "latest",
-        });
+        const [logs, cutoff] = await Promise.all([
+          client.getContractEvents({
+            address: curve,
+            abi: curveAbi,
+            eventName: "Trade",
+            fromBlock: 0n,
+            toBlock: "latest",
+          }),
+          cutoffBlock(client, DAY),
+        ]);
         const supply = supplyOf(token);
-        let vol = 0;
+        let vol24 = 0;
         let ath = 0;
         const series: number[] = [];
         const all: Trade[] = [];
@@ -72,7 +88,7 @@ export function useTokenActivity(token?: TokenMarket): Activity {
           };
           const nat = Number(formatEther(a.nativeAmount ?? 0n));
           const mcap = Number(formatEther(a.newPrice ?? 0n)) * supply;
-          vol += nat;
+          if (l.blockNumber >= cutoff) vol24 += nat;
           if (mcap > ath) ath = mcap;
           series.push(mcap);
           all.push({
@@ -85,7 +101,6 @@ export function useTokenActivity(token?: TokenMarket): Activity {
           });
         }
 
-        // Fetch block timestamps for the most recent trades only.
         const recentLogs = logs.slice(-20).reverse();
         const recent = all.slice(-20).reverse();
         const uniqueBlocks = [...new Set(recentLogs.map((l) => l.blockNumber))];
@@ -104,16 +119,7 @@ export function useTokenActivity(token?: TokenMarket): Activity {
           t.time = ts.get(recentLogs[i].blockNumber) ?? 0;
         });
 
-        if (alive) {
-          setData({
-            trades: recent,
-            volumeEth: vol,
-            lastTradeTime: recent[0]?.time ?? 0,
-            athMcapEth: ath,
-            series,
-            isLoading: false,
-          });
-        }
+        if (alive) setData({ trades: recent, volume24hEth: vol24, athMcapEth: ath, series, isLoading: false });
       } catch {
         if (alive) setData({ ...EMPTY, isLoading: false });
       }
@@ -128,43 +134,68 @@ export function useTokenActivity(token?: TokenMarket): Activity {
 }
 
 export interface MarketStat {
-  volumeEth: number;
-  lastTradeTime: number; // block number as a monotonic proxy (no timestamp fetch)
+  volumeEth: number; // all-time
+  volume24hEth: number;
+  athEth: number;
+  holders: number;
+  lastBlock: number;
 }
 
-/**
- * Enriches a list of tokens with volume + last-trade ordering info by reading each
- * curve's Trade events. Fine for a handful of tokens; an indexer scales better.
- * Polls periodically so "Last Trade" ordering feels live.
- */
+/** Per-token stats for the Discover list + launchpad totals. Polls periodically. */
 export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketStat> {
   const client = usePublicClient();
   const [stats, setStats] = useState<Map<string, MarketStat>>(new Map());
-  const key = tokens.map((t) => t.curve).join(",");
+  const key = tokens.map((t) => t.address).join(",");
 
   useEffect(() => {
     if (!LIVE || !client || tokens.length === 0) return;
     let alive = true;
     async function load() {
+      const cutoff = await cutoffBlock(client!, DAY);
       const next = new Map<string, MarketStat>();
       await Promise.all(
-        tokens.map(async (t) => {
+        tokens.slice(0, 40).map(async (t) => {
           try {
-            const logs = await client!.getContractEvents({
-              address: t.curve,
-              abi: curveAbi,
-              eventName: "Trade",
-              fromBlock: 0n,
-              toBlock: "latest",
-            });
+            const [trades, transfers] = await Promise.all([
+              client!.getContractEvents({
+                address: t.curve,
+                abi: curveAbi,
+                eventName: "Trade",
+                fromBlock: 0n,
+                toBlock: "latest",
+              }),
+              client!.getContractEvents({
+                address: t.address,
+                abi: tokenAbi,
+                eventName: "Transfer",
+                fromBlock: 0n,
+                toBlock: "latest",
+              }),
+            ]);
+            const supply = supplyOf(t);
             let vol = 0;
+            let vol24 = 0;
+            let ath = 0;
             let lastBlock = 0;
-            for (const l of logs) {
-              const a = l.args as { nativeAmount?: bigint };
-              vol += Number(formatEther(a.nativeAmount ?? 0n));
+            for (const l of trades) {
+              const a = l.args as { nativeAmount?: bigint; newPrice?: bigint };
+              const nat = Number(formatEther(a.nativeAmount ?? 0n));
+              vol += nat;
+              if (l.blockNumber >= cutoff) vol24 += nat;
+              const mcap = Number(formatEther(a.newPrice ?? 0n)) * supply;
+              if (mcap > ath) ath = mcap;
               lastBlock = Number(l.blockNumber);
             }
-            next.set(t.address.toLowerCase(), { volumeEth: vol, lastTradeTime: lastBlock });
+            const bal = new Map<string, bigint>();
+            for (const l of transfers) {
+              const a = l.args as { from: Address; to: Address; value: bigint };
+              if (a.from && a.from !== ZERO) bal.set(a.from, (bal.get(a.from) ?? 0n) - a.value);
+              if (a.to && a.to !== ZERO) bal.set(a.to, (bal.get(a.to) ?? 0n) + a.value);
+            }
+            const excluded = new Set([t.curve.toLowerCase(), DEAD, ZERO, t.address.toLowerCase()]);
+            let holders = 0;
+            for (const [addr, v] of bal) if (v > 0n && !excluded.has(addr.toLowerCase())) holders++;
+            next.set(t.address.toLowerCase(), { volumeEth: vol, volume24hEth: vol24, athEth: ath, holders, lastBlock });
           } catch {
             /* ignore */
           }
@@ -173,7 +204,7 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
       if (alive) setStats(next);
     }
     load();
-    const id = setInterval(load, 20_000);
+    const id = setInterval(load, 30_000);
     return () => {
       alive = false;
       clearInterval(id);
@@ -213,12 +244,7 @@ export function useTokenHolders(token?: TokenMarket): { holders: Holder[]; isLoa
           if (a.from && a.from !== ZERO) bal.set(a.from, (bal.get(a.from) ?? 0n) - a.value);
           if (a.to && a.to !== ZERO) bal.set(a.to, (bal.get(a.to) ?? 0n) + a.value);
         }
-        const excluded = new Set([
-          token.curve.toLowerCase(),
-          DEAD,
-          ZERO,
-          token.address.toLowerCase(),
-        ]);
+        const excluded = new Set([token.curve.toLowerCase(), DEAD, ZERO, token.address.toLowerCase()]);
         const supply = supplyOf(token);
         const holders: Holder[] = [...bal.entries()]
           .filter(([a, v]) => v > 0n && !excluded.has(a.toLowerCase()))
@@ -245,4 +271,21 @@ export function useTokenHolders(token?: TokenMarket): { holders: Holder[]; isLoa
   }, [client, addr, token?.marketCapRh, token?.priceRh]);
 
   return state;
+}
+
+/** Aggregate launchpad totals from the per-token stats map. */
+export function useLaunchpadTotals(tokens: TokenMarket[], stats: Map<string, MarketStat>) {
+  return useMemo(() => {
+    let volume24hEth = 0;
+    let highestAthEth = 0;
+    let holders = 0;
+    for (const t of tokens) {
+      const s = stats.get(t.address.toLowerCase());
+      if (!s) continue;
+      volume24hEth += s.volume24hEth;
+      if (s.athEth > highestAthEth) highestAthEth = s.athEth;
+      holders += s.holders;
+    }
+    return { tokens: tokens.length, volume24hEth, highestAthEth, holders };
+  }, [tokens, stats]);
 }
