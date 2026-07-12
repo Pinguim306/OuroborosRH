@@ -15,6 +15,8 @@ import { ProgressBar } from "@/components/ProgressBar";
 import { TradeWidget } from "@/components/TradeWidget";
 import { RewardsPanel } from "@/components/RewardsPanel";
 import { MarketcapChart } from "@/components/MarketcapChart";
+import { DexScreenerChart } from "@/components/DexScreenerChart";
+import { dexscreenerEmbedUrl } from "@/lib/chain";
 
 export default function TokenPage() {
   const params = useParams();
@@ -92,8 +94,13 @@ export default function TokenPage() {
             <StatTile label="24h Volume" value={usdFromEth(vol24, ethUsd)} />
           </div>
 
-          {/* Marketcap chart */}
-          <MarketcapChart series={series} ethUsd={ethUsd} />
+          {/* Chart: DexScreener once graduated (has a live DEX pair), else our
+              on-chain marketcap chart for the bonding-curve phase. */}
+          {token.graduated && dexscreenerEmbedUrl(token.pair) ? (
+            <DexScreenerChart pair={token.pair} />
+          ) : (
+            <MarketcapChart series={series} ethUsd={ethUsd} />
+          )}
 
           {/* Bonding curve / graduation */}
           <div className="glass p-6">

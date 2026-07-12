@@ -23,6 +23,33 @@ export const robinhoodChain = defineChain({
 export const NATIVE_SYMBOL = robinhoodChain.nativeCurrency.symbol;
 
 /**
+ * DexScreener's chain slug for Robinhood Chain (dexscreener.com/robinhood).
+ * DexScreener only tracks tokens that have a live DEX pair, so this is used for
+ * graduated tokens (which get a Uniswap V2 pair) — not bonding-curve tokens.
+ */
+export const DEXSCREENER_CHAIN = "robinhood";
+
+const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
+
+/** Build the embeddable DexScreener chart URL for a graduated token's pair. */
+export function dexscreenerEmbedUrl(pair?: string): string | null {
+  if (!pair || pair.toLowerCase() === ZERO_ADDR) return null;
+  const params = new URLSearchParams({
+    embed: "1",
+    theme: "dark",
+    trades: "0",
+    info: "0",
+  });
+  return `https://dexscreener.com/${DEXSCREENER_CHAIN}/${pair}?${params.toString()}`;
+}
+
+/** Public DexScreener page for a pair (used for the "open on DexScreener" link). */
+export function dexscreenerPageUrl(pair?: string): string | null {
+  if (!pair || pair.toLowerCase() === ZERO_ADDR) return null;
+  return `https://dexscreener.com/${DEXSCREENER_CHAIN}/${pair}`;
+}
+
+/**
  * Uniswap deployment addresses on Robinhood Chain (chain 4663), from
  * @uniswap/sdk-core. Curves migrate liquidity to the V2 router at graduation;
  * the others are handy for building "trade on Uniswap" links.
