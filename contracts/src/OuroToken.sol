@@ -19,12 +19,31 @@ import {ReentrancyGuard} from "src/utils/ReentrancyGuard.sol";
 ///         token itself, later a DEX pair) are excluded from dividends.
 contract OuroToken is ERC20, ReentrancyGuard {
     uint256 internal constant MAGNITUDE = 2 ** 128;
+    uint256 internal constant BPS = 10_000;
 
     string public metadataURI;
 
     /// @notice Address allowed to manage dividend exclusions (set to the launchpad
     ///         owner after launch; can be renounced to lock the config).
     address public authority;
+
+    // --------------------------------------------------------------------- //
+    //  Post-graduation trade tax (fee-on-transfer)                          //
+    // --------------------------------------------------------------------- //
+    /// @notice Fee, in bps, taken on trades against the graduated DEX pair and sent
+    ///         to `taxVault`. Immutable and capped, so it can never be cranked up.
+    ///         Only bites once `dexPair` is set (at graduation) — before that, all
+    ///         trading is on the bonding curve and this is inert.
+    uint256 public immutable tradeTaxBps;
+    /// @notice Where the trade tax accrues (the protocol vault).
+    address public immutable taxVault;
+    /// @notice Hard cap on the trade tax (2%) — a guarantee to holders.
+    uint256 public constant MAX_TRADE_TAX_BPS = 200;
+
+    /// @notice The graduated DEX pair; trades to/from it are taxed. 0 until graduation.
+    address public dexPair;
+    /// @notice Addresses exempt from the trade tax (curve, router, vault, …).
+    mapping(address => bool) public isTaxExempt;
 
     uint256 public magnifiedRewardPerShare;
     /// @notice Total balance held by non-excluded accounts (the dividend base).
@@ -41,11 +60,16 @@ contract OuroToken is ERC20, ReentrancyGuard {
     event RewardClaimed(address indexed account, uint256 amount);
     event ExclusionSet(address indexed account, bool excluded);
     event AuthorityTransferred(address indexed from, address indexed to);
+    event DexPairSet(address indexed pair);
+    event TaxExemptSet(address indexed account, bool exempt);
+    event TradeTaxTaken(address indexed from, address indexed to, uint256 amount);
 
     error NotAuthority();
     error NothingToClaim();
     error NativeTransferFailed();
     error AlreadySet();
+    error TaxTooHigh();
+    error ZeroAddress();
 
     constructor(
         string memory _name,
@@ -53,17 +77,31 @@ contract OuroToken is ERC20, ReentrancyGuard {
         uint256 _supply,
         address _to,
         address _authority,
-        string memory _metadataURI
+        string memory _metadataURI,
+        uint256 _tradeTaxBps,
+        address _taxVault
     ) ERC20(_name, _symbol) {
+        if (_tradeTaxBps > MAX_TRADE_TAX_BPS) revert TaxTooHigh();
+        if (_tradeTaxBps > 0 && _taxVault == address(0)) revert ZeroAddress();
         metadataURI = _metadataURI;
         authority = _authority;
         emit AuthorityTransferred(address(0), _authority);
+
+        tradeTaxBps = _tradeTaxBps;
+        taxVault = _taxVault;
 
         _mint(_to, _supply);
         // The initial holder (the launchpad factory) and the token itself never
         // earn dividends; the curve is excluded right after it is deployed.
         _setExcluded(_to, true);
         _setExcluded(address(this), true);
+
+        // The vault never earns dividends (it isn't a public holder) and is exempt
+        // from the trade tax so re-distributing its balance is never taxed.
+        if (_taxVault != address(0)) {
+            isTaxExempt[_taxVault] = true;
+            if (_taxVault != _to && _taxVault != address(this)) _setExcluded(_taxVault, true);
+        }
     }
 
     modifier onlyAuthority() {
@@ -123,6 +161,22 @@ contract OuroToken is ERC20, ReentrancyGuard {
         _setExcluded(account, excluded);
     }
 
+    /// @notice Set the graduated DEX pair. Trades to/from it are taxed. Called once by
+    ///         the curve at graduation (which then renounces authority), so the pair
+    ///         can never be changed afterwards.
+    function setDexPair(address pair) external onlyAuthority {
+        if (pair == address(0)) revert ZeroAddress();
+        dexPair = pair;
+        emit DexPairSet(pair);
+    }
+
+    /// @notice Exempt (or un-exempt) an address from the trade tax. Used at graduation
+    ///         to exempt the router so migrating liquidity is never taxed.
+    function setTaxExempt(address account, bool exempt) external onlyAuthority {
+        isTaxExempt[account] = exempt;
+        emit TaxExemptSet(account, exempt);
+    }
+
     function transferAuthority(address newAuthority) external onlyAuthority {
         emit AuthorityTransferred(authority, newAuthority);
         authority = newAuthority;
@@ -136,6 +190,29 @@ contract OuroToken is ERC20, ReentrancyGuard {
     // --------------------------------------------------------------------- //
     //  Internals                                                            //
     // --------------------------------------------------------------------- //
+
+    /// @dev Trade tax: on transfers to/from the DEX pair (buys/sells), skim
+    ///      `tradeTaxBps` to the vault, unless either party is exempt. Splits the move
+    ///      into two so dividend accounting stays correct on each leg. Wallet-to-wallet
+    ///      transfers and everything before graduation (pair unset) are untouched.
+    function _transfer(address from, address to, uint256 amount) internal override {
+        uint256 fee = _tradeTax(from, to, amount);
+        if (fee == 0) {
+            super._transfer(from, to, amount);
+            return;
+        }
+        super._transfer(from, taxVault, fee);
+        super._transfer(from, to, amount - fee);
+        emit TradeTaxTaken(from, to, fee);
+    }
+
+    function _tradeTax(address from, address to, uint256 amount) internal view returns (uint256) {
+        address pair = dexPair;
+        if (tradeTaxBps == 0 || pair == address(0)) return 0;
+        if (from != pair && to != pair) return 0; // not a trade against the pair
+        if (isTaxExempt[from] || isTaxExempt[to]) return 0;
+        return (amount * tradeTaxBps) / BPS;
+    }
 
     function _distribute(uint256 amount) internal {
         if (amount == 0) return;

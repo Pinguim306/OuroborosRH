@@ -32,7 +32,8 @@ contract BondingCurveTest is Test {
             liqFeeBps: LIQ_BPS,
             holderFeeBps: HOLDER_BPS,
             graduationTarget: TARGET,
-            maxBuyBps: 0
+            maxBuyBps: 0,
+            postGradTaxBps: 0
         });
         launchpad = new Launchpad(address(this), dev, address(router), CREATION_FEE, p);
         vm.deal(alice, 100 ether);
@@ -155,7 +156,8 @@ contract BondingCurveTest is Test {
             liqFeeBps: LIQ_BPS,
             holderFeeBps: HOLDER_BPS,
             graduationTarget: 5 ether,
-            maxBuyBps: 0
+            maxBuyBps: 0,
+            postGradTaxBps: 0
         });
         Launchpad lp = new Launchpad(address(this), dev, address(router), 0, p);
         (address t, address c) = lp.createToken("Grad", "GRAD", "", 0);
@@ -194,7 +196,8 @@ contract BondingCurveTest is Test {
             liqFeeBps: LIQ_BPS,
             holderFeeBps: HOLDER_BPS,
             graduationTarget: 5 ether,
-            maxBuyBps: 0
+            maxBuyBps: 0,
+            postGradTaxBps: 0
         });
         Launchpad lp = new Launchpad(address(this), dev, address(router), 0, p);
         (address t, address c) = lp.createToken("Grief", "GRF", "", 0);
@@ -233,7 +236,8 @@ contract BondingCurveTest is Test {
             liqFeeBps: LIQ_BPS,
             holderFeeBps: HOLDER_BPS,
             graduationTarget: TARGET,
-            maxBuyBps: 200 // 2%
+            maxBuyBps: 200, // 2%
+            postGradTaxBps: 0
         });
         Launchpad lp = new Launchpad(address(this), dev, address(router), 0, p);
         (address t, address c) = lp.createToken("Cap", "CAP", "", 0);
@@ -294,7 +298,8 @@ contract BondingCurveTest is Test {
             liqFeeBps: LIQ_BPS,
             holderFeeBps: HOLDER_BPS,
             graduationTarget: TARGET,
-            maxBuyBps: 200 // 2%
+            maxBuyBps: 200, // 2%
+            postGradTaxBps: 0
         });
         Launchpad lp = new Launchpad(address(this), dev, address(router), 0, p);
 
