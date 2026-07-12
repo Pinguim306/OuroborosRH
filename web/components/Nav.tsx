@@ -7,8 +7,7 @@ import { Logo } from "./Logo";
 import { WalletButton } from "./WalletButton";
 
 const links = [
-  { href: "/", label: copy.nav.explore },
-  { href: "/create", label: copy.nav.create },
+  { href: "/discover", label: "Discover" },
   { href: "/rewards", label: copy.nav.rewards },
 ];
 
@@ -43,7 +42,7 @@ export function Nav() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Link href="/create" className="btn-ghost hidden sm:inline-flex">
+          <Link href="/create" className="btn-primary hidden sm:inline-flex">
             {copy.nav.create}
           </Link>
           <WalletButton />

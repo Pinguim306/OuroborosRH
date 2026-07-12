@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { parseEther } from "viem";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
@@ -15,12 +15,20 @@ export default function CreatePage() {
     name: "",
     symbol: "",
     description: "",
-    image: "🐍",
     x: "",
     telegram: "",
     website: "",
   });
   const [status, setStatus] = useState<"idle" | "deploying" | "done">("idle");
+
+  // Image upload state
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>("");
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [imageWarn, setImageWarn] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const { data: creationFee } = useReadContract({
     address: CONTRACTS.launchpad,
@@ -34,24 +42,75 @@ export default function CreatePage() {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  // Live: real createToken tx (metadataURI carries the image). Demo: simulate.
-  const busy = LIVE ? isPending || confirming : status === "deploying";
+  const busy = uploading || (LIVE ? isPending || confirming : status === "deploying");
   const done = LIVE ? isSuccess : status === "done";
 
-  function deploy() {
-    if (!form.name || !form.symbol) return;
-    if (LIVE) {
-      writeContract({
-        address: CONTRACTS.launchpad,
-        abi: launchpadAbi,
-        functionName: "createToken",
-        args: [form.name, form.symbol, form.image],
-        value: (creationFee as bigint | undefined) ?? parseEther("0.01"),
-      });
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    setImageError(null);
+    setImageWarn(null);
+    setUploadError(null);
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!["image/jpeg", "image/png", "image/gif"].includes(f.type)) {
+      setImageError("Use a .jpg, .png or .gif image.");
       return;
     }
-    setStatus("deploying");
-    setTimeout(() => setStatus("done"), 1800);
+    if (f.size > 4 * 1024 * 1024) {
+      setImageError("Image must be under 4 MB.");
+      return;
+    }
+    const url = URL.createObjectURL(f);
+    const img = new window.Image();
+    img.onload = () => {
+      if (img.width < 1000 || img.height < 1000) {
+        setImageWarn(`Low resolution (${img.width}×${img.height}). Min. 1000×1000 recommended.`);
+      } else if (img.width !== img.height) {
+        setImageWarn("Not square — a 1:1 image is recommended.");
+      }
+    };
+    img.src = url;
+    setImageFile(f);
+    setImagePreview(url);
+  }
+
+  async function deploy() {
+    if (!form.name || !form.symbol) return;
+    if (!LIVE) {
+      setStatus("deploying");
+      setTimeout(() => setStatus("done"), 1800);
+      return;
+    }
+
+    let metadataURI = "";
+    if (imageFile) {
+      setUploading(true);
+      setUploadError(null);
+      try {
+        const fd = new FormData();
+        fd.append("file", imageFile);
+        const r = await fetch("/api/upload", { method: "POST", body: fd });
+        const j = await r.json();
+        if (!r.ok) {
+          setUploadError(j.error ?? "Image upload failed.");
+          setUploading(false);
+          return;
+        }
+        metadataURI = j.url;
+      } catch {
+        setUploadError("Image upload failed.");
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
+    writeContract({
+      address: CONTRACTS.launchpad,
+      abi: launchpadAbi,
+      functionName: "createToken",
+      args: [form.name, form.symbol, metadataURI],
+      value: (creationFee as bigint | undefined) ?? parseEther("0.01"),
+    });
   }
 
   return (
@@ -88,9 +147,40 @@ export default function CreatePage() {
               />
             </Field>
 
-            <Field label={copy.create.fields.image}>
-              <input className="field" value={form.image} onChange={set("image")} placeholder="🐍 or https://…" />
-            </Field>
+            {/* Image upload */}
+            <div>
+              <span className="label mb-1.5 block">Token image</span>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif"
+                onChange={onFile}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="flex w-full items-center gap-4 rounded-xl border border-dashed border-white/15 bg-obsidian-900/60 p-4 text-left transition hover:border-venom-500/40"
+              >
+                <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl bg-obsidian-800 text-2xl">
+                  {imagePreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={imagePreview} alt="preview" className="h-full w-full object-cover" />
+                  ) : (
+                    "🖼️"
+                  )}
+                </div>
+                <div className="min-w-0 text-xs">
+                  <div className="font-semibold text-white/80">
+                    {imageFile ? imageFile.name : "Choose an image from your device"}
+                  </div>
+                  <div className="mt-0.5 text-white/40">Max 4 MB · .jpg, .png or .gif</div>
+                  <div className="text-white/40">Min. 1000×1000px · 1:1 square recommended</div>
+                </div>
+              </button>
+              {imageError && <p className="mt-1.5 text-[11px] text-red-400">{imageError}</p>}
+              {imageWarn && <p className="mt-1.5 text-[11px] text-acid">⚠ {imageWarn}</p>}
+            </div>
 
             <div className="grid grid-cols-3 gap-3">
               <Field label={copy.create.fields.x}>
@@ -114,9 +204,6 @@ export default function CreatePage() {
               <li>Max buy: <span className="text-white/70">2% of supply</span></li>
               <li>Rewards: <span className="text-venom-400">to holders, no staking</span></li>
             </ul>
-            <p className="mt-2 text-white/40">
-              Fees fund permanent liquidity and holder rewards automatically.
-            </p>
             <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-3">
               <span className="text-white/60">One-time creation fee</span>
               <span className="font-mono font-semibold text-acid">0.01 {NATIVE_SYMBOL}</span>
@@ -129,8 +216,8 @@ export default function CreatePage() {
               <p className="mt-1 font-semibold text-venom-400">
                 {form.name} (${form.symbol}) is live in the loop!
               </p>
-              <Link href="/" className="btn-ghost mt-3 inline-flex">
-                View the market
+              <Link href="/discover" className="btn-ghost mt-3 inline-flex">
+                View on Discover
               </Link>
             </div>
           ) : (
@@ -139,18 +226,18 @@ export default function CreatePage() {
               disabled={!form.name || !form.symbol || busy || (LIVE && !isConnected)}
               className="btn-primary mt-6 w-full text-base"
             >
-              {busy ? copy.create.submitting : copy.create.submit}
+              {uploading ? "Uploading image…" : busy ? copy.create.submitting : copy.create.submit}
             </button>
           )}
 
           {busy && (
             <div className="mt-3">
-              <ProgressBar value={confirming ? 0.85 : 0.4} />
+              <ProgressBar value={uploading ? 0.3 : confirming ? 0.85 : 0.5} />
             </div>
           )}
-          {LIVE && error && (
+          {LIVE && (uploadError || error) && (
             <p className="mt-3 text-center text-[11px] text-red-400">
-              {(error as { shortMessage?: string }).shortMessage ?? "Transaction failed."}
+              {uploadError ?? (error as { shortMessage?: string })?.shortMessage ?? "Transaction failed."}
             </p>
           )}
           {!isConnected && (
@@ -165,8 +252,13 @@ export default function CreatePage() {
           <div className="label mb-2">Live preview</div>
           <div className="glass p-4">
             <div className="flex items-start gap-3">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-obsidian-800 text-2xl">
-                {form.image?.startsWith("http") ? "🖼️" : form.image || "🐍"}
+              <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-obsidian-800 text-2xl">
+                {imagePreview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={imagePreview} alt="preview" className="h-full w-full object-cover" />
+                ) : (
+                  "🪙"
+                )}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -181,14 +273,10 @@ export default function CreatePage() {
             <div className="mt-4">
               <ProgressBar value={0} label="Bonding curve" />
             </div>
-            <div className="mt-3 flex justify-between text-xs text-white/40">
-              <span>👥 0 holders</span>
-              <span>Fresh launch</span>
-            </div>
           </div>
           <p className="mt-3 text-xs leading-relaxed text-white/35">
-            The moment you launch, fees start compounding into liquidity and loyalty rewards — no
-            extra setup.
+            The moment you launch, fees start compounding into liquidity and holder rewards — no extra
+            setup.
           </p>
         </div>
       </div>

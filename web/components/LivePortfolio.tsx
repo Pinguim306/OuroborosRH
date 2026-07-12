@@ -12,7 +12,8 @@ import { tokenAbi } from "@/lib/contracts";
 import { useLiveMarkets } from "@/lib/useMarkets";
 import type { TokenMarket } from "@/lib/types";
 import { copy } from "@/lib/copy";
-import { compact, rh } from "@/lib/format";
+import { compact, usdFromEth } from "@/lib/format";
+import { useEthPrice } from "@/lib/usePrice";
 import { StatTile } from "./StatTile";
 
 const num = (x: unknown): number => Number(formatEther(typeof x === "bigint" ? x : 0n));
@@ -27,6 +28,7 @@ interface Position {
 export function LivePortfolio() {
   const { address, isConnected } = useAccount();
   const { tokens, isLoading } = useLiveMarkets();
+  const ethUsd = useEthPrice();
 
   const contracts = tokens.flatMap((t) => [
     {
@@ -66,7 +68,7 @@ export function LivePortfolio() {
   return (
     <>
       <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3">
-        <StatTile label="Total claimable" value={rh(totalClaimable, 5)} accent />
+        <StatTile label="Total claimable" value={usdFromEth(totalClaimable, ethUsd, 2)} accent />
         <StatTile label="Tokens held" value={String(positions.length)} />
         <StatTile label="Staking required" value="None" sub="Rewards accrue automatically" />
       </div>
@@ -78,7 +80,7 @@ export function LivePortfolio() {
       ) : (
         <div className="mt-8 space-y-3">
           {positions.map((p) => (
-            <PositionRow key={p.token.address} position={p} />
+            <PositionRow key={p.token.address} position={p} ethUsd={ethUsd} />
           ))}
         </div>
       )}
@@ -86,7 +88,7 @@ export function LivePortfolio() {
   );
 }
 
-function PositionRow({ position: p }: { position: Position }) {
+function PositionRow({ position: p, ethUsd }: { position: Position; ethUsd: number }) {
   const { writeContract, data: hash, isPending } = useWriteContract();
   const { isLoading: confirming } = useWaitForTransactionReceipt({ hash });
   const busy = isPending || confirming;
@@ -107,7 +109,9 @@ function PositionRow({ position: p }: { position: Position }) {
 
       <div className="text-center">
         <div className="label">Claimable</div>
-        <div className="font-mono text-sm font-semibold text-venom-400">{rh(p.claimableRh, 5)}</div>
+        <div className="font-mono text-sm font-semibold text-venom-400">
+          {usdFromEth(p.claimableRh, ethUsd, 2)}
+        </div>
       </div>
 
       <button

@@ -3,21 +3,28 @@
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getToken, mockTrades, mockHolders } from "@/lib/mock/data";
-import { compact, rh, pct, shortAddr, timeAgo } from "@/lib/format";
+import { compact, pct, usdFromEth, shortAddr, timeAgo } from "@/lib/format";
 import { NATIVE_SYMBOL } from "@/lib/chain";
 import { LIVE } from "@/lib/contracts";
 import { useLiveToken } from "@/lib/useMarkets";
+import { useTokenActivity, useTokenHolders } from "@/lib/useActivity";
+import { useEthPrice } from "@/lib/usePrice";
 import type { Address } from "@/lib/types";
 import { StatTile } from "@/components/StatTile";
 import { ProgressBar } from "@/components/ProgressBar";
 import { TradeWidget } from "@/components/TradeWidget";
 import { RewardsPanel } from "@/components/RewardsPanel";
+import { MarketcapChart } from "@/components/MarketcapChart";
 
 export default function TokenPage() {
   const params = useParams();
   const address = Array.isArray(params.address) ? params.address[0] : params.address;
   const live = useLiveToken(address as Address | undefined);
   const token = LIVE ? live.token : address ? getToken(address) : undefined;
+
+  const ethUsd = useEthPrice();
+  const activity = useTokenActivity(token);
+  const holdersData = useTokenHolders(token);
 
   if (LIVE && live.isLoading && !token) {
     return <div className="mx-auto max-w-md px-4 py-32 text-center text-white/50">Loading token…</div>;
@@ -29,23 +36,35 @@ export default function TokenPage() {
         <div className="text-5xl">🕳️</div>
         <h1 className="mt-4 font-display text-2xl font-bold">Token not found</h1>
         <p className="mt-2 text-white/50">This market doesn&apos;t exist (or hasn&apos;t been indexed yet).</p>
-        <Link href="/" className="btn-primary mt-6 inline-flex">
-          Back to the market
+        <Link href="/discover" className="btn-primary mt-6 inline-flex">
+          Back to Discover
         </Link>
       </div>
     );
   }
 
-  // Trades/holders feeds need an off-chain indexer; shown from mock data in demo mode.
-  const trades = LIVE ? [] : mockTrades(token);
-  const holders = LIVE ? [] : mockHolders(token);
+  const trades = LIVE ? activity.trades : mockTrades(token);
+  const holders = LIVE ? holdersData.holders : mockHolders(token);
+  const volumeEth = LIVE ? activity.volumeEth : token.volume24hRh;
+  // Chart series (ETH marketcap over trades). Demo mode uses a synthetic curve.
+  const series = LIVE
+    ? activity.series
+    : Array.from({ length: 40 }, (_, i) =>
+        token.marketCapRh * (0.3 + 0.7 * (i / 39)) * (0.92 + 0.16 * Math.sin(i * 1.3)),
+      );
+  const athEth = LIVE ? activity.athMcapEth : Math.max(token.marketCapRh, ...series);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-4">
-        <div className="grid h-16 w-16 place-items-center rounded-2xl bg-obsidian-800 text-4xl">
-          {token.image}
+        <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl bg-obsidian-800 text-4xl">
+          {token.image.startsWith("http") || token.image.startsWith("ipfs") ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={toHttp(token.image)} alt={token.symbol} className="h-full w-full object-cover" />
+          ) : (
+            token.image
+          )}
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2">
@@ -58,8 +77,9 @@ export default function TokenPage() {
           <p className="mt-1 max-w-xl text-sm text-white/50">{token.description}</p>
         </div>
         <div className="text-right">
-          <div className="label">Price</div>
-          <div className="stat-value text-gradient">{rh(token.priceRh, 6)}</div>
+          <div className="label">Marketcap</div>
+          <div className="stat-value text-gradient">{usdFromEth(token.marketCapRh, ethUsd)}</div>
+          <div className="mt-0.5 text-xs text-white/40">ATH {usdFromEth(athEth, ethUsd)}</div>
         </div>
       </div>
 
@@ -67,11 +87,14 @@ export default function TokenPage() {
         {/* Left: market data */}
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatTile label="Market cap" value={rh(token.marketCapRh, 0)} />
-            <StatTile label="Liquidity" value={rh(token.liquidityRh, 0)} accent />
-            <StatTile label="Rewards pool" value={rh(token.rewardsPoolRh, 0)} />
-            <StatTile label="Holders" value={compact(token.holders, 0)} />
+            <StatTile label="Marketcap" value={usdFromEth(token.marketCapRh, ethUsd)} />
+            <StatTile label="Liquidity" value={usdFromEth(token.liquidityRh, ethUsd)} accent />
+            <StatTile label="Rewards pool" value={usdFromEth(token.rewardsPoolRh, ethUsd)} />
+            <StatTile label="Volume" value={usdFromEth(volumeEth, ethUsd)} />
           </div>
+
+          {/* Marketcap chart */}
+          <MarketcapChart series={series} ethUsd={ethUsd} />
 
           {/* Bonding curve / graduation */}
           <div className="glass p-6">
@@ -89,16 +112,6 @@ export default function TokenPage() {
             ) : (
               <ProgressBar value={token.graduationProgress} label="Progress to graduation" />
             )}
-            <div className="mt-5 rounded-xl bg-obsidian-900/60 p-4">
-              <div className="flex items-center justify-between">
-                <span className="label">Trade fee</span>
-                <span className="font-semibold text-white">1.5%</span>
-              </div>
-              <p className="mt-1.5 text-xs leading-relaxed text-white/45">
-                Every trade deepens permanent liquidity and streams rewards to holders — the loop
-                feeds itself.
-              </p>
-            </div>
           </div>
 
           {/* Trades */}
@@ -106,35 +119,37 @@ export default function TokenPage() {
             <div className="border-b border-white/5 px-5 py-3 text-sm font-semibold">Recent trades</div>
             {trades.length === 0 ? (
               <div className="px-5 py-8 text-center text-xs text-white/35">
-                Live trade history needs an indexer — coming soon. Trades still settle on-chain.
+                {LIVE && activity.isLoading ? "Loading trades…" : "No trades yet. Be the first."}
               </div>
             ) : (
-            <div className="max-h-80 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-obsidian-850/90 text-left text-xs text-white/40">
-                  <tr>
-                    <th className="px-5 py-2 font-medium">Type</th>
-                    <th className="px-5 py-2 font-medium">{NATIVE_SYMBOL}</th>
-                    <th className="px-5 py-2 font-medium">{token.symbol}</th>
-                    <th className="px-5 py-2 font-medium">Trader</th>
-                    <th className="px-5 py-2 text-right font-medium">Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trades.map((t) => (
-                    <tr key={t.id} className="border-t border-white/5">
-                      <td className={`px-5 py-2 font-semibold ${t.isBuy ? "text-venom-400" : "text-red-400"}`}>
-                        {t.isBuy ? "Buy" : "Sell"}
-                      </td>
-                      <td className="px-5 py-2 font-mono text-white/70">{compact(t.rhAmount, 3)}</td>
-                      <td className="px-5 py-2 font-mono text-white/70">{compact(t.tokenAmount, 0)}</td>
-                      <td className="px-5 py-2 font-mono text-white/40">{shortAddr(t.trader)}</td>
-                      <td className="px-5 py-2 text-right text-xs text-white/40">{timeAgo(t.time)}</td>
+              <div className="max-h-80 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-obsidian-850/90 text-left text-xs text-white/40">
+                    <tr>
+                      <th className="px-5 py-2 font-medium">Type</th>
+                      <th className="px-5 py-2 font-medium">{NATIVE_SYMBOL}</th>
+                      <th className="px-5 py-2 font-medium">{token.symbol}</th>
+                      <th className="px-5 py-2 font-medium">Trader</th>
+                      <th className="px-5 py-2 text-right font-medium">Time</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {trades.map((t) => (
+                      <tr key={t.id} className="border-t border-white/5">
+                        <td className={`px-5 py-2 font-semibold ${t.isBuy ? "text-venom-400" : "text-red-400"}`}>
+                          {t.isBuy ? "Buy" : "Sell"}
+                        </td>
+                        <td className="px-5 py-2 font-mono text-white/70">{compact(t.rhAmount, 3)}</td>
+                        <td className="px-5 py-2 font-mono text-white/70">{compact(t.tokenAmount, 0)}</td>
+                        <td className="px-5 py-2 font-mono text-white/40">{shortAddr(t.trader)}</td>
+                        <td className="px-5 py-2 text-right text-xs text-white/40">
+                          {t.time ? timeAgo(t.time) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
 
@@ -142,11 +157,11 @@ export default function TokenPage() {
           <div className="glass overflow-hidden">
             <div className="flex items-center justify-between border-b border-white/5 px-5 py-3">
               <span className="text-sm font-semibold">Top holders</span>
-              <span className="text-xs text-white/40">Fees claimable (accrued, no staking)</span>
+              <span className="text-xs text-white/40">{holders.length} shown</span>
             </div>
             {holders.length === 0 ? (
               <div className="px-5 py-8 text-center text-xs text-white/35">
-                Holder rankings need an indexer — coming soon.
+                {LIVE && holdersData.isLoading ? "Loading holders…" : "No holders yet."}
               </div>
             ) : (
               <div className="divide-y divide-white/5">
@@ -154,9 +169,11 @@ export default function TokenPage() {
                   <div key={h.address} className="flex items-center gap-3 px-5 py-3 text-sm">
                     <span className="w-5 text-white/30">{i + 1}</span>
                     <span className="flex-1 font-mono text-white/60">{shortAddr(h.address)}</span>
-                    <span className="w-16 text-right text-white/50">{pct(h.sharePct / 100)}</span>
-                    <span className="w-28 text-right font-mono font-semibold text-venom-400">
-                      {rh(h.claimableRh, 3)}
+                    <span className="w-24 text-right font-mono text-white/50">
+                      {compact(h.balance, 0)} {token.symbol}
+                    </span>
+                    <span className="w-16 text-right font-semibold text-venom-400">
+                      {pct(h.sharePct / 100)}
                     </span>
                   </div>
                 ))}
@@ -175,3 +192,6 @@ export default function TokenPage() {
   );
 }
 
+function toHttp(uri: string): string {
+  return uri.startsWith("ipfs://") ? `https://ipfs.io/ipfs/${uri.slice(7)}` : uri;
+}

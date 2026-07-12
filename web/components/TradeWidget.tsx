@@ -216,12 +216,8 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
         ))}
       </div>
 
-      <div className="mt-4 space-y-2 rounded-xl bg-obsidian-900/60 p-3 text-xs">
+      <div className="mt-4 rounded-xl bg-obsidian-900/60 p-3 text-xs">
         <Row label="You receive (est.)" value={quote.outLabel} strong />
-        <Row label="Trade fee" value={rh(quote.fee, 4)} />
-        <p className="border-t border-white/5 pt-2 text-white/40">
-          Fees fund permanent liquidity and holder rewards.
-        </p>
       </div>
 
       <button

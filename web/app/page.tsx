@@ -1,38 +1,27 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { copy } from "@/lib/copy";
-import { rh, compact } from "@/lib/format";
+import { compact, usdFromEth } from "@/lib/format";
 import { MOCK_TOKENS } from "@/lib/mock/data";
 import { LIVE } from "@/lib/contracts";
 import { useLiveMarkets } from "@/lib/useMarkets";
+import { useEthPrice } from "@/lib/usePrice";
 import type { TokenMarket } from "@/lib/types";
 import { StatTile } from "@/components/StatTile";
-import { TokenCard } from "@/components/TokenCard";
 import { LoopDiagram } from "@/components/LoopDiagram";
 
-type Tab = "trending" | "new" | "graduating";
-
 export default function HomePage() {
-  const [tab, setTab] = useState<Tab>("trending");
-  const { tokens: liveTokens, isLoading } = useLiveMarkets();
+  const ethUsd = useEthPrice();
+  const { tokens: liveTokens } = useLiveMarkets();
   const all: TokenMarket[] = LIVE ? liveTokens : MOCK_TOKENS;
 
   const stats = {
     liquidityLocked: all.reduce((s, t) => s + t.liquidityRh, 0),
     rewardsPaid: all.reduce((s, t) => s + t.rewardsPoolRh, 0),
-    volume24h: all.reduce((s, t) => s + t.volume24hRh, 0),
     tokens: all.length,
     graduated: all.filter((t) => t.graduated).length,
   };
-
-  const tokens =
-    tab === "trending"
-      ? [...all].sort((a, b) => b.volume24hRh - a.volume24hRh || b.liquidityRh - a.liquidityRh)
-      : tab === "new"
-        ? [...all].sort((a, b) => b.createdAt - a.createdAt)
-        : all.filter((t) => !t.graduated).sort((a, b) => b.graduationProgress - a.graduationProgress);
 
   return (
     <div className="mx-auto max-w-6xl px-4">
@@ -43,16 +32,14 @@ export default function HomePage() {
           <h1 className="mt-5 font-display text-5xl font-extrabold leading-[1.05] tracking-tight md:text-6xl">
             Every trade <span className="text-gradient">feeds the loop.</span>
           </h1>
-          <p className="mt-5 max-w-lg text-base leading-relaxed text-white/55">
-            {copy.hero.subtitle}
-          </p>
+          <p className="mt-5 max-w-lg text-base leading-relaxed text-white/55">{copy.hero.subtitle}</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/create" className="btn-primary text-base">
               {copy.hero.ctaPrimary} →
             </Link>
-            <a href="#market" className="btn-ghost text-base">
+            <Link href="/discover" className="btn-ghost text-base">
               {copy.hero.ctaSecondary}
-            </a>
+            </Link>
           </div>
         </div>
         <div className="animate-float">
@@ -62,10 +49,10 @@ export default function HomePage() {
 
       {/* Stats */}
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile label="Liquidity locked" value={rh(stats.liquidityLocked, 0)} accent />
-        <StatTile label="Rewards streamed" value={rh(stats.rewardsPaid, 0)} />
-        <StatTile label="24h volume" value={rh(stats.volume24h, 0)} />
+        <StatTile label="Liquidity locked" value={usdFromEth(stats.liquidityLocked, ethUsd, 0)} accent />
+        <StatTile label="Rewards streamed" value={usdFromEth(stats.rewardsPaid, ethUsd, 0)} />
         <StatTile label="Tokens launched" value={compact(stats.tokens, 0)} sub={`${stats.graduated} graduated`} />
+        <StatTile label="Explore" value="Discover →" sub="Browse every token" />
       </section>
 
       {/* How the loop works */}
@@ -102,49 +89,15 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* Market */}
-      <section id="market" className="scroll-mt-20 pb-24">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <h2 className="font-display text-2xl font-bold">The market</h2>
-          <div className="flex gap-1 rounded-xl bg-obsidian-900 p-1">
-            {(
-              [
-                ["trending", "🔥 Trending"],
-                ["new", "✨ New"],
-                ["graduating", "🎓 Graduating"],
-              ] as [Tab, string][]
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`rounded-lg px-3.5 py-2 text-sm font-medium transition ${
-                  tab === key ? "bg-venom-500 text-obsidian-950" : "text-white/50 hover:text-white"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        {LIVE && isLoading && tokens.length === 0 ? (
-          <div className="glass p-10 text-center text-white/50">Loading markets…</div>
-        ) : tokens.length === 0 ? (
-          <div className="glass p-10 text-center text-white/50">
-            No tokens yet.{" "}
-            <Link href="/create" className="text-venom-400 hover:underline">
-              Be the first to launch one →
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link href="/discover" className="btn-primary">
+              Explore tokens →
+            </Link>
+            <Link href="/create" className="btn-ghost">
+              Launch your own
             </Link>
           </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {tokens.map((t) => (
-              <TokenCard key={t.address} token={t} />
-            ))}
-          </div>
-        )}
+        </div>
       </section>
     </div>
   );

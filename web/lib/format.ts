@@ -18,6 +18,14 @@ export function usd(n: number): string {
   return `$${compact(n)}`;
 }
 
+/** Format an ETH amount as USD using the live ETH price; falls back to ETH. */
+export function usdFromEth(eth: number, ethUsd: number, digits = 2): string {
+  if (!ethUsd || !isFinite(ethUsd)) return rh(eth, digits);
+  const v = eth * ethUsd;
+  if (v > 0 && v < 0.01) return "<$0.01";
+  return `$${compact(v, digits)}`;
+}
+
 export function pct(fraction: number, digits = 1): string {
   return `${(fraction * 100).toFixed(digits)}%`;
 }

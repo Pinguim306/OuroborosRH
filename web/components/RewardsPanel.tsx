@@ -10,7 +10,8 @@ import {
 } from "wagmi";
 import type { TokenMarket } from "@/lib/types";
 import { copy } from "@/lib/copy";
-import { compact, rh } from "@/lib/format";
+import { compact, rh, usdFromEth } from "@/lib/format";
+import { useEthPrice } from "@/lib/usePrice";
 import { NATIVE_SYMBOL } from "@/lib/chain";
 import { LIVE, tokenAbi } from "@/lib/contracts";
 
@@ -26,6 +27,7 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
   const [holding] = useState(() => (token.priceRh > 0 ? (token.marketCapRh / token.priceRh) * 0.004 : 0));
   const [simClaimable, setSimClaimable] = useState(() => token.rewardsPoolRh * 0.004);
   const [flash, setFlash] = useState<string | null>(null);
+  const ethUsd = useEthPrice();
 
   // --- Live reads ---
   const claimableQ = useReadContract({
@@ -103,7 +105,7 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
         <div className="rounded-xl bg-obsidian-900/60 p-4">
           <div className="label">Pool paid out</div>
           <div className="mt-0.5 font-mono text-sm font-semibold text-white">
-            {rh(token.rewardsPoolRh, 0)}
+            {usdFromEth(token.rewardsPoolRh, ethUsd, 0)}
           </div>
         </div>
       </div>
@@ -111,7 +113,9 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
       <div className="mt-3 flex items-center justify-between rounded-xl border border-venom-500/20 bg-venom-500/5 p-4">
         <div>
           <div className="label">Claimable now</div>
-          <div className="mt-0.5 font-mono text-lg font-bold text-venom-400">{rh(claimable, 5)}</div>
+          <div className="mt-0.5 font-mono text-lg font-bold text-venom-400">
+            {usdFromEth(claimable, ethUsd, 2)}
+          </div>
         </div>
         <button onClick={claim} disabled={claimable <= 0 || busy || (LIVE && !isConnected)} className="btn-primary">
           {busy ? "Confirming…" : copy.token.claim}
