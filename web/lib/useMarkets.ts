@@ -42,6 +42,7 @@ function mapToken(
   realNative: bigint,
   rewardsPool: bigint,
   supply: bigint,
+  pair?: Address,
 ): TokenMarket {
   const priceRh = num(price);
   const supplyN = num(supply);
@@ -49,6 +50,7 @@ function mapToken(
     address: m.token,
     curve: m.curve,
     rewards: m.token, // the token is the dividend vault
+    pair,
     name: m.name,
     symbol: m.symbol,
     description: m.metadataURI.startsWith("http") ? "" : "",
@@ -67,7 +69,10 @@ function mapToken(
   };
 }
 
-const STATS_PER_MARKET = 6;
+const STATS_PER_MARKET = 7;
+
+const asAddr = (x: unknown): Address | undefined =>
+  typeof x === "string" && x.startsWith("0x") ? (x as Address) : undefined;
 
 /** Read all launchpad markets + their on-chain stats. */
 export function useLiveMarkets(): { tokens: TokenMarket[]; isLoading: boolean } {
@@ -93,6 +98,7 @@ export function useLiveMarkets(): { tokens: TokenMarket[]; isLoading: boolean } 
         { address: m.curve, abi: curveAbi, functionName: "realNativeRaised" } as const,
         { address: m.token, abi: tokenAbi, functionName: "totalRewardsDistributed" } as const,
         { address: m.token, abi: tokenAbi, functionName: "totalSupply" } as const,
+        { address: m.curve, abi: curveAbi, functionName: "pair" } as const,
       ]),
     [markets],
   );
@@ -115,6 +121,7 @@ export function useLiveMarkets(): { tokens: TokenMarket[]; isLoading: boolean } 
         bn(r[b + 3]?.result),
         bn(r[b + 4]?.result),
         bn(r[b + 5]?.result),
+        asAddr(r[b + 6]?.result),
       );
     });
   }, [markets, statsQ.data]);
@@ -160,6 +167,7 @@ export function useLiveToken(tokenAddress?: Address): {
       { address: curve, abi: curveAbi, functionName: "realNativeRaised" },
       { address: token, abi: tokenAbi, functionName: "totalRewardsDistributed" },
       { address: token, abi: tokenAbi, functionName: "totalSupply" },
+      { address: curve, abi: curveAbi, functionName: "pair" },
     ],
     query: { enabled: LIVE && !!curve && !!token },
   });
@@ -184,6 +192,7 @@ export function useLiveToken(tokenAddress?: Address): {
       bn(r[3]?.result),
       bn(r[4]?.result),
       bn(r[5]?.result),
+      asAddr(r[6]?.result),
     );
   }, [market, statsQ.data]);
 

@@ -4,6 +4,7 @@ export interface TokenMarket {
   address: Address;
   curve: Address;
   rewards: Address;
+  pair?: Address; // Uniswap V2 pair, set once the token graduates
   name: string;
   symbol: string;
   description: string;
