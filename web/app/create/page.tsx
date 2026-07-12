@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { parseEther } from "viem";
+import { formatEther, parseEther, parseEventLogs } from "viem";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { copy } from "@/lib/copy";
 import { NATIVE_SYMBOL } from "@/lib/chain";
@@ -20,6 +20,7 @@ export default function CreatePage() {
     website: "",
   });
   const [status, setStatus] = useState<"idle" | "deploying" | "done">("idle");
+  const [devBuy, setDevBuy] = useState("");
 
   // Image upload state
   const fileRef = useRef<HTMLInputElement>(null);
@@ -36,8 +37,38 @@ export default function CreatePage() {
     functionName: "creationFee",
     query: { enabled: LIVE },
   });
+  const { data: curveParams } = useReadContract({
+    address: CONTRACTS.launchpad,
+    abi: launchpadAbi,
+    functionName: "params",
+    query: { enabled: LIVE },
+  });
+
+  // Largest dev buy that still fits under the anti-whale cap (same 2% every buyer
+  // gets). Computed from the launch params so it tracks whatever they're set to;
+  // a small safety margin keeps integer rounding from tripping the on-chain cap.
+  const maxDevBuyEth = useMemo(() => maxDevBuy(curveParams), [curveParams]);
+  const devBuyNum = parseFloat(devBuy) || 0;
+  const devBuyOverCap = maxDevBuyEth > 0 && devBuyNum > maxDevBuyEth;
+  const clampedDevBuy = maxDevBuyEth > 0 ? Math.min(devBuyNum, maxDevBuyEth) : devBuyNum;
   const { writeContract, data: hash, isPending, error } = useWriteContract();
-  const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+  const { data: receipt, isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  // Pull the freshly deployed token address out of the TokenLaunched event so we
+  // can link the creator straight to its launchpad page.
+  const newTokenAddress = useMemo(() => {
+    if (!receipt) return undefined;
+    try {
+      const logs = parseEventLogs({
+        abi: launchpadAbi,
+        eventName: "TokenLaunched",
+        logs: receipt.logs,
+      });
+      return (logs[0]?.args as { token?: string } | undefined)?.token;
+    } catch {
+      return undefined;
+    }
+  }, [receipt]);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -104,12 +135,16 @@ export default function CreatePage() {
       setUploading(false);
     }
 
+    // Clamp the dev buy to the cap so a rounding overshoot can't revert the launch.
+    const devBuyWei = clampedDevBuy > 0 ? parseEther(clampedDevBuy.toFixed(18)) : 0n;
+    const fee = (creationFee as bigint | undefined) ?? parseEther("0.01");
+
     writeContract({
       address: CONTRACTS.launchpad,
       abi: launchpadAbi,
       functionName: "createToken",
-      args: [form.name, form.symbol, metadataURI],
-      value: (creationFee as bigint | undefined) ?? parseEther("0.01"),
+      args: [form.name, form.symbol, metadataURI, devBuyWei],
+      value: fee + devBuyWei,
     });
   }
 
@@ -193,6 +228,42 @@ export default function CreatePage() {
                 <input className="field" value={form.website} onChange={set("website")} placeholder="site.xyz" />
               </Field>
             </div>
+
+            {/* Dev buy — the creator can buy their own launch first, capped at the
+                same 2% anti-whale limit as everyone else. */}
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="label">Dev buy ({NATIVE_SYMBOL}) · optional</span>
+                {maxDevBuyEth > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setDevBuy(maxDevBuyEth.toFixed(4))}
+                    className="text-[11px] font-medium text-venom-400 hover:text-venom-300"
+                  >
+                    Max {maxDevBuyEth.toFixed(4)}
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  className="field font-mono"
+                  value={devBuy}
+                  onChange={(e) => setDevBuy(e.target.value.replace(/[^0-9.]/g, ""))}
+                  inputMode="decimal"
+                  placeholder="0.0"
+                />
+                <span className="chip shrink-0">{NATIVE_SYMBOL}</span>
+              </div>
+              <p className="mt-1.5 text-[11px] text-white/40">
+                Buy your token in the same transaction, before anyone else. Limited to the 2% max-buy
+                cap — larger amounts are clamped to the max.
+              </p>
+              {devBuyOverCap && (
+                <p className="mt-1 text-[11px] text-acid">
+                  ⚠ Above the 2% cap — will be clamped to {maxDevBuyEth.toFixed(4)} {NATIVE_SYMBOL}.
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="mt-6 rounded-xl border border-white/5 bg-obsidian-900/50 p-4 text-xs text-white/50">
@@ -204,9 +275,27 @@ export default function CreatePage() {
               <li>Max buy: <span className="text-white/70">2% of supply</span></li>
               <li>Rewards: <span className="text-venom-400">to holders, no staking</span></li>
             </ul>
-            <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-3">
-              <span className="text-white/60">One-time creation fee</span>
-              <span className="font-mono font-semibold text-acid">0.01 {NATIVE_SYMBOL}</span>
+            <div className="mt-3 space-y-1 border-t border-white/5 pt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-white/60">One-time creation fee</span>
+                <span className="font-mono font-semibold text-acid">0.01 {NATIVE_SYMBOL}</span>
+              </div>
+              {devBuyNum > 0 && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-white/60">Dev buy</span>
+                    <span className="font-mono text-white/70">
+                      {clampedDevBuy.toFixed(4)} {NATIVE_SYMBOL}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-white/5 pt-1">
+                    <span className="text-white/70">Total</span>
+                    <span className="font-mono font-semibold text-white">
+                      {(0.01 + clampedDevBuy).toFixed(4)} {NATIVE_SYMBOL}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -216,9 +305,21 @@ export default function CreatePage() {
               <p className="mt-1 font-semibold text-venom-400">
                 {form.name} (${form.symbol}) is live in the loop!
               </p>
-              <Link href="/discover" className="btn-ghost mt-3 inline-flex">
-                View on Discover
-              </Link>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                {LIVE && newTokenAddress ? (
+                  <Link href={`/token/${newTokenAddress}`} className="btn-primary inline-flex">
+                    Open your token
+                  </Link>
+                ) : null}
+                <Link href="/discover" className="btn-ghost inline-flex">
+                  View on Discover
+                </Link>
+              </div>
+              {LIVE && newTokenAddress && (
+                <p className="mt-2 break-all font-mono text-[11px] text-white/40">
+                  {newTokenAddress}
+                </p>
+              )}
             </div>
           ) : (
             <button
@@ -282,6 +383,39 @@ export default function CreatePage() {
       </div>
     </div>
   );
+}
+
+/** Default launch params (mirrors the deploy script) — used for the demo preview
+ *  before contracts are live. */
+const DEMO_PARAMS = {
+  totalSupply: 1_000_000_000,
+  virtualNative: 1,
+  feeBps: 150,
+  maxBuyBps: 200,
+};
+
+/**
+ * The largest dev buy (in native coin) whose tokens-out stays within the
+ * anti-whale cap on a fresh curve. Solve getAmountOut(netIn, vNative, supply) =
+ * maxBuyTokens for netIn, then gross up for the trade fee. Returns 0 when the cap
+ * is disabled (maxBuyBps == 0), i.e. no computed ceiling.
+ */
+function maxDevBuy(params: readonly bigint[] | undefined): number {
+  let supply = DEMO_PARAMS.totalSupply;
+  let vNative = DEMO_PARAMS.virtualNative;
+  let feeBps = DEMO_PARAMS.feeBps;
+  let maxBuyBps = DEMO_PARAMS.maxBuyBps;
+  if (params && params.length >= 7) {
+    supply = Number(formatEther(params[0]));
+    vNative = Number(formatEther(params[1]));
+    feeBps = Number(params[2]) + Number(params[3]) + Number(params[4]);
+    maxBuyBps = Number(params[6]);
+  }
+  if (maxBuyBps === 0 || supply <= 0) return 0;
+  const maxTokens = (supply * maxBuyBps) / 10_000;
+  const netIn = (maxTokens * vNative) / (supply - maxTokens);
+  const gross = netIn / (1 - feeBps / 10_000);
+  return gross * 0.99; // safety margin against on-chain rounding
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

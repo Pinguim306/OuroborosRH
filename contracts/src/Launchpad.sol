@@ -108,14 +108,19 @@ contract Launchpad is Ownable, ReentrancyGuard {
     // --------------------------------------------------------------------- //
 
     /// @notice Launch a new dividend token + bonding curve. Requires `creationFee`
-    ///         in native coin (excess is refunded).
-    function createToken(string calldata name, string calldata symbol, string calldata metadataURI)
-        external
-        payable
-        nonReentrant
-        returns (address token, address curve)
-    {
-        if (msg.value < creationFee) revert InsufficientCreationFee();
+    ///         in native coin. The creator may optionally include a `devBuy` — native
+    ///         spent buying their own token on the fresh curve in the same transaction,
+    ///         before anyone else can trade. `msg.value` must cover `creationFee +
+    ///         devBuy`; any excess is refunded. The dev buy is subject to the same
+    ///         anti-whale cap (`maxBuyBps`) as every other buyer, so it reverts if it
+    ///         would exceed that share of supply.
+    function createToken(
+        string calldata name,
+        string calldata symbol,
+        string calldata metadataURI,
+        uint256 devBuy
+    ) external payable nonReentrant returns (address token, address curve) {
+        if (msg.value < creationFee + devBuy) revert InsufficientCreationFee();
         CurveParams memory p = params;
 
         // 1. Mint the full supply to this factory (temporary, excluded holder).
@@ -146,11 +151,12 @@ contract Launchpad is Ownable, ReentrancyGuard {
         t.transferAuthority(address(c));
 
         // 5. Record the market BEFORE any external value transfer (checks-effects-
-        //    interactions), then forward the creation fee. (L2 fix.)
+        //    interactions), then forward the creation fee, run the optional dev buy,
+        //    and refund the remainder. (L2 fix.)
         token = address(t);
         curve = address(c);
         _recordMarket(token, curve, name, symbol, metadataURI);
-        _payCreationFee();
+        _settle(c, devBuy);
     }
 
     /// @dev Split out of createToken to keep its stack shallow (the combined locals
@@ -190,9 +196,15 @@ contract Launchpad is Ownable, ReentrancyGuard {
         }
     }
 
-    function _payCreationFee() internal {
+    /// @dev Pay the creation fee, execute the optional dev buy on the new curve for
+    ///      the creator, then refund whatever native is left. Split out of createToken
+    ///      to keep its stack shallow.
+    function _settle(BondingCurve c, uint256 devBuy) internal {
         if (creationFee > 0) _sendNative(feeRecipient, creationFee);
-        uint256 refund = msg.value - creationFee;
+        // Dev buy delivers tokens straight to the creator; minTokensOut is 0 because
+        // no one can front-run a buy that runs inside the launch transaction.
+        if (devBuy > 0) c.buyFor{value: devBuy}(msg.sender, 0);
+        uint256 refund = msg.value - creationFee - devBuy;
         if (refund > 0) _sendNative(msg.sender, refund);
     }
 

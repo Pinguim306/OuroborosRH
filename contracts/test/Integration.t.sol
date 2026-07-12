@@ -40,7 +40,7 @@ contract IntegrationTest is Test {
         uint256 devStart = dev.balance;
 
         // 1. Launch — creation fee goes to the developer wallet.
-        (address t, address c) = launchpad.createToken{value: CREATION_FEE}("Loop Coin", "LOOP", "ipfs://x");
+        (address t, address c) = launchpad.createToken{value: CREATION_FEE}("Loop Coin", "LOOP", "ipfs://x", 0);
         OuroToken token = OuroToken(payable(t));
         BondingCurve curve = BondingCurve(payable(c));
         assertEq(dev.balance - devStart, CREATION_FEE);
