@@ -104,14 +104,15 @@ export default function DocsPage() {
             <KeyVals
               rows={[
                 ["Total supply", "1,000,000,000 tokens"],
-                ["Creation fee", `0.01 ${NATIVE_SYMBOL} (one-time)`],
+                ["Creation fee", "none — you only pay network gas"],
                 ["Graduation target", `4 ${NATIVE_SYMBOL} raised`],
                 ["Max buy", "2% of supply per transaction"],
               ]}
             />
             <p>
-              The creation fee is charged once, at launch, and goes to the protocol. Any excess{" "}
-              {NATIVE_SYMBOL} you send is refunded in the same transaction.
+              Launching is free — you pay only the network gas. Any excess {NATIVE_SYMBOL} you
+              send is refunded in the same transaction. (A creation fee can be configured
+              on-chain by the protocol; it is currently set to zero.)
             </p>
           </Section>
 
