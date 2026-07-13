@@ -1,35 +1,32 @@
 # 🐍 Ouroboros — Robinhood Chain Token Launchpad
 
-**Trade → Fees → Liquidity → Rewards → Trade.** A launchpad where trading fees
-don't leave the ecosystem — they become **permanent liquidity**, and holders
-collect a share of them **just by holding**. Live at
+**Trade → Fees → Harvest → Rewards → Trade.** A launchpad where every token is
+born on a live Uniswap V3 pool with its liquidity **locked forever**, and pool
+fees flow back to holders **just for holding**. Live at
 [ouroborosrh.fun](https://ouroborosrh.fun/).
 
-Ouroboros is a pump.fun-style launchpad for [Robinhood Chain](https://robinhood.com/us/en/chain/)
-with **two launch modes**, picked on the Launch page:
+Ouroboros is a launchpad for [Robinhood Chain](https://robinhood.com/us/en/chain/).
+Every launch goes **straight into a Uniswap V3 pool**:
 
-| | 🌀 Bonding curve | ⚡ Instant V3 pool |
-|---|---|---|
-| Market | constant-product curve | Uniswap V3 pool, live the second the tx confirms |
-| Trade fee | 1.5% (split: protocol / liquidity / holders) | 1% pool fee tier |
-| Anti-whale | 2% max buy per tx | none (no V3 hook for it) |
-| Graduation | at 4 ETH raised → Uniswap V2 pair, LP **burned** | n/a — born on the DEX |
-| Post-DEX fee | 1% trade tax on the pair (capped 2%) → protocol | 1% pool fee, harvested |
-| Liquidity | permanent (curve, then burned LP) | entire supply locked forever in the **FeeLocker** |
-| Chart | on-chain candles, DexScreener after graduation | DexScreener from trade one |
-| Dev buy | same tx, capped at 2% | pool's first swap — un-front-runnable |
+| | ⚡ Instant V3 launch |
+|---|---|
+| Market | Uniswap V3 pool, live the second the tx confirms |
+| Trade fee | 1% pool fee tier — the only fee |
+| Liquidity | entire supply locked forever in the **FeeLocker** (un-ruggable) |
+| Chart | DexScreener from trade one |
+| Dev buy | pool's first swap — un-front-runnable |
+| Transfer tax | none — wallet-to-wallet transfers always free |
 
 ## Holder rewards — no staking
 
 Every token is a **dividend token**: rewards accrue automatically, proportional
 to balance; connect a wallet and **claim anytime**.
 
-- **Curve mode:** a slice of every trade fee streams into the token as ETH.
-- **V3 mode:** the pool's 1% fee accrues in the locked position; a
-  **permissionless Harvest** (button on the token page) collects it — the split
-  is enforced on-chain (40% of the ETH side to holders, the rest + token side to
-  the protocol; the caller gets nothing). With zero holders, the holder share
-  waits as `pendingRewards` for the next buyer — it can never be drained.
+The pool's 1% fee accrues in the locked position; a **permissionless Harvest**
+(button on the token page) collects it — the split is enforced on-chain (40% of
+the ETH side to holders, the rest + token side to the protocol; the caller gets
+nothing). With zero holders, the holder share waits as `pendingRewards` for the
+next buyer — it can never be drained.
 
 At launch the creator picks a **rewards mode**, immutable forever
 (`LAUNCHPAD_VERSION ≥ 2`; the site auto-detects and hides the option on v1
@@ -44,9 +41,9 @@ deployments):
 A reputation score computed **entirely from public on-chain events** — no
 signup, no snapshots, verifiable by anyone (`/points`): 1,000 pts / ETH traded,
 500 pts per launch, 100 pts / ETH of volume your tokens generate, 250 pts for
-being one of a token's first 10 buyers, 2,000 pts per graduation. Volume only
-counts on tokens ≥ 3 distinct wallets have traded (anti-wash). Points carry no
-guaranteed monetary value or future entitlement.
+being one of a token's first 10 buyers. Volume only counts on tokens ≥ 3
+distinct wallets have traded (anti-wash). Points carry no guaranteed monetary
+value or future entitlement.
 
 ## The FeeLocker
 

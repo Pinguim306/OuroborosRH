@@ -11,7 +11,6 @@ import {
   PTS_PER_LAUNCH,
   PTS_PER_ETH_CREATOR,
   PTS_EARLY_APE,
-  PTS_GRADUATION,
   EARLY_APE_SLOTS,
   MIN_TRADERS,
   type WalletPoints,
@@ -30,7 +29,7 @@ const RULES = [
     icon: "🔄",
     title: "Trade",
     pts: `${fmt(PTS_PER_ETH_VOLUME)} pts / ETH`,
-    desc: "Every ETH of buy or sell volume, on the curve or on V3 pools.",
+    desc: "Every ETH of buy or sell volume across every Ouroboros token.",
   },
   {
     icon: "🚀",
@@ -49,12 +48,6 @@ const RULES = [
     title: "Ape early",
     pts: `${fmt(PTS_EARLY_APE)} pts / token`,
     desc: `Be one of the first ${EARLY_APE_SLOTS} buyers of any token.`,
-  },
-  {
-    icon: "🎓",
-    title: "Graduate",
-    pts: `${fmt(PTS_GRADUATION)} pts / token`,
-    desc: "When a token you created graduates to the DEX.",
   },
 ];
 
@@ -85,7 +78,7 @@ export default function PointsPage() {
       </div>
 
       {/* How to earn */}
-      <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
         {RULES.map((r) => (
           <div key={r.title} className="glass p-4">
             <div className="text-2xl">{r.icon}</div>
@@ -118,7 +111,6 @@ export default function PointsPage() {
               <Breakdown label="Launches" value={me.launching} />
               <Breakdown label="Creator volume" value={me.creatorVolume} />
               <Breakdown label="Early ape" value={me.earlyApe} />
-              <Breakdown label="Graduations" value={me.graduation} />
             </div>
           </div>
         </div>

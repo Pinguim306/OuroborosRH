@@ -11,7 +11,7 @@ npm run lint
 ```
 
 ## Pages
-- `/` — hero, the loop explainer, stats, and the token market (trending / new / graduating).
+- `/` — hero, the loop explainer, stats, live feed, and the token market.
 - `/create` — launch a token with a live preview.
 - `/token/[address]` — trade widget, loyalty-rewards panel, bonding-curve progress, trades, holders.
 - `/rewards` — your portfolio of staked positions and claimable fees.

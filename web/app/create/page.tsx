@@ -21,8 +21,6 @@ export default function CreatePage() {
   });
   const [status, setStatus] = useState<"idle" | "deploying" | "done">("idle");
   const [devBuy, setDevBuy] = useState("");
-  // Launch mode: bonding curve (graduates to V2) or straight into a Uniswap V3 pool.
-  const [mode, setMode] = useState<"curve" | "v3">("curve");
   // Rewards mode: Loop Rewards streams the fee share to all holders (classic);
   // Creator Rewards pays it to the creator's wallet. Fixed forever at launch.
   const [rewards, setRewards] = useState<"loop" | "creator">("loop");
@@ -42,12 +40,6 @@ export default function CreatePage() {
     functionName: "creationFee",
     query: { enabled: LIVE },
   });
-  const { data: curveParams } = useReadContract({
-    address: CONTRACTS.launchpad,
-    abi: launchpadAbi,
-    functionName: "params",
-    query: { enabled: LIVE },
-  });
   // v1 launchpads don't have the rewards-mode flag (or this getter) — the read
   // fails there, the selector stays hidden and the 4-arg create signature is used.
   const { data: lpVersion } = useReadContract({
@@ -58,9 +50,6 @@ export default function CreatePage() {
   });
   const supportsRewardsMode = !LIVE || (typeof lpVersion === "bigint" && lpVersion >= 2n);
 
-  // Largest dev buy that still fits under the anti-whale cap (same 2% every buyer
-  // gets). Computed from the launch params so it tracks whatever they're set to;
-  // a small safety margin keeps integer rounding from tripping the on-chain cap.
   // Live creation fee (owner-configurable on-chain; 0 = free, gas only).
   const feeEth = LIVE
     ? creationFee !== undefined
@@ -68,13 +57,7 @@ export default function CreatePage() {
       : undefined
     : 0.01;
 
-  const maxDevBuyEth = useMemo(() => maxDevBuy(curveParams), [curveParams]);
   const devBuyNum = parseFloat(devBuy) || 0;
-  // The 2% anti-whale cap only exists on the bonding curve — V3 pools have no hook
-  // for it, so in V3 mode the dev buy is unclamped.
-  const devBuyOverCap = mode === "curve" && maxDevBuyEth > 0 && devBuyNum > maxDevBuyEth;
-  const clampedDevBuy =
-    mode === "curve" && maxDevBuyEth > 0 ? Math.min(devBuyNum, maxDevBuyEth) : devBuyNum;
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { data: receipt, isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
@@ -205,11 +188,11 @@ export default function CreatePage() {
       setUploading(false);
     }
 
-    // Clamp the dev buy to the cap so a rounding overshoot can't revert the launch.
-    const devBuyWei = clampedDevBuy > 0 ? parseEther(clampedDevBuy.toFixed(18)) : 0n;
+    const devBuyWei = devBuyNum > 0 ? parseEther(devBuyNum.toFixed(18)) : 0n;
     const fee = (creationFee as bigint | undefined) ?? parseEther("0.01"); // excess is refunded on-chain
 
-    // v2 launchpads take the rewards-mode flag; v1 keeps the legacy 4-arg call.
+    // Every launch goes straight into a Uniswap V3 pool. v2 launchpads take the
+    // rewards-mode flag; v1 keeps the legacy 4-arg call.
     const args = supportsRewardsMode
       ? ([form.name, form.symbol, metadataURI, devBuyWei, rewards === "creator"] as const)
       : ([form.name, form.symbol, metadataURI, devBuyWei] as const);
@@ -218,7 +201,7 @@ export default function CreatePage() {
       chainId: CHAIN_ID,
       address: CONTRACTS.launchpad,
       abi: launchpadAbi,
-      functionName: mode === "v3" ? "createTokenV3" : "createToken",
+      functionName: "createTokenV3",
       args,
       value: fee + devBuyWei,
     });
@@ -305,43 +288,6 @@ export default function CreatePage() {
               </Field>
             </div>
 
-            {/* Launch mode: bonding curve (classic) vs instant Uniswap V3 pool. */}
-            <div>
-              <span className="label mb-1.5 block">Launch mode</span>
-              <div className="grid grid-cols-2 gap-2">
-                {(
-                  [
-                    {
-                      key: "curve",
-                      title: "Bonding curve",
-                      desc: "Classic launch. 2% anti-whale cap, holder rewards from trade fees, graduates to Uniswap V2 at 4 ETH.",
-                    },
-                    {
-                      key: "v3",
-                      title: "Instant V3 pool",
-                      desc: "Launches straight into a Uniswap V3 pool. Tradable the second the tx confirms, DexScreener from trade one. No max-buy cap.",
-                    },
-                  ] as const
-                ).map((opt) => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => setMode(opt.key)}
-                    className={`rounded-xl border p-3 text-left transition ${
-                      mode === opt.key
-                        ? "border-venom-500/60 bg-venom-500/10"
-                        : "border-white/10 bg-obsidian-900/60 hover:border-white/25"
-                    }`}
-                  >
-                    <div className={`text-sm font-semibold ${mode === opt.key ? "text-venom-400" : "text-white/80"}`}>
-                      {opt.title}
-                    </div>
-                    <p className="mt-1 text-[11px] leading-relaxed text-white/45">{opt.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Rewards mode: who receives the fee stream — every holder (the loop)
                 or the creator's wallet. Immutable once launched. */}
             {supportsRewardsMode && (
@@ -353,18 +299,12 @@ export default function CreatePage() {
                       {
                         key: "loop",
                         title: "🐍 Loop Rewards",
-                        desc:
-                          mode === "curve"
-                            ? "The 0.4% holder fee streams to every holder automatically — the classic Ouroboros loop."
-                            : "40% of harvested pool fees stream to every holder automatically — the classic Ouroboros loop.",
+                        desc: "40% of harvested pool fees stream to every holder automatically — the classic Ouroboros loop.",
                       },
                       {
                         key: "creator",
                         title: "👑 Creator Rewards",
-                        desc:
-                          mode === "curve"
-                            ? "The 0.4% holder fee is paid straight to your wallet on every trade instead."
-                            : "The 40% holder share of harvested pool fees is paid straight to your wallet instead.",
+                        desc: "The 40% holder share of harvested pool fees is paid straight to your wallet instead.",
                       },
                     ] as const
                   ).map((opt) => (
@@ -390,20 +330,10 @@ export default function CreatePage() {
               </div>
             )}
 
-            {/* Dev buy — the creator can buy their own launch first, capped at the
-                same 2% anti-whale limit as everyone else. */}
+            {/* Dev buy — executed as the pool's first swap, in the launch tx. */}
             <div>
               <div className="mb-1.5 flex items-center justify-between">
                 <span className="label">Dev buy ({NATIVE_SYMBOL}) · optional</span>
-                {mode === "curve" && maxDevBuyEth > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setDevBuy(maxDevBuyEth.toFixed(4))}
-                    className="text-[11px] font-medium text-venom-400 hover:text-venom-300"
-                  >
-                    Max {maxDevBuyEth.toFixed(4)}
-                  </button>
-                )}
               </div>
               <div className="flex items-center gap-2">
                 <input
@@ -416,47 +346,26 @@ export default function CreatePage() {
                 <span className="chip shrink-0">{NATIVE_SYMBOL}</span>
               </div>
               <p className="mt-1.5 text-[11px] text-white/40">
-                {mode === "curve"
-                  ? "Buy your token in the same transaction, before anyone else. Limited to the 2% max-buy cap — larger amounts are clamped to the max."
-                  : "Executed as the pool's very first swap, inside the launch transaction — impossible to front-run. No cap in V3 mode."}
+                Executed as the pool&apos;s very first swap, inside the launch transaction —
+                impossible to front-run.
               </p>
-              {devBuyOverCap && (
-                <p className="mt-1 text-[11px] text-acid">
-                  ⚠ Above the 2% cap — will be clamped to {maxDevBuyEth.toFixed(4)} {NATIVE_SYMBOL}.
-                </p>
-              )}
             </div>
           </div>
 
           <div className="mt-6 rounded-xl border border-white/5 bg-obsidian-900/50 p-4 text-xs text-white/50">
             <div className="mb-2 font-semibold text-white/70">Launch parameters</div>
-            {mode === "curve" ? (
-              <ul className="grid grid-cols-2 gap-y-1">
-                <li>Supply: <span className="text-white/70">1,000,000,000</span></li>
-                <li>Trade fee: <span className="text-white/70">1.5%</span></li>
-                <li>Graduation: <span className="text-white/70">4 {NATIVE_SYMBOL} raised</span></li>
-                <li>Max buy: <span className="text-white/70">2% of supply</span></li>
-                <li>
-                  Rewards:{" "}
-                  <span className="text-venom-400">
-                    {rewards === "creator" ? "to the creator" : "to holders, no staking"}
-                  </span>
-                </li>
-              </ul>
-            ) : (
-              <ul className="grid grid-cols-2 gap-y-1">
-                <li>Supply: <span className="text-white/70">1,000,000,000</span></li>
-                <li>Pool fee: <span className="text-white/70">1% (Uniswap V3)</span></li>
-                <li>Liquidity: <span className="text-white/70">locked forever</span></li>
-                <li>Max buy: <span className="text-white/70">none</span></li>
-                <li>
-                  Rewards:{" "}
-                  <span className="text-venom-400">
-                    {rewards === "creator" ? "pool fees to the creator" : "from pool fees, no staking"}
-                  </span>
-                </li>
-              </ul>
-            )}
+            <ul className="grid grid-cols-2 gap-y-1">
+              <li>Supply: <span className="text-white/70">1,000,000,000</span></li>
+              <li>Pool fee: <span className="text-white/70">1% (Uniswap V3)</span></li>
+              <li>Liquidity: <span className="text-white/70">locked forever</span></li>
+              <li>Tradable: <span className="text-white/70">instantly, DexScreener from trade one</span></li>
+              <li>
+                Rewards:{" "}
+                <span className="text-venom-400">
+                  {rewards === "creator" ? "pool fees to the creator" : "from pool fees, no staking"}
+                </span>
+              </li>
+            </ul>
             <div className="mt-3 space-y-1 border-t border-white/5 pt-3">
               <div className="flex items-center justify-between">
                 <span className="text-white/60">One-time creation fee</span>
@@ -473,13 +382,13 @@ export default function CreatePage() {
                   <div className="flex items-center justify-between">
                     <span className="text-white/60">Dev buy</span>
                     <span className="font-mono text-white/70">
-                      {clampedDevBuy.toFixed(4)} {NATIVE_SYMBOL}
+                      {devBuyNum.toFixed(4)} {NATIVE_SYMBOL}
                     </span>
                   </div>
                   <div className="flex items-center justify-between border-t border-white/5 pt-1">
                     <span className="text-white/70">Total</span>
                     <span className="font-mono font-semibold text-white">
-                      {((feeEth ?? 0) + clampedDevBuy).toFixed(4)} {NATIVE_SYMBOL}
+                      {((feeEth ?? 0) + devBuyNum).toFixed(4)} {NATIVE_SYMBOL}
                     </span>
                   </div>
                 </>
@@ -584,51 +493,18 @@ export default function CreatePage() {
                 </p>
               </div>
             </div>
-            <div className="mt-4">
-              <ProgressBar value={0} label="Bonding curve" />
+            <div className="mt-4 flex items-center justify-center rounded-lg border border-venom-500/20 bg-venom-500/5 py-2 text-xs font-semibold text-venom-400">
+              ⚡ Live on Uniswap V3 from second one
             </div>
           </div>
           <p className="mt-3 text-xs leading-relaxed text-white/35">
-            The moment you launch, fees start compounding into liquidity and holder rewards — no extra
-            setup.
+            The moment you launch, the pool is live and its fees start feeding holder rewards — no
+            extra setup.
           </p>
         </div>
       </div>
     </div>
   );
-}
-
-/** Default launch params (mirrors the deploy script) — used for the demo preview
- *  before contracts are live. */
-const DEMO_PARAMS = {
-  totalSupply: 1_000_000_000,
-  virtualNative: 1,
-  feeBps: 150,
-  maxBuyBps: 200,
-};
-
-/**
- * The largest dev buy (in native coin) whose tokens-out stays within the
- * anti-whale cap on a fresh curve. Solve getAmountOut(netIn, vNative, supply) =
- * maxBuyTokens for netIn, then gross up for the trade fee. Returns 0 when the cap
- * is disabled (maxBuyBps == 0), i.e. no computed ceiling.
- */
-function maxDevBuy(params: readonly bigint[] | undefined): number {
-  let supply = DEMO_PARAMS.totalSupply;
-  let vNative = DEMO_PARAMS.virtualNative;
-  let feeBps = DEMO_PARAMS.feeBps;
-  let maxBuyBps = DEMO_PARAMS.maxBuyBps;
-  if (params && params.length >= 7) {
-    supply = Number(formatEther(params[0]));
-    vNative = Number(formatEther(params[1]));
-    feeBps = Number(params[2]) + Number(params[3]) + Number(params[4]);
-    maxBuyBps = Number(params[6]);
-  }
-  if (maxBuyBps === 0 || supply <= 0) return 0;
-  const maxTokens = (supply * maxBuyBps) / 10_000;
-  const netIn = (maxTokens * vNative) / (supply - maxTokens);
-  const gross = netIn / (1 - feeBps / 10_000);
-  return gross * 0.99; // safety margin against on-chain rounding
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

@@ -68,8 +68,8 @@ export default function TermsPage() {
               The Protocol is unaudited reference software and may contain bugs or vulnerabilities.
             </Bullet>
             <Bullet>
-              Token prices are determined algorithmically by a bonding curve and by open-market
-              trading, and can move sharply.
+              Token prices are determined by open-market trading on automated market makers and can
+              move sharply.
             </Bullet>
             <Bullet>
               Blockchain transactions are irreversible; mistaken or fraudulent transactions cannot be
