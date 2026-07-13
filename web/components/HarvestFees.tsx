@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { CONTRACTS, launchpadAbi, feeLockerAbi } from "@/lib/contracts";
-import { compact, usdFromEth } from "@/lib/format";
+import { usdFromEth } from "@/lib/format";
 import { useEthPrice } from "@/lib/usePrice";
 import type { Address, TokenMarket } from "@/lib/types";
 
@@ -93,7 +93,6 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
         {pending && (
           <p className="mt-1 text-xs font-medium text-venom-400">
             Uncollected: {usdFromEth(pending.eth, ethUsd, 2)}
-            {pending.tok > 0 ? ` + ${compact(pending.tok, 2)} ${token.symbol}` : ""}
           </p>
         )}
       </div>
