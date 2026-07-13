@@ -7,6 +7,7 @@ import { MOCK_TOKENS } from "@/lib/mock/data";
 import { LIVE } from "@/lib/contracts";
 import { useLiveMarkets } from "@/lib/useMarkets";
 import { useEthPrice } from "@/lib/usePrice";
+import { useHolderShare, totalFeesEth } from "@/lib/useFees";
 import type { TokenMarket } from "@/lib/types";
 import { StatTile } from "@/components/StatTile";
 import { LoopDiagram } from "@/components/LoopDiagram";
@@ -16,11 +17,11 @@ export default function HomePage() {
   const { tokens: liveTokens } = useLiveMarkets();
   const all: TokenMarket[] = LIVE ? liveTokens : MOCK_TOKENS;
 
+  const holderShare = useHolderShare(all.some((t) => t.mode === "v3"));
   const stats = {
     liquidityLocked: all.reduce((s, t) => s + t.liquidityRh, 0),
-    rewardsPaid: all.reduce((s, t) => s + t.rewardsPoolRh, 0),
+    rewardsPaid: all.reduce((s, t) => s + totalFeesEth(t, holderShare), 0),
     tokens: all.length,
-    graduated: all.filter((t) => t.graduated).length,
   };
 
   return (
@@ -51,7 +52,7 @@ export default function HomePage() {
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatTile label="Liquidity locked" value={usdFromEth(stats.liquidityLocked, ethUsd, 0)} accent />
         <StatTile label="Rewards streamed" value={usdFromEth(stats.rewardsPaid, ethUsd, 0)} />
-        <StatTile label="Tokens launched" value={compact(stats.tokens, 0)} sub={`${stats.graduated} graduated`} />
+        <StatTile label="Tokens launched" value={compact(stats.tokens, 0)} />
         <StatTile label="Explore" value="Discover →" sub="Browse every token" />
       </section>
 
