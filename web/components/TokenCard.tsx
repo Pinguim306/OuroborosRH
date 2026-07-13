@@ -42,9 +42,9 @@ export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: 
           </div>
         </div>
         <div>
-          <div className="label">Liquidity</div>
+          <div className="label">24h Volume</div>
           <div className="mt-0.5 text-sm font-semibold text-venom-400">
-            {usdFromEth(token.liquidityRh, ethUsd, 0)}
+            {usdFromEth(token.volume24hRh, ethUsd, 0)}
           </div>
         </div>
       </div>
@@ -60,7 +60,7 @@ export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: 
       </div>
 
       <div className="mt-3 flex justify-between text-xs text-white/40">
-        <span>Vol {usdFromEth(token.volume24hRh, ethUsd, 0)}</span>
+        <span>Liq {usdFromEth(token.liquidityRh, ethUsd, 0)}</span>
         <span>{token.graduated ? "Graduated" : `${Math.round(token.graduationProgress * 100)}% to grad`}</span>
       </div>
     </Link>
