@@ -113,22 +113,54 @@ export default function CreatePage() {
     }
 
     let metadataURI = "";
-    if (imageFile) {
+    const hasSocials = !!(form.website || form.x || form.telegram);
+    if (imageFile || hasSocials || form.description) {
       setUploading(true);
       setUploadError(null);
       try {
-        const fd = new FormData();
-        fd.append("file", imageFile);
-        const r = await fetch("/api/upload", { method: "POST", body: fd });
-        const j = await r.json();
-        if (!r.ok) {
-          setUploadError(j.error ?? "Image upload failed.");
-          setUploading(false);
-          return;
+        // 1. Upload the image (if any) to IPFS.
+        let imageURI = "";
+        if (imageFile) {
+          const fd = new FormData();
+          fd.append("file", imageFile);
+          const r = await fetch("/api/upload", { method: "POST", body: fd });
+          const j = await r.json();
+          if (!r.ok) {
+            setUploadError(j.error ?? "Image upload failed.");
+            setUploading(false);
+            return;
+          }
+          imageURI = j.url;
         }
-        metadataURI = j.url;
+        // 2. Pin the metadata JSON (image + socials) — this is the on-chain metadataURI,
+        //    so the website/socials persist and render on the token page + externally.
+        const mr = await fetch("/api/upload-json", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: form.name,
+            symbol: form.symbol,
+            description: form.description,
+            image: imageURI,
+            website: form.website,
+            twitter: form.x,
+            telegram: form.telegram,
+          }),
+        });
+        const mj = await mr.json();
+        if (!mr.ok) {
+          // Fall back to the bare image URI so a metadata hiccup doesn't block launch.
+          if (imageURI) metadataURI = imageURI;
+          else {
+            setUploadError(mj.error ?? "Metadata upload failed.");
+            setUploading(false);
+            return;
+          }
+        } else {
+          metadataURI = mj.url;
+        }
       } catch {
-        setUploadError("Image upload failed.");
+        setUploadError("Upload failed.");
         setUploading(false);
         return;
       }
