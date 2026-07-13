@@ -16,7 +16,7 @@ export const copy = {
     kicker: "Robinhood Chain · Fair-launch protocol",
     title: "Every trade feeds the loop.",
     subtitle:
-      "Launch a token on a fair bonding curve — or straight into a Uniswap V3 pool, tradable the second the tx confirms. Fees don't leak to a treasury: they become permanent liquidity, and holders earn a share just by holding.",
+      "Launch a token straight into a Uniswap V3 pool — tradable the second the tx confirms, with the entire supply locked as liquidity forever. Pool fees don't leak away: they're harvested for the community, and holders earn a share just by holding.",
     ctaPrimary: "Launch a token",
     ctaSecondary: "Explore the market",
   },
@@ -26,19 +26,19 @@ export const copy = {
     steps: [
       {
         label: "Trade",
-        text: "Buy and sell on a transparent bonding curve. A flat 1.5% fee on every trade.",
+        text: "Buy and sell on a live Uniswap V3 pool from second one. The pool's 1% fee tier is the only fee.",
       },
       {
-        label: "Fees → Liquidity",
-        text: "Part of every fee is locked as permanent liquidity — deepening the market and lifting the floor.",
+        label: "Locked liquidity",
+        text: "The entire supply is minted as pool liquidity and locked forever in the FeeLocker — un-ruggable by construction.",
       },
       {
-        label: "Liquidity → Rewards",
-        text: "Another slice streams straight into the token, pooled in ETH, the chain's native coin.",
+        label: "Fees → Harvest",
+        text: "Swap fees accrue inside the locked position. Anyone can harvest them — the split is enforced on-chain.",
       },
       {
         label: "Rewards → Holders",
-        text: "Just hold the token. Your share of the fees accrues automatically — connect your wallet and claim anytime. No staking.",
+        text: "Just hold the token. Your share of the harvested fees accrues automatically — connect your wallet and claim anytime. No staking.",
       },
     ],
   },
@@ -50,8 +50,8 @@ export const copy = {
         text: "Rewards accrue to your wallet automatically, proportional to your balance. Nothing to lock, nothing to unstake — connect and claim whenever you want. Hold longer and you're simply present for more fee inflows.",
       },
       {
-        title: "Fees become liquidity",
-        text: "A share of every trading fee is folded back into the curve as permanent, locked liquidity. The market gets deeper with every swap — it can never be rug-pulled out.",
+        title: "Liquidity locked forever",
+        text: "The entire supply is minted into the Uniswap V3 pool and the position is locked in an ownerless vault. There is no withdraw function — the market can never be rug-pulled out.",
       },
       {
         title: "Paid on-chain, in ETH",
@@ -62,7 +62,7 @@ export const copy = {
   create: {
     title: "Launch your token",
     subtitle:
-      "One transaction deploys your token, its bonding curve, and its rewards vault — all wired into the loop.",
+      "One transaction deploys your token straight into a live Uniswap V3 pool — tradable instantly, liquidity locked forever, all wired into the loop.",
     fields: {
       name: "Token name",
       symbol: "Ticker",

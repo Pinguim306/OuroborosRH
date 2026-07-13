@@ -19,7 +19,6 @@ import type { Address, TokenMarket } from "./types";
  *   - Launching:    500 pts per token launched
  *   - Creator cut:  100 pts per ETH of volume your tokens generate
  *   - Early ape:    250 pts per token where you were one of its first 10 buyers
- *   - Graduation: 2,000 pts when a token you created graduates
  *
  * Anti-wash rule: trading volume only counts on tokens with at least
  * MIN_TRADERS distinct traders — ping-ponging your own token earns nothing.
@@ -30,7 +29,6 @@ export const PTS_PER_ETH_VOLUME = 1_000;
 export const PTS_PER_LAUNCH = 500;
 export const PTS_PER_ETH_CREATOR = 100;
 export const PTS_EARLY_APE = 250;
-export const PTS_GRADUATION = 2_000;
 export const EARLY_APE_SLOTS = 10;
 export const MIN_TRADERS = 3;
 
@@ -41,7 +39,6 @@ export interface WalletPoints {
   launching: number;
   creatorVolume: number;
   earlyApe: number;
-  graduation: number;
   volumeEth: number; // eligible trading volume behind the trading score
 }
 
@@ -58,7 +55,6 @@ interface Tally {
   launches: number;
   creatorVolEth: number;
   earlyApes: number;
-  graduations: number;
 }
 
 const freshTally = (): Tally => ({
@@ -66,7 +62,6 @@ const freshTally = (): Tally => ({
   launches: 0,
   creatorVolEth: 0,
   earlyApes: 0,
-  graduations: 0,
 });
 
 export function usePoints(tokens: TokenMarket[]): PointsBoard {
@@ -171,7 +166,6 @@ export function usePoints(tokens: TokenMarket[]): PointsBoard {
               const creator = tally(t.creator);
               creator.launches += 1;
               if (eligible) creator.creatorVolEth += tokenVol;
-              if (t.graduated) creator.graduations += 1;
             } catch {
               /* one token failing must not zero the whole board */
             }
@@ -183,15 +177,13 @@ export function usePoints(tokens: TokenMarket[]): PointsBoard {
           const launching = t.launches * PTS_PER_LAUNCH;
           const creatorVolume = t.creatorVolEth * PTS_PER_ETH_CREATOR;
           const earlyApe = t.earlyApes * PTS_EARLY_APE;
-          const graduation = t.graduations * PTS_GRADUATION;
           return {
             address: addrOf.get(k) as Address,
             trading,
             launching,
             creatorVolume,
             earlyApe,
-            graduation,
-            total: trading + launching + creatorVolume + earlyApe + graduation,
+            total: trading + launching + creatorVolume + earlyApe,
             volumeEth: t.volumeEth,
           };
         });

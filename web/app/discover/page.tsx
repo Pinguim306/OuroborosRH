@@ -12,7 +12,7 @@ import type { TokenMarket } from "@/lib/types";
 import { TokenCard } from "@/components/TokenCard";
 import { StatTile } from "@/components/StatTile";
 
-type Mode = "trending" | "highmcap" | "volume" | "newest" | "oldest" | "lasttrade" | "graduated";
+type Mode = "trending" | "highmcap" | "volume" | "newest" | "oldest" | "lasttrade";
 
 const MODES: [Mode, string][] = [
   ["trending", "🔥 Trending"],
@@ -21,7 +21,6 @@ const MODES: [Mode, string][] = [
   ["newest", "✨ Newest"],
   ["oldest", "🕰️ Oldest"],
   ["lasttrade", "⚡ Last Trade"],
-  ["graduated", "🎓 Graduated"],
 ];
 
 export default function DiscoverPage() {
@@ -58,14 +57,12 @@ export default function DiscoverPage() {
             t.address.toLowerCase().includes(query),
         )
       : enriched;
-    if (mode === "graduated") list = list.filter((t) => t.graduated);
     const sorted = [...list];
     switch (mode) {
       case "trending":
         sorted.sort((a, b) => b.volume24hRh - a.volume24hRh || b.marketCapRh - a.marketCapRh);
         break;
       case "highmcap":
-      case "graduated":
         sorted.sort((a, b) => b.marketCapRh - a.marketCapRh);
         break;
       case "volume":
@@ -144,8 +141,8 @@ export default function DiscoverPage() {
         <div className="glass mt-8 p-10 text-center text-white/50">Loading markets…</div>
       ) : filtered.length === 0 ? (
         <div className="glass mt-8 p-10 text-center text-white/50">
-          {q ? "No tokens match your search." : mode === "graduated" ? "No graduated tokens yet." : "No tokens yet — "}
-          {!q && mode !== "graduated" && (
+          {q ? "No tokens match your search." : "No tokens yet — "}
+          {!q && (
             <Link href="/create" className="text-venom-400 hover:underline">
               be the first to launch →
             </Link>
