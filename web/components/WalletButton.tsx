@@ -34,6 +34,25 @@ export function WalletButton() {
     return discovered.length > 0 ? discovered : connectors;
   }, [connectors]);
 
+  // Popular wallets we always surface: when the extension isn't installed (so
+  // EIP-6963 can't discover it), show it with an install link instead.
+  const SUGGESTED = useMemo(
+    () =>
+      [
+        { name: "Rabby", match: "rabby", url: "https://rabby.io/" },
+        { name: "MetaMask", match: "metamask", url: "https://metamask.io/download/" },
+        { name: "Trust Wallet", match: "trust", url: "https://trustwallet.com/download" },
+      ] as const,
+    [],
+  );
+  const missing = useMemo(
+    () =>
+      SUGGESTED.filter(
+        (s) => !connectors.some((c) => (c.name + c.id).toLowerCase().includes(s.match)),
+      ),
+    [SUGGESTED, connectors],
+  );
+
   function pick(connector: Connector) {
     setPendingId(connector.uid);
     connect({ connector });
@@ -92,6 +111,29 @@ export function WalletButton() {
                 ))}
               </div>
 
+              {missing.length > 0 && (
+                <div className="border-t border-white/5 p-2">
+                  <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+                    Not installed
+                  </div>
+                  {missing.map((s) => (
+                    <a
+                      key={s.name}
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-white/5"
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-obsidian-800 text-lg">
+                        👛
+                      </span>
+                      <span className="flex-1 text-sm font-medium text-white/70">{s.name}</span>
+                      <span className="text-xs text-venom-400">Install ↗</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+
               <div className="border-t border-white/5 px-5 py-3">
                 {error ? (
                   <p className="text-xs text-red-400">
@@ -99,7 +141,7 @@ export function WalletButton() {
                   </p>
                 ) : (
                   <p className="text-xs text-white/35">
-                    Don&apos;t see your wallet? Install its browser extension, then reload.
+                    After installing a wallet, reload the page to see it here.
                   </p>
                 )}
               </div>
