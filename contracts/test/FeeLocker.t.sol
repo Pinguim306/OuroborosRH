@@ -99,8 +99,11 @@ contract FeeLockerTest is Test {
         if (tokenIs0) npm.setPendingFees(0, 1 ether);
         else npm.setPendingFees(1 ether, 0);
 
+        // Assert the delta, not the absolute balance: under --fork-url the vault
+        // address may already hold ETH on the real chain.
+        uint256 before = newVault.balance;
         locker.collect(positionId);
-        assertEq(newVault.balance, 0.6 ether);
+        assertEq(newVault.balance - before, 0.6 ether);
     }
 
     function testCollectUnknownPositionReverts() public {
