@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <defs>
+    <linearGradient id="ouro" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7dffb2" />
+      <stop offset="0.5" stop-color="#22e584" />
+      <stop offset="1" stop-color="#c8ff4d" />
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#22e584" stop-opacity="0.35" />
+      <stop offset="1" stop-color="#22e584" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="48" height="48" rx="11" fill="#0b0f14" />
+  <g transform="translate(24 24) scale(0.82) translate(-24 -24)">
+    <circle cx="24" cy="24" r="16" fill="url(#glow)" />
+    <path d="M24 6a18 18 0 1 1-12.7 5.3" stroke="url(#ouro)" stroke-width="4" stroke-linecap="round" fill="none" />
+    <path d="M9 10.5 L15 8 L14 15 Z" fill="url(#ouro)" />
+    <circle cx="13" cy="11" r="1.1" fill="#05070a" />
+  </g>
+</svg>

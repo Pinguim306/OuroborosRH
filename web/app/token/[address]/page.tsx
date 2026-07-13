@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getToken, mockTrades, mockHolders } from "@/lib/mock/data";
-import { compact, pct, usdFromEth, shortAddr, timeAgo } from "@/lib/format";
+import { compact, pct, usdFromEth, shortAddr, timeAgo, fullDateTime } from "@/lib/format";
 import { NATIVE_SYMBOL } from "@/lib/chain";
 import { LIVE } from "@/lib/contracts";
 import { useLiveToken } from "@/lib/useMarkets";
@@ -17,6 +17,9 @@ import { RewardsPanel } from "@/components/RewardsPanel";
 import { MarketcapChart } from "@/components/MarketcapChart";
 import { DexScreenerChart } from "@/components/DexScreenerChart";
 import { dexscreenerEmbedUrl } from "@/lib/chain";
+import { TokenAvatar } from "@/components/TokenAvatar";
+import { SocialLinks } from "@/components/SocialLinks";
+import { useTokenMeta } from "@/lib/useMeta";
 
 export default function TokenPage() {
   const params = useParams();
@@ -27,6 +30,7 @@ export default function TokenPage() {
   const ethUsd = useEthPrice();
   const activity = useTokenActivity(token);
   const holdersData = useTokenHolders(token);
+  const meta = useTokenMeta(token?.image);
 
   if (LIVE && live.isLoading && !token) {
     return <div className="mx-auto max-w-md px-4 py-32 text-center text-white/50">Loading token…</div>;
@@ -60,14 +64,11 @@ export default function TokenPage() {
     <div className="mx-auto max-w-6xl px-4 py-10">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-4">
-        <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl bg-obsidian-800 text-4xl">
-          {token.image.startsWith("http") || token.image.startsWith("ipfs") ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={toHttp(token.image)} alt={token.symbol} className="h-full w-full object-cover" />
-          ) : (
-            token.image
-          )}
-        </div>
+        <TokenAvatar
+          uri={token.image}
+          symbol={token.symbol}
+          className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl bg-obsidian-800 text-4xl"
+        />
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <h1 className="font-display text-2xl font-bold">{token.name}</h1>
@@ -77,6 +78,17 @@ export default function TokenPage() {
             )}
           </div>
           <p className="mt-1 max-w-xl text-sm text-white/50">{token.description}</p>
+          {token.createdAt ? (
+            <p className="mt-1 text-xs text-white/35">
+              Created {fullDateTime(token.createdAt)} · {timeAgo(token.createdAt)}
+            </p>
+          ) : null}
+          <SocialLinks
+            website={meta?.website}
+            twitter={meta?.twitter}
+            telegram={meta?.telegram}
+            className="mt-2"
+          />
         </div>
         <div className="text-right">
           <div className="label">Marketcap</div>
@@ -196,8 +208,4 @@ export default function TokenPage() {
       </div>
     </div>
   );
-}
-
-function toHttp(uri: string): string {
-  return uri.startsWith("ipfs://") ? `https://ipfs.io/ipfs/${uri.slice(7)}` : uri;
 }
