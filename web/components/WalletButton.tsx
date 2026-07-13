@@ -17,15 +17,28 @@ export function WalletButton() {
   const [copied, setCopied] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // Viewport position for the account menu (portaled to <body> — see below).
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
 
-  // Close the account menu on outside click.
+  // Close the account menu on outside click (button AND portaled menu).
   useEffect(() => {
     function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (ref.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     }
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
+
+  function toggleMenu() {
+    if (!open && ref.current) {
+      const r = ref.current.getBoundingClientRect();
+      setMenuPos({ top: r.bottom + 8, right: Math.max(8, window.innerWidth - r.right) });
+    }
+    setOpen((o) => !o);
+  }
 
   useEffect(() => {
     if (isConnected) setPicker(false);
@@ -174,14 +187,21 @@ export function WalletButton() {
           {switching ? "Switching…" : `Switch to ${robinhoodChain.name}`}
         </button>
       )}
-      <button onClick={() => setOpen((o) => !o)} className="btn-ghost">
+      <button onClick={toggleMenu} className="btn-ghost">
         <span className="h-2 w-2 rounded-full bg-venom-400 shadow-glow" />
         <span className="font-mono text-xs">{shortAddr(address)}</span>
         <span className={`text-white/40 transition ${open ? "rotate-180" : ""}`}>▾</span>
       </button>
 
-      {open && (
-        <div className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-xl border border-white/10 bg-obsidian-850 shadow-venom">
+      {/* Portal to <body>: the nav header's backdrop-blur creates a containing
+          block that clipped/misplaced the menu (same bug the connect modal had),
+          so it is rendered outside the header at the button's viewport position. */}
+      {open && menuPos && typeof document !== "undefined" && createPortal(
+        <div
+          ref={menuRef}
+          style={{ top: menuPos.top, right: menuPos.right }}
+          className="fixed z-[60] w-52 overflow-hidden rounded-xl border border-white/10 bg-obsidian-850 shadow-venom"
+        >
           <div className="border-b border-white/5 px-4 py-3">
             <div className="label">Connected</div>
             <div className="mt-0.5 font-mono text-xs text-white/70">{shortAddr(address)}</div>
@@ -205,7 +225,8 @@ export function WalletButton() {
           >
             Disconnect
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

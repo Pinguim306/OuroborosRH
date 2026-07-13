@@ -65,6 +65,66 @@ export function parseV3Swap(
   };
 }
 
+/**
+ * Addresses that execute swaps on users' behalf (routers/aggregators/bots). V3
+ * Swap events carry these as sender/recipient, so they must never be credited
+ * as traders on boards. Lowercase.
+ */
+export const INFRA_ADDRESSES = new Set(
+  [
+    "0xCaf681a66D020601342297493863E78C959E5cb2", // Uniswap SwapRouter02 (chain 4663)
+    "0x65050A9b7E5075A2bA5cED7b1b64EE66262c40Dc", // router/aggregator seen relaying user swaps
+    ZERO,
+    DEAD,
+  ].map((a) => a.toLowerCase()),
+);
+
+/**
+ * Resolve the real wallet behind each V3 swap of a pool. The Swap event's
+ * sender/recipient is whatever router relayed the trade, but the launched
+ * token's Transfer in the same transaction touches the actual wallet:
+ * pool → wallet on buys, wallet → pool on sells.
+ */
+export async function v3TradersByTx(
+  client: PublicClient,
+  token: Address,
+  pool: Address,
+): Promise<{ buyerByTx: Map<string, Address>; sellerByTx: Map<string, Address> }> {
+  const buyerByTx = new Map<string, Address>();
+  const sellerByTx = new Map<string, Address>();
+  try {
+    const [outOfPool, intoPool] = await Promise.all([
+      client.getContractEvents({
+        address: token,
+        abi: tokenAbi,
+        eventName: "Transfer",
+        args: { from: pool },
+        fromBlock: 0n,
+        toBlock: "latest",
+      }),
+      client.getContractEvents({
+        address: token,
+        abi: tokenAbi,
+        eventName: "Transfer",
+        args: { to: pool },
+        fromBlock: 0n,
+        toBlock: "latest",
+      }),
+    ]);
+    for (const l of outOfPool) {
+      const to = (l.args as { to?: Address }).to;
+      if (to && !INFRA_ADDRESSES.has(to.toLowerCase())) buyerByTx.set(l.transactionHash, to);
+    }
+    for (const l of intoPool) {
+      const from = (l.args as { from?: Address }).from;
+      if (from && !INFRA_ADDRESSES.has(from.toLowerCase())) sellerByTx.set(l.transactionHash, from);
+    }
+  } catch {
+    /* fall back to the Swap event's own addresses */
+  }
+  return { buyerByTx, sellerByTx };
+}
+
 /** The launchpad's WETH address — needed to orient V3 pool swaps. */
 export async function wethOf(client: PublicClient): Promise<string | undefined> {
   try {
@@ -191,7 +251,7 @@ export function useTokenActivity(token?: TokenMarket): Activity {
         const parsed: { trade: Trade; mcap: number; bn: bigint }[] = [];
 
         if (token.mode === "v3") {
-          const [logs, wethAddr] = await Promise.all([
+          const [logs, wethAddr, traders] = await Promise.all([
             client.getContractEvents({
               address: curve, // the pool
               abi: v3PoolAbi,
@@ -200,16 +260,22 @@ export function useTokenActivity(token?: TokenMarket): Activity {
               toBlock: "latest",
             }),
             wethOf(client),
+            v3TradersByTx(client, token.address, curve),
           ]);
           const tokenIs0 = wethAddr ? token.address.toLowerCase() < wethAddr.toLowerCase() : true;
           for (const l of logs) {
             const s = parseV3Swap(l, tokenIs0, supply);
+            // The Swap event names the router; the token Transfer in the same tx
+            // names the actual wallet — prefer it.
+            const wallet = s.isBuy
+              ? traders.buyerByTx.get(l.transactionHash)
+              : traders.sellerByTx.get(l.transactionHash);
             parsed.push({
               bn: s.bn,
               mcap: s.mcap,
               trade: {
                 id: s.id,
-                trader: s.trader,
+                trader: wallet ?? s.trader,
                 isBuy: s.isBuy,
                 rhAmount: s.ethAmount,
                 tokenAmount: s.tokenAmount,

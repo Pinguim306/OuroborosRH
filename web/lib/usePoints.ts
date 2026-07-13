@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
 import { curveAbi, v3PoolAbi, LIVE } from "./contracts";
-import { parseV3Swap, supplyOf, wethOf } from "./useActivity";
+import { parseV3Swap, supplyOf, wethOf, v3TradersByTx, INFRA_ADDRESSES } from "./useActivity";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -102,29 +102,38 @@ export function usePoints(tokens: TokenMarket[]): PointsBoard {
             try {
               const supply = supplyOf(t);
               const tokenIs0 = weth ? t.address.toLowerCase() < weth.toLowerCase() : true;
-              const logs =
-                t.mode === "v3"
-                  ? await client!.getContractEvents({
+              const isV3 = t.mode === "v3";
+              const [logs, traders] = await Promise.all([
+                isV3
+                  ? client!.getContractEvents({
                       address: t.curve, // the pool
                       abi: v3PoolAbi,
                       eventName: "Swap",
                       fromBlock: 0n,
                       toBlock: "latest",
                     })
-                  : await client!.getContractEvents({
+                  : client!.getContractEvents({
                       address: t.curve,
                       abi: curveAbi,
                       eventName: "Trade",
                       fromBlock: 0n,
                       toBlock: "latest",
-                    });
+                    }),
+                // V3 Swap events name the relaying router — resolve the real wallet
+                // from the token Transfer in the same transaction.
+                isV3 ? v3TradersByTx(client!, t.address, t.curve) : Promise.resolve(undefined),
+              ]);
 
               // Normalize every trade of this token, in chain order.
               const trades: { trader: Address; isBuy: boolean; eth: number }[] = [];
               for (const l of logs) {
-                if (t.mode === "v3") {
+                if (isV3) {
                   const s = parseV3Swap(l, tokenIs0, supply);
-                  trades.push({ trader: s.trader, isBuy: s.isBuy, eth: s.ethAmount });
+                  const wallet =
+                    (s.isBuy
+                      ? traders?.buyerByTx.get(l.transactionHash)
+                      : traders?.sellerByTx.get(l.transactionHash)) ?? s.trader;
+                  trades.push({ trader: wallet, isBuy: s.isBuy, eth: s.ethAmount });
                 } else {
                   const a = l.args as { trader: Address; isBuy: boolean; nativeAmount?: bigint };
                   trades.push({
@@ -136,14 +145,19 @@ export function usePoints(tokens: TokenMarket[]): PointsBoard {
               }
 
               // Anti-wash gate: volume only counts on tokens that at least
-              // MIN_TRADERS distinct wallets have traded.
-              const distinct = new Set(trades.map((x) => x.trader.toLowerCase()));
+              // MIN_TRADERS distinct wallets have traded (routers don't count).
+              const distinct = new Set(
+                trades.map((x) => x.trader.toLowerCase()).filter((a) => !INFRA_ADDRESSES.has(a)),
+              );
               const eligible = distinct.size >= MIN_TRADERS;
 
               let tokenVol = 0;
               const earlyBuyers = new Set<string>();
               for (const tr of trades) {
                 tokenVol += tr.eth;
+                // Routers/aggregators never score, even when a swap couldn't be
+                // attributed to the wallet behind it.
+                if (INFRA_ADDRESSES.has(tr.trader.toLowerCase())) continue;
                 if (eligible) tally(tr.trader).volumeEth += tr.eth;
                 if (tr.isBuy && earlyBuyers.size < EARLY_APE_SLOTS) {
                   const k = tr.trader.toLowerCase();
