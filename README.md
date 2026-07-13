@@ -30,7 +30,7 @@ never be drained.
 
 Harvesting is **automatic** when the keeper is configured (`KEEPER_PRIVATE_KEY`):
 the site cranks `collect()` after trades and page views once pending fees reach
-`HARVEST_THRESHOLD_ETH`. Spend guards make the keeper self-funding: it only
+`HARVEST_THRESHOLD_ETH` (default 0.01 ETH). Spend guards make the keeper self-funding: it only
 harvests when the moved value is ≥20× the gas cost (and 60% of every harvest
 goes to the protocol wallet — ≈40× the gas), one attempt per token per 5 min,
 max 20 harvests/hour. Without a keeper, the token page shows a manual Harvest
@@ -100,7 +100,7 @@ contract is deployed.
 | `TELEGRAM_CHAT_ID` | Channel to announce in (`@channelname` or `-100…`); the bot must be a channel admin |
 | `NEXT_PUBLIC_SITE_URL` | Public site origin used in announcement links (default `https://ouroborosrh.fun`) |
 | `KEEPER_PRIVATE_KEY` | Auto-harvest keeper — a FRESH wallet holding a little ETH for gas only (secret; never the protocol/owner key). Unset = manual Harvest button |
-| `HARVEST_THRESHOLD_ETH` | Pending ETH-side fees that trigger an auto-harvest (default `0.002`) |
+| `HARVEST_THRESHOLD_ETH` | Pending ETH-side fees that trigger an auto-harvest (default `0.01`) |
 
 ## ⚠️ Disclaimer
 

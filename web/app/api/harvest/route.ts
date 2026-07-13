@@ -17,17 +17,17 @@ import type { Address } from "@/lib/types";
  *   KEEPER_PRIVATE_KEY    — a fresh wallet holding a little ETH for gas ONLY
  *                           (never the protocol/owner key)
  *   HARVEST_THRESHOLD_ETH — pending ETH-side fees that trigger a harvest
- *                           (default 0.002)
+ *                           (default 0.01)
  * Unset KEEPER_PRIVATE_KEY disables the keeper; the site then keeps showing the
  * manual Harvest button.
  */
 
 const THRESHOLD_ETH = (() => {
-  const raw = process.env.HARVEST_THRESHOLD_ETH ?? "0.002";
+  const raw = process.env.HARVEST_THRESHOLD_ETH ?? "0.01";
   try {
     return parseEther(raw);
   } catch {
-    return parseEther("0.002");
+    return parseEther("0.01");
   }
 })();
 
