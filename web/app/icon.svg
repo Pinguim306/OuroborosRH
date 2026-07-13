@@ -14,7 +14,8 @@
   <g transform="translate(24 24) scale(0.82) translate(-24 -24)">
     <circle cx="24" cy="24" r="16" fill="url(#glow)" />
     <path d="M24 6a18 18 0 1 1-12.7 5.3" stroke="url(#ouro)" stroke-width="4" stroke-linecap="round" fill="none" />
-    <path d="M9 10.5 L15 8 L14 15 Z" fill="url(#ouro)" />
-    <circle cx="13" cy="11" r="1.1" fill="#05070a" />
+    <path d="M18.2 7.4 C 16.9 5.5, 13.4 5.0, 10.9 6.5 C 8.4 8.0, 7.4 11.0, 8.5 13.3 C 9.6 15.6, 12.6 16.4, 14.9 15.1 C 16.7 14.0, 17.9 11.3, 18.2 7.4 Z" fill="url(#ouro)" />
+    <circle cx="12.1" cy="9.6" r="1.25" fill="#05070a" />
+    <path d="M18 7.3 L20.2 6.4 M20.2 6.4 L21.6 5.5 M20.2 6.4 L21.8 6.8" stroke="url(#ouro)" stroke-width="1.1" stroke-linecap="round" fill="none" />
   </g>
 </svg>
