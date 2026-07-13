@@ -424,6 +424,13 @@ export const swapRouter02Abi = [
 export const feeLockerAbi = [
   {
     type: "function",
+    name: "holderShareBps",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "collect",
     stateMutability: "nonpayable",
     inputs: [{ name: "tokenId", type: "uint256" }],
