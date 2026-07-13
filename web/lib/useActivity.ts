@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
 import type { PublicClient } from "viem";
-import { curveAbi, tokenAbi, LIVE } from "./contracts";
+import { curveAbi, tokenAbi, v3PoolAbi, launchpadAbi, CONTRACTS, LIVE } from "./contracts";
 import type { Address, Holder, TokenMarket, Trade } from "./types";
 
 /**
@@ -123,53 +123,105 @@ export function useTokenActivity(token?: TokenMarket): Activity {
     let alive = true;
     (async () => {
       try {
-        const [logs, clock] = await Promise.all([
-          client.getContractEvents({
+        const clock = await blockClock(client);
+        const back = BigInt(Math.max(1, Math.floor(DAY / clock.spb)));
+        const cutoff = clock.latestNum > back ? clock.latestNum - back : 0n;
+        const supply = supplyOf(token);
+
+        // One normalized shape for both sources: bonding-curve Trade events, or —
+        // for instant-V3 tokens — the Uniswap pool's Swap events.
+        const parsed: { trade: Trade; mcap: number; bn: bigint }[] = [];
+
+        if (token.mode === "v3") {
+          const [logs, wethAddr] = await Promise.all([
+            client.getContractEvents({
+              address: curve, // the pool
+              abi: v3PoolAbi,
+              eventName: "Swap",
+              fromBlock: 0n,
+              toBlock: "latest",
+            }),
+            client
+              .readContract({ address: CONTRACTS.launchpad, abi: launchpadAbi, functionName: "weth" })
+              .catch(() => undefined),
+          ]);
+          const tokenIs0 =
+            typeof wethAddr === "string" ? token.address.toLowerCase() < wethAddr.toLowerCase() : true;
+          for (const l of logs) {
+            const a = l.args as {
+              sender?: Address;
+              recipient?: Address;
+              amount0?: bigint;
+              amount1?: bigint;
+              sqrtPriceX96?: bigint;
+            };
+            // Amounts are the pool's deltas: negative = out of the pool. A buy pulls
+            // tokens out (token delta < 0) and pushes ETH in.
+            const amtTok = (tokenIs0 ? a.amount0 : a.amount1) ?? 0n;
+            const amtEth = (tokenIs0 ? a.amount1 : a.amount0) ?? 0n;
+            const ratio = Number(a.sqrtPriceX96 ?? 0n) / 2 ** 96;
+            const p10 = ratio * ratio; // token1-per-token0 after the swap
+            const price = tokenIs0 ? p10 : p10 > 0 ? 1 / p10 : 0;
+            parsed.push({
+              bn: l.blockNumber,
+              mcap: price * supply,
+              trade: {
+                id: `${l.transactionHash}-${l.logIndex}`,
+                trader: (a.recipient ?? a.sender ?? ZERO) as Address,
+                isBuy: amtTok < 0n,
+                rhAmount: Number(formatEther(amtEth < 0n ? -amtEth : amtEth)),
+                tokenAmount: Number(formatEther(amtTok < 0n ? -amtTok : amtTok)),
+                time: 0,
+              },
+            });
+          }
+        } else {
+          const logs = await client.getContractEvents({
             address: curve,
             abi: curveAbi,
             eventName: "Trade",
             fromBlock: 0n,
             toBlock: "latest",
-          }),
-          blockClock(client),
-        ]);
-        const back = BigInt(Math.max(1, Math.floor(DAY / clock.spb)));
-        const cutoff = clock.latestNum > back ? clock.latestNum - back : 0n;
-        const supply = supplyOf(token);
+          });
+          for (const l of logs) {
+            const a = l.args as {
+              trader: Address;
+              isBuy: boolean;
+              nativeAmount: bigint;
+              tokenAmount: bigint;
+              newPrice: bigint;
+            };
+            parsed.push({
+              bn: l.blockNumber,
+              mcap: Number(formatEther(a.newPrice ?? 0n)) * supply,
+              trade: {
+                id: `${l.transactionHash}-${l.logIndex}`,
+                trader: a.trader,
+                isBuy: a.isBuy,
+                rhAmount: Number(formatEther(a.nativeAmount ?? 0n)),
+                tokenAmount: Number(formatEther(a.tokenAmount ?? 0n)),
+                time: 0,
+              },
+            });
+          }
+        }
+
         let vol24 = 0;
         let ath = 0;
         const series: number[] = [];
         const points: { t: number; v: number }[] = [];
-        const all: Trade[] = [];
-        for (const l of logs) {
-          const a = l.args as {
-            trader: Address;
-            isBuy: boolean;
-            nativeAmount: bigint;
-            tokenAmount: bigint;
-            newPrice: bigint;
-          };
-          const nat = Number(formatEther(a.nativeAmount ?? 0n));
-          const mcap = Number(formatEther(a.newPrice ?? 0n)) * supply;
-          if (l.blockNumber >= cutoff) vol24 += nat;
-          if (mcap > ath) ath = mcap;
-          series.push(mcap);
+        for (const p of parsed) {
+          if (p.bn >= cutoff) vol24 += p.trade.rhAmount;
+          if (p.mcap > ath) ath = p.mcap;
+          series.push(p.mcap);
           // Estimate this trade's time from the sampled seconds-per-block.
-          const estTime = clock.latestTs - Number(clock.latestNum - l.blockNumber) * clock.spb;
-          points.push({ t: Math.round(estTime), v: mcap });
-          all.push({
-            id: `${l.transactionHash}-${l.logIndex}`,
-            trader: a.trader,
-            isBuy: a.isBuy,
-            rhAmount: nat,
-            tokenAmount: Number(formatEther(a.tokenAmount ?? 0n)),
-            time: 0,
-          });
+          const estTime = clock.latestTs - Number(clock.latestNum - p.bn) * clock.spb;
+          points.push({ t: Math.round(estTime), v: p.mcap });
         }
 
-        const recentLogs = logs.slice(-20).reverse();
-        const recent = all.slice(-20).reverse();
-        const uniqueBlocks = [...new Set(recentLogs.map((l) => l.blockNumber))];
+        const recentParsed = parsed.slice(-20).reverse();
+        const recent = recentParsed.map((p) => p.trade);
+        const uniqueBlocks = [...new Set(recentParsed.map((p) => p.bn))];
         const ts = new Map<bigint, number>();
         await Promise.all(
           uniqueBlocks.map(async (bn) => {
@@ -182,7 +234,7 @@ export function useTokenActivity(token?: TokenMarket): Activity {
           }),
         );
         recent.forEach((t, i) => {
-          t.time = ts.get(recentLogs[i].blockNumber) ?? 0;
+          t.time = ts.get(recentParsed[i].bn) ?? 0;
         });
 
         const candles = buildCandles(points);
