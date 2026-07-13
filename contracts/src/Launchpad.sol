@@ -100,6 +100,7 @@ contract Launchpad is Ownable, ReentrancyGuard {
     error InsufficientCreationFee();
     error NativeTransferFailed();
     error V3NotConfigured();
+    error LockerMismatch();
 
     constructor(
         address initialOwner,
@@ -141,22 +142,27 @@ contract Launchpad is Ownable, ReentrancyGuard {
         emit RouterUpdated(_router);
     }
 
-    /// @notice Configure the instant-V3 launch mode. On the first call it wires the
-    ///         position manager and deploys the FeeLocker (immutable thereafter, since
-    ///         positions live in it); later calls may only update the swap router and
-    ///         pool pricing params. `holderShareBps` is the share of collected ETH
-    ///         fees streamed to holders (only used on the first call).
+    /// @notice Configure the instant-V3 launch mode. The FeeLocker is deployed
+    ///         separately (by the deploy script) and passed in — embedding its
+    ///         creation code here pushed the Launchpad past the EIP-170 size limit.
+    ///         On the first call the position manager and locker are wired and become
+    ///         immutable (positions live in the locker); later calls may only update
+    ///         the swap router and pool pricing params.
     function setV3Config(
         address _positionManager,
         address _swapRouter,
-        uint256 _holderShareBps,
+        address _feeLocker,
         V3Params calldata _v3Params
     ) external onlyOwner {
         if (address(feeLocker) == address(0)) {
             positionManager = INonfungiblePositionManager(_positionManager);
             weth = positionManager.WETH9();
             v3Factory = IUniswapV3Factory(positionManager.factory());
-            feeLocker = new FeeLocker(_positionManager, address(this), weth, _holderShareBps);
+            FeeLocker locker = FeeLocker(payable(_feeLocker));
+            // The locker must have been constructed pointing back at this launchpad,
+            // or register() would revert on every V3 launch.
+            if (locker.launchpad() != address(this)) revert LockerMismatch();
+            feeLocker = locker;
         }
         swapRouter = ISwapRouter02(_swapRouter);
         v3Params = _v3Params;

@@ -41,10 +41,11 @@ contract FeeLockerTest is Test {
         });
         MockDexRouter v2router = new MockDexRouter(address(new MockDexFactory()), address(new MockWETH()));
         launchpad = new Launchpad(address(this), dev, address(v2router), CREATION_FEE, p);
+        locker = new FeeLocker(address(npm), address(launchpad), address(weth), HOLDER_SHARE_BPS);
         launchpad.setV3Config(
             address(npm),
             address(new MockSwapRouter02()),
-            HOLDER_SHARE_BPS,
+            address(locker),
             Launchpad.V3Params({
                 feeTier: 10000,
                 sqrtPriceX96Token0: 2505414483750479311864138,
@@ -55,8 +56,6 @@ contract FeeLockerTest is Test {
                 tickUpper1: 207200
             })
         );
-        locker = launchpad.feeLocker();
-
         (address tk,) = launchpad.createTokenV3{value: CREATION_FEE}("Viper", "VPR", "", 0);
         token = OuroToken(payable(tk));
 
