@@ -19,6 +19,9 @@ export const robinhoodChain = defineChain({
   testnet: false,
 });
 
+/** Chain id every transaction is pinned to (wagmi auto-prompts a network switch). */
+export const CHAIN_ID = robinhoodChain.id;
+
 /** The native coin ticker shown throughout the UI. */
 export const NATIVE_SYMBOL = robinhoodChain.nativeCurrency.symbol;
 

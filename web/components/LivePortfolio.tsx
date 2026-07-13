@@ -9,6 +9,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import { tokenAbi } from "@/lib/contracts";
+import { CHAIN_ID } from "@/lib/chain";
 import { useLiveMarkets } from "@/lib/useMarkets";
 import type { TokenMarket } from "@/lib/types";
 import { copy } from "@/lib/copy";
@@ -119,7 +120,7 @@ function PositionRow({ position: p, ethUsd }: { position: Position; ethUsd: numb
 
       <button
         onClick={() =>
-          writeContract({ address: p.token.address, abi: tokenAbi, functionName: "claim" })
+          writeContract({ chainId: CHAIN_ID, address: p.token.address, abi: tokenAbi, functionName: "claim" })
         }
         disabled={p.claimableRh <= 0 || busy}
         className="btn-ghost"

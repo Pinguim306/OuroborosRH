@@ -5,7 +5,7 @@ import Link from "next/link";
 import { formatEther, parseEther, parseEventLogs } from "viem";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { copy } from "@/lib/copy";
-import { NATIVE_SYMBOL } from "@/lib/chain";
+import { CHAIN_ID, NATIVE_SYMBOL } from "@/lib/chain";
 import { LIVE, CONTRACTS, launchpadAbi } from "@/lib/contracts";
 import { ProgressBar } from "@/components/ProgressBar";
 
@@ -184,6 +184,7 @@ export default function CreatePage() {
     const fee = (creationFee as bigint | undefined) ?? parseEther("0.01"); // excess is refunded on-chain
 
     writeContract({
+      chainId: CHAIN_ID,
       address: CONTRACTS.launchpad,
       abi: launchpadAbi,
       functionName: mode === "v3" ? "createTokenV3" : "createToken",

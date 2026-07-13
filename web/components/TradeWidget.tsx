@@ -11,7 +11,7 @@ import {
 import type { Address, TokenMarket } from "@/lib/types";
 import { copy } from "@/lib/copy";
 import { compact, rh } from "@/lib/format";
-import { NATIVE_SYMBOL, ROBINHOOD_CONTRACTS } from "@/lib/chain";
+import { CHAIN_ID, NATIVE_SYMBOL, ROBINHOOD_CONTRACTS } from "@/lib/chain";
 import { CONTRACTS, LIVE, curveAbi, tokenAbi, routerAbi, launchpadAbi, swapRouter02Abi } from "@/lib/contracts";
 
 // Total per-trade fee on the curve. The internal split lives in the contract.
@@ -186,6 +186,7 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
     // Sell always needs an allowance to the active spender (curve or router).
     if (mode === "sell" && needsApproval) {
       writeContract({
+        chainId: CHAIN_ID,
         address: token.address,
         abi: tokenAbi,
         functionName: "approve",
@@ -201,6 +202,7 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
         const est = token.priceRh > 0 ? (num * (1 - V3_POOL_FEE)) / token.priceRh : 0;
         const minTokens = minOut(safeParseEther(est > 0 ? est.toFixed(18) : "0"));
         writeContract({
+          chainId: CHAIN_ID,
           address: SWAP02,
           abi: swapRouter02Abi,
           functionName: "exactInputSingle",
@@ -243,6 +245,7 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
           args: [minEth, address],
         });
         writeContract({
+          chainId: CHAIN_ID,
           address: SWAP02,
           abi: swapRouter02Abi,
           functionName: "multicall",
@@ -257,6 +260,7 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200); // 20 min
       if (mode === "buy") {
         writeContract({
+          chainId: CHAIN_ID,
           address: ROUTER,
           abi: routerAbi,
           functionName: "swapExactETHForTokensSupportingFeeOnTransferTokens",
@@ -265,6 +269,7 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
         });
       } else {
         writeContract({
+          chainId: CHAIN_ID,
           address: ROUTER,
           abi: routerAbi,
           functionName: "swapExactTokensForETHSupportingFeeOnTransferTokens",
@@ -278,6 +283,7 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
     if (mode === "buy") {
       const expected = (quoteBuyQ.data as readonly [bigint, bigint] | undefined)?.[0] ?? 0n;
       writeContract({
+        chainId: CHAIN_ID,
         address: token.curve,
         abi: curveAbi,
         functionName: "buy",
@@ -288,6 +294,7 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
     }
     const expectedOut = (quoteSellQ.data as readonly [bigint, bigint] | undefined)?.[0] ?? 0n;
     writeContract({
+      chainId: CHAIN_ID,
       address: token.curve,
       abi: curveAbi,
       functionName: "sell",

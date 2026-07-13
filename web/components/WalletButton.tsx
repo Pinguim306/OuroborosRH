@@ -2,13 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAccount, useConnect, useDisconnect, type Connector } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useSwitchChain, type Connector } from "wagmi";
 import { shortAddr } from "@/lib/format";
+import { CHAIN_ID, robinhoodChain } from "@/lib/chain";
 
 export function WalletButton() {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const { connect, connectors, isPending, error } = useConnect();
   const { disconnect } = useDisconnect();
+  const { switchChain, isPending: switching } = useSwitchChain();
+  const wrongChain = isConnected && chainId !== CHAIN_ID;
   const [open, setOpen] = useState(false);
   const [picker, setPicker] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -158,7 +161,19 @@ export function WalletButton() {
   }
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative flex items-center gap-2" ref={ref}>
+      {/* Wallet is on another network — every tx is pinned to Robinhood Chain, so
+          surface it and offer a one-click switch (wagmi adds the chain if missing). */}
+      {wrongChain && (
+        <button
+          onClick={() => switchChain({ chainId: CHAIN_ID })}
+          disabled={switching}
+          className="flex items-center gap-1.5 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-300 transition hover:bg-amber-400/20 disabled:opacity-50"
+        >
+          <span aria-hidden>⚠</span>
+          {switching ? "Switching…" : `Switch to ${robinhoodChain.name}`}
+        </button>
+      )}
       <button onClick={() => setOpen((o) => !o)} className="btn-ghost">
         <span className="h-2 w-2 rounded-full bg-venom-400 shadow-glow" />
         <span className="font-mono text-xs">{shortAddr(address)}</span>
