@@ -12,7 +12,7 @@ import type { TokenMarket } from "@/lib/types";
 import { copy } from "@/lib/copy";
 import { compact, rh, usdFromEth } from "@/lib/format";
 import { useEthPrice } from "@/lib/usePrice";
-import { NATIVE_SYMBOL } from "@/lib/chain";
+import { CHAIN_ID, NATIVE_SYMBOL } from "@/lib/chain";
 import { LIVE, tokenAbi } from "@/lib/contracts";
 
 /**
@@ -81,7 +81,7 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
       setTimeout(() => setFlash(null), 2600);
       return;
     }
-    writeContract({ address: token.address, abi: tokenAbi, functionName: "claim" });
+    writeContract({ chainId: CHAIN_ID, address: token.address, abi: tokenAbi, functionName: "claim" });
   }
 
   return (
