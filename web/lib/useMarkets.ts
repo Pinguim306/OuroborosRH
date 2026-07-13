@@ -26,6 +26,20 @@ interface MarketTuple {
 const bn = (x: unknown): bigint => (typeof x === "bigint" ? x : 0n);
 const num = (x: unknown): number => Number(formatEther(bn(x)));
 
+/**
+ * Token addresses to hide from the listings (Discover, home). Set as a comma-
+ * separated list in NEXT_PUBLIC_HIDDEN_TOKENS. This only filters the lists — the
+ * tokens still exist on-chain and their /token/<address> page still works.
+ */
+const HIDDEN_TOKENS = new Set(
+  (process.env.NEXT_PUBLIC_HIDDEN_TOKENS ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+const isHidden = (t: TokenMarket): boolean => HIDDEN_TOKENS.has(t.address.toLowerCase());
+
 function imageFrom(metadataURI: string): string {
   // Image URLs (uploaded to IPFS or a remote host) render as an <img>; short
   // metadata renders as an emoji badge; otherwise a default coin.
@@ -110,20 +124,22 @@ export function useLiveMarkets(): { tokens: TokenMarket[]; isLoading: boolean } 
 
   const tokens = useMemo(() => {
     if (!statsQ.data) return [];
-    return markets.map((m, i) => {
-      const b = i * STATS_PER_MARKET;
-      const r = statsQ.data!;
-      return mapToken(
-        m,
-        bn(r[b]?.result),
-        bn(r[b + 1]?.result),
-        Boolean(r[b + 2]?.result),
-        bn(r[b + 3]?.result),
-        bn(r[b + 4]?.result),
-        bn(r[b + 5]?.result),
-        asAddr(r[b + 6]?.result),
-      );
-    });
+    return markets
+      .map((m, i) => {
+        const b = i * STATS_PER_MARKET;
+        const r = statsQ.data!;
+        return mapToken(
+          m,
+          bn(r[b]?.result),
+          bn(r[b + 1]?.result),
+          Boolean(r[b + 2]?.result),
+          bn(r[b + 3]?.result),
+          bn(r[b + 4]?.result),
+          bn(r[b + 5]?.result),
+          asAddr(r[b + 6]?.result),
+        );
+      })
+      .filter((t) => !isHidden(t));
   }, [markets, statsQ.data]);
 
   return { tokens, isLoading: marketsQ.isLoading || statsQ.isLoading };
