@@ -2,57 +2,84 @@
 
 **Trade → Fees → Liquidity → Rewards → Trade.** A launchpad where trading fees
 don't leave the ecosystem — they become **permanent liquidity**, and holders
-collect a share of them **proportional to how much and how long they hold**.
+collect a share of them **just by holding**. Live at
+[ouroborosrh.fun](https://ouroborosrh.fun/).
 
-Ouroboros is a pump.fun-style launchpad for [Robinhood Chain](https://robinhood.com/us/en/chain/):
-launch a token on a fair bonding curve, trade instantly, and graduate to a DEX
-once the curve fills. The twist is the **loop** — the self-feeding flywheel that
-turns every trade into deeper liquidity and loyalty rewards.
+Ouroboros is a pump.fun-style launchpad for [Robinhood Chain](https://robinhood.com/us/en/chain/)
+with **two launch modes**, picked on the Launch page:
 
-## The loop (what makes it different)
+| | 🌀 Bonding curve | ⚡ Instant V3 pool |
+|---|---|---|
+| Market | constant-product curve | Uniswap V3 pool, live the second the tx confirms |
+| Trade fee | 1.5% (split: protocol / liquidity / holders) | 1% pool fee tier |
+| Anti-whale | 2% max buy per tx | none (no V3 hook for it) |
+| Graduation | at 4 ETH raised → Uniswap V2 pair, LP **burned** | n/a — born on the DEX |
+| Post-DEX fee | 1% trade tax on the pair (capped 2%) → protocol | 1% pool fee, harvested |
+| Liquidity | permanent (curve, then burned LP) | entire supply locked forever in the **FeeLocker** |
+| Chart | on-chain candles, DexScreener after graduation | DexScreener from trade one |
+| Dev buy | same tx, capped at 2% | pool's first swap — un-front-runnable |
 
-1. **Trade** — every buy/sell on the bonding curve charges a flat **1.5% fee**.
-2. **Fees → Liquidity** — a portion is folded back into the curve as **permanent,
-   locked liquidity**, deepening the market and lifting the floor.
-3. **Liquidity → Rewards** — a portion streams straight into the token, pooled in
-   the chain's native coin (ETH).
-4. **Rewards → Holders** — **no staking.** The token is a dividend token: fees
-   accrue to every holder automatically, proportional to balance. Connect your
-   wallet and **claim anytime**. Hold longer and you're simply present for more
-   inflows.
+## Holder rewards — no staking
 
-### Protocol fees
-A small protocol fee (part of the 1.5% trade fee) and a fixed **creation fee**
-(0.01 ETH by default) support the platform. The fee split and recipient are
-owner-configurable (`setParams`, `setFeeRecipient`, `setCreationFee`); the exact
-per-destination split lives on-chain in the contract.
+Every token is a **dividend token**: rewards accrue automatically, proportional
+to balance; connect a wallet and **claim anytime**.
+
+- **Curve mode:** a slice of every trade fee streams into the token as ETH.
+- **V3 mode:** the pool's 1% fee accrues in the locked position; a
+  **permissionless Harvest** (button on the token page) collects it — the split
+  is enforced on-chain (40% of the ETH side to holders, the rest + token side to
+  the protocol; the caller gets nothing). With zero holders, the holder share
+  waits as `pendingRewards` for the next buyer — it can never be drained.
+
+## The FeeLocker
+
+V3 position NFTs live in a locker with **no owner and a single value-moving
+function**: `collect()`. The principal liquidity can never be withdrawn —
+un-ruggable by construction, while fees stay harvestable.
 
 ## Monorepo layout
 
-| Path         | What                                                                 |
-|--------------|----------------------------------------------------------------------|
-| `contracts/` | Foundry Solidity contracts (bonding curve, launchpad, holder rewards) — **reference, unaudited** |
-| `web/`       | Next.js + TypeScript + Tailwind + wagmi/viem front-end               |
+| Path         | What |
+|--------------|------|
+| `contracts/` | Foundry contracts — Launchpad (both modes), BondingCurve, OuroToken (dividends + post-grad tax), FeeLocker — **reference, unaudited** |
+| `web/`       | Next.js + TypeScript + Tailwind + wagmi/viem front-end (Discover, launch, trading both modes, rewards, docs/terms) |
+| `web/API.md` | Public REST trade API (`/api/v1/*`) for bots — non-custodial, returns unsigned txs |
 
 ## Quick start
 
 ```bash
 # Contracts
 cd contracts
-forge build
-forge test -vvv
+forge test -vvv                                     # unit suite
+forge test -vvv --fork-url $ROBINHOOD_RPC           # REQUIRED before deploying (V3 math)
+forge script script/Deploy.s.sol --rpc-url $ROBINHOOD_RPC --broadcast
 
-# Web app
-cd web
-npm install
-npm run dev   # http://localhost:3000
+# Web
+cd web && npm install && npm run dev
 ```
 
-The web app ships with a **mock-data layer**, so every page is fully browsable
-before any contract is deployed. Once you deploy the contracts, drop the addresses
-into `web/lib/contracts.ts` and the wagmi hooks read live on-chain state.
+Deploy env (`contracts/.env`): `PRIVATE_KEY`, `FEE_RECIPIENT`, `DEX_ROUTER`
+(V2 router), optional `V3_POSITION_MANAGER` / `V3_SWAP_ROUTER` (Robinhood Chain
+defaults built in). The script prints the **Launchpad** and **FeeLocker**
+addresses and configures V3 pricing (`setV3Config`, owner-updatable later).
+The web app ships with a mock-data layer, so every page is browsable before any
+contract is deployed.
+
+### Web environment (Vercel)
+
+| Var | Purpose |
+|---|---|
+| `NEXT_PUBLIC_LAUNCHPAD_ADDRESS` | Comma-separated: **first = primary** (new launches), rest = legacy launchpads still listed |
+| `PINATA_JWT` | IPFS uploads (token image + metadata JSON with description/socials) — secret |
+| `NEXT_PUBLIC_X_URL` | X/Twitter button in the footer |
+| `NEXT_PUBLIC_HIDDEN_TOKENS` | Comma-separated token addresses hidden from listings |
+| `LAUNCHPAD_API_KEY` | Optional auth for the public trade API |
 
 ## ⚠️ Disclaimer
 
-The contracts here are a **reference implementation and have NOT been audited**.
-Do not deploy them with real funds without a professional security review.
+The contracts are a **reference implementation and have NOT been audited** — do
+not commit funds you can't lose. Dividend authority is renounced after setup (no
+one can freeze rewards); the trade tax is immutable and hard-capped at 2%; the
+FeeLocker has no admin. Run the fork tests before any deploy.
+
+*Not affiliated with Robinhood Markets, Inc.*
