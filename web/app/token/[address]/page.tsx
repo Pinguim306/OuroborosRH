@@ -81,7 +81,9 @@ export default function TokenPage() {
               <span className="chip border-venom-500/40 text-venom-400">✦ Graduated</span>
             ) : null}
           </div>
-          <p className="mt-1 max-w-xl text-sm text-white/50">{token.description}</p>
+          <p className="mt-1 max-w-xl text-sm text-white/50">
+            {meta?.description || token.description}
+          </p>
           {token.createdAt ? (
             <p className="mt-1 text-xs text-white/35">
               Created {fullDateTime(token.createdAt)} · {timeAgo(token.createdAt)}

@@ -1,10 +1,16 @@
+"use client";
+
 import Link from "next/link";
 import type { TokenMarket } from "@/lib/types";
 import { compact, usdFromEth, timeAgo } from "@/lib/format";
+import { useTokenMeta } from "@/lib/useMeta";
 import { ProgressBar } from "./ProgressBar";
 import { TokenAvatar } from "./TokenAvatar";
 
 export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: number }) {
+  // Live tokens keep their description in the IPFS metadata JSON, not on-chain.
+  const meta = useTokenMeta(token.image);
+  const description = meta?.description || token.description;
   return (
     <Link
       href={`/token/${token.address}`}
@@ -22,7 +28,7 @@ export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: 
             <span className="chip !px-2 !py-0.5">{token.symbol}</span>
           </div>
           <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-white/45">
-            {token.description}
+            {description}
           </p>
         </div>
       </div>
