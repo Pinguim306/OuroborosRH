@@ -41,10 +41,38 @@ contract Deploy is Script {
         // Adjustable later via setCreationFee.
         uint256 creationFee = 0.01 ether;
 
+        // ------------------------------------------------------------------ //
+        //  Instant-V3 launch mode                                            //
+        // ------------------------------------------------------------------ //
+        // Uniswap V3 NonfungiblePositionManager + SwapRouter02 on Robinhood Chain.
+        address positionManager = vm.envOr("V3_POSITION_MANAGER", 0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
+        address swapRouter02 = vm.envOr("V3_SWAP_ROUTER", 0xCaf681a66D020601342297493863E78C959E5cb2);
+
+        // Initial pool price: 1e-9 WETH per token => 1 ETH marketcap for the 1B
+        // supply, matching the bonding curve's starting price. sqrtPriceX96 and the
+        // single-sided full-range ticks depend on token/WETH sort order, so both
+        // variants are configured (1% tier => tick spacing 200, max usable 887200).
+        //   token = token0: P = 1e-9, tick -207244 -> range [-207200, 887200]
+        //   token = token1: P = 1e9,  tick  207243 -> range [-887200, 207200]
+        Launchpad.V3Params memory v3 = Launchpad.V3Params({
+            feeTier: 10000, // 1% — the protocol's take on every swap, harvested via the FeeLocker
+            sqrtPriceX96Token0: 2505414483750479311864138, // sqrt(1e-9) * 2^96
+            sqrtPriceX96Token1: 2505414483750479311864138015696063, // sqrt(1e9) * 2^96
+            tickLower0: -207200,
+            tickUpper0: 887200,
+            tickLower1: -887200,
+            tickUpper1: 207200
+        });
+
+        // Share of collected ETH-side pool fees streamed to holders (rest -> protocol).
+        uint256 holderShareBps = 4000; // 40%
+
         vm.startBroadcast(pk);
         Launchpad launchpad = new Launchpad(owner, feeRecipient, router, creationFee, params);
+        launchpad.setV3Config(positionManager, swapRouter02, holderShareBps, v3);
         vm.stopBroadcast();
 
         console2.log("Launchpad deployed at:", address(launchpad));
+        console2.log("FeeLocker deployed at:", address(launchpad.feeLocker()));
     }
 }

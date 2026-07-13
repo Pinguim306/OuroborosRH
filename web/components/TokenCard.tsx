@@ -43,7 +43,11 @@ export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: 
       </div>
 
       <div className="mt-4">
-        {token.graduated ? (
+        {token.mode === "v3" ? (
+          <div className="flex items-center justify-center gap-1.5 rounded-full bg-venom-500/10 py-1.5 text-xs font-semibold text-venom-400">
+            ⚡ Live on Uniswap V3
+          </div>
+        ) : token.graduated ? (
           <div className="flex items-center justify-center gap-1.5 rounded-full bg-venom-500/10 py-1.5 text-xs font-semibold text-venom-400">
             ✦ Graduated to DEX
           </div>
@@ -54,7 +58,13 @@ export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: 
 
       <div className="mt-3 flex justify-between text-xs text-white/40">
         <span>{token.createdAt ? `⧗ ${timeAgo(token.createdAt)}` : "—"}</span>
-        <span>{token.graduated ? "Graduated" : `${Math.round(token.graduationProgress * 100)}% to grad`}</span>
+        <span>
+          {token.mode === "v3"
+            ? "Instant V3 launch"
+            : token.graduated
+              ? "Graduated"
+              : `${Math.round(token.graduationProgress * 100)}% to grad`}
+        </span>
       </div>
     </Link>
   );

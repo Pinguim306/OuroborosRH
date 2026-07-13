@@ -3,8 +3,15 @@ pragma solidity ^0.8.24;
 
 import {OuroToken} from "src/OuroToken.sol";
 import {BondingCurve} from "src/BondingCurve.sol";
+import {FeeLocker} from "src/FeeLocker.sol";
 import {Ownable} from "src/utils/Ownable.sol";
 import {ReentrancyGuard} from "src/utils/ReentrancyGuard.sol";
+import {
+    INonfungiblePositionManager,
+    IUniswapV3Factory,
+    IUniswapV3Pool,
+    ISwapRouter02
+} from "src/interfaces/IUniswapV3.sol";
 
 /// @title Launchpad
 /// @notice Factory that spins up a full Ouroboros market in one transaction:
@@ -36,6 +43,37 @@ contract Launchpad is Ownable, ReentrancyGuard {
     /// @notice Uniswap-V2-style router each curve migrates liquidity to at graduation.
     address public router;
 
+    // --------------------------------------------------------------------- //
+    //  Instant-V3 launch mode                                               //
+    // --------------------------------------------------------------------- //
+
+    /// @notice Pool pricing for instant-V3 launches. The initial sqrt price and the
+    ///         single-sided tick range depend on whether the launched token sorts as
+    ///         token0 or token1 against WETH, so both variants are configured. Values
+    ///         are computed off-chain by the deploy script.
+    struct V3Params {
+        uint24 feeTier; // e.g. 10000 = 1% — the protocol's take on every swap
+        uint160 sqrtPriceX96Token0; // initial price when the token is token0
+        uint160 sqrtPriceX96Token1; // initial price when the token is token1
+        int24 tickLower0; // single-sided range when token is token0
+        int24 tickUpper0;
+        int24 tickLower1; // single-sided range when token is token1
+        int24 tickUpper1;
+    }
+
+    V3Params public v3Params;
+
+    INonfungiblePositionManager public positionManager;
+    IUniswapV3Factory public v3Factory;
+    address public weth;
+    ISwapRouter02 public swapRouter;
+    /// @notice Permanent vault holding every V3 position NFT (fees harvestable, principal locked).
+    FeeLocker public feeLocker;
+
+    /// @notice True for tokens launched straight into a V3 pool (their Market.curve
+    ///         field holds the pool address instead of a bonding curve).
+    mapping(address => bool) public isV3Token;
+
     struct Market {
         address token;
         address curve;
@@ -52,13 +90,16 @@ contract Launchpad is Ownable, ReentrancyGuard {
     event TokenLaunched(
         uint256 indexed id, address indexed creator, address token, address curve, string name, string symbol
     );
+    event TokenLaunchedV3(address indexed token, address indexed pool, uint256 indexed positionId);
     event ParamsUpdated(CurveParams params);
+    event V3ConfigUpdated(address positionManager, address swapRouter, V3Params params);
     event FeeRecipientUpdated(address indexed feeRecipient);
     event CreationFeeUpdated(uint256 creationFee);
     event RouterUpdated(address indexed router);
 
     error InsufficientCreationFee();
     error NativeTransferFailed();
+    error V3NotConfigured();
 
     constructor(
         address initialOwner,
@@ -98,6 +139,28 @@ contract Launchpad is Ownable, ReentrancyGuard {
     function setRouter(address _router) external onlyOwner {
         router = _router;
         emit RouterUpdated(_router);
+    }
+
+    /// @notice Configure the instant-V3 launch mode. On the first call it wires the
+    ///         position manager and deploys the FeeLocker (immutable thereafter, since
+    ///         positions live in it); later calls may only update the swap router and
+    ///         pool pricing params. `holderShareBps` is the share of collected ETH
+    ///         fees streamed to holders (only used on the first call).
+    function setV3Config(
+        address _positionManager,
+        address _swapRouter,
+        uint256 _holderShareBps,
+        V3Params calldata _v3Params
+    ) external onlyOwner {
+        if (address(feeLocker) == address(0)) {
+            positionManager = INonfungiblePositionManager(_positionManager);
+            weth = positionManager.WETH9();
+            v3Factory = IUniswapV3Factory(positionManager.factory());
+            feeLocker = new FeeLocker(_positionManager, address(this), weth, _holderShareBps);
+        }
+        swapRouter = ISwapRouter02(_swapRouter);
+        v3Params = _v3Params;
+        emit V3ConfigUpdated(address(positionManager), _swapRouter, _v3Params);
     }
 
     function marketsCount() external view returns (uint256) {
@@ -163,6 +226,122 @@ contract Launchpad is Ownable, ReentrancyGuard {
         curve = address(c);
         _recordMarket(token, curve, name, symbol, metadataURI);
         _settle(c, devBuy);
+    }
+
+    /// @notice Launch a token straight into a Uniswap V3 pool — no bonding curve. The
+    ///         pool exists and is tradable the second this transaction confirms, with
+    ///         full DexScreener history from the first trade. The entire supply is
+    ///         minted as single-sided liquidity into the pool at the configured
+    ///         starting price; the position NFT is locked forever in the FeeLocker,
+    ///         whose 1%-tier swap fees are harvestable (protocol + holders) while the
+    ///         principal cannot be withdrawn.
+    ///
+    ///         V3 pools revert on fee-on-transfer tokens, so V3-mode tokens carry no
+    ///         transfer tax — the protocol's take is the pool fee tier itself. The 2%
+    ///         anti-whale cap does not apply in this mode (V3 has no such hook), and
+    ///         `devBuy` executes as the pool's very first swap, in this transaction.
+    function createTokenV3(
+        string calldata name,
+        string calldata symbol,
+        string calldata metadataURI,
+        uint256 devBuy
+    ) external payable nonReentrant returns (address token, address pool) {
+        if (msg.value < creationFee + devBuy) revert InsufficientCreationFee();
+        V3Params memory v = v3Params;
+        if (v.feeTier == 0 || address(feeLocker) == address(0)) revert V3NotConfigured();
+
+        // 1. Mint the full supply to this factory. No transfer tax (V3-incompatible):
+        //    tradeTaxBps = 0. Dividend machinery stays: holders claim the ETH the
+        //    FeeLocker streams in from pool fees.
+        OuroToken t = new OuroToken(
+            name, symbol, params.totalSupply, address(this), address(this), metadataURI, 0, feeRecipient
+        );
+        token = address(t);
+
+        // 2. Create + initialize the pool, then mint the whole supply as single-sided
+        //    liquidity to the FeeLocker. Pool and locker are excluded from dividends
+        //    before they ever hold tokens.
+        pool = _createV3Pool(t, v);
+        uint256 positionId = _mintV3Position(t, v);
+
+        // 3. Freeze the dividend config forever, record, and emit.
+        t.renounceAuthority();
+        _recordMarket(token, pool, name, symbol, metadataURI);
+        isV3Token[token] = true;
+        emit TokenLaunchedV3(token, pool, positionId);
+
+        // 4. Creation fee, optional dev buy (the pool's first swap), refund.
+        _settleV3(token, v.feeTier, devBuy);
+    }
+
+    /// @dev Resolve (or create) and initialize the token/WETH pool at the configured
+    ///      starting price, and exclude it from dividends. If a griefer pre-created
+    ///      AND pre-initialized the pool at a hostile price, the subsequent mint can
+    ///      revert — the launch fails harmlessly (nothing has left the caller's wallet
+    ///      beyond gas) and a retry deploys a token at a fresh address.
+    function _createV3Pool(OuroToken t, V3Params memory v) internal returns (address pool) {
+        bool tokenIs0 = address(t) < weth;
+        pool = v3Factory.getPool(address(t), weth, v.feeTier);
+        if (pool == address(0)) pool = v3Factory.createPool(address(t), weth, v.feeTier);
+        try IUniswapV3Pool(pool).initialize(tokenIs0 ? v.sqrtPriceX96Token0 : v.sqrtPriceX96Token1) {}
+            catch {} // already initialized (pre-existing pool) — mint below validates price
+        t.setExcludedFromDividends(pool, true);
+        t.setExcludedFromDividends(address(feeLocker), true);
+    }
+
+    /// @dev Mint the full supply as a single-sided position (all tokens, no ETH)
+    ///      directly to the FeeLocker, then register it and burn any rounding dust.
+    function _mintV3Position(OuroToken t, V3Params memory v) internal returns (uint256 positionId) {
+        bool tokenIs0 = address(t) < weth;
+        uint256 supply = t.balanceOf(address(this));
+        t.approve(address(positionManager), supply);
+
+        (positionId,,,) = positionManager.mint(
+            INonfungiblePositionManager.MintParams({
+                token0: tokenIs0 ? address(t) : weth,
+                token1: tokenIs0 ? weth : address(t),
+                fee: v.feeTier,
+                tickLower: tokenIs0 ? v.tickLower0 : v.tickLower1,
+                tickUpper: tokenIs0 ? v.tickUpper0 : v.tickUpper1,
+                amount0Desired: tokenIs0 ? supply : 0,
+                amount1Desired: tokenIs0 ? 0 : supply,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(feeLocker),
+                deadline: block.timestamp
+            })
+        );
+        t.approve(address(positionManager), 0);
+        feeLocker.register(positionId, address(t), tokenIs0);
+
+        // Rounding dust the mint didn't take is burned (excluded first, so it can
+        // never dilute holder rewards).
+        uint256 dust = t.balanceOf(address(this));
+        if (dust > 0) {
+            t.setExcludedFromDividends(0x000000000000000000000000000000000000dEaD, true);
+            require(t.transfer(0x000000000000000000000000000000000000dEaD, dust), "dust transfer failed");
+        }
+    }
+
+    /// @dev Pay the creation fee, run the optional dev buy through the swap router
+    ///      (the pool's first-ever swap, so it cannot be front-run), refund the rest.
+    function _settleV3(address token, uint24 feeTier, uint256 devBuy) internal {
+        if (creationFee > 0) _sendNative(feeRecipient, creationFee);
+        if (devBuy > 0) {
+            swapRouter.exactInputSingle{value: devBuy}(
+                ISwapRouter02.ExactInputSingleParams({
+                    tokenIn: weth,
+                    tokenOut: token,
+                    fee: feeTier,
+                    recipient: msg.sender,
+                    amountIn: devBuy,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                })
+            );
+        }
+        uint256 refund = msg.value - creationFee - devBuy;
+        if (refund > 0) _sendNative(msg.sender, refund);
     }
 
     /// @dev Split out of createToken to keep its stack shallow (the combined locals
