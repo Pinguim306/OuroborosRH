@@ -33,6 +33,10 @@ abstract contract Test {
         require(a == b, "assertEq(address) failed");
     }
 
+    function assertEq(int256 a, int256 b) internal pure {
+        require(a == b, "assertEq(int) failed");
+    }
+
     function assertEq(bool a, bool b) internal pure {
         require(a == b, "assertEq(bool) failed");
     }
