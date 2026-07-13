@@ -21,8 +21,10 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
   const [positionId, setPositionId] = useState<bigint | undefined>();
   const [pending, setPending] = useState<{ eth: number; tok: number } | undefined>();
 
+  // The position NFT lives in the FeeLocker of the launchpad that CREATED this
+  // token — for legacy tokens that is not the current primary launchpad.
   const lockerQ = useReadContract({
-    address: CONTRACTS.launchpad,
+    address: token.launchpad ?? CONTRACTS.launchpad,
     abi: launchpadAbi,
     functionName: "feeLocker",
   });

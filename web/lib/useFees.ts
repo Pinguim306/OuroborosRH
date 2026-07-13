@@ -7,11 +7,13 @@ import type { Address, TokenMarket } from "./types";
 /**
  * The FeeLocker's holder share as a fraction (holderShareBps / 10000), or
  * undefined while loading / when not needed. Pass `enabled: false` to skip the
- * reads entirely (e.g. no V3 tokens on screen).
+ * reads entirely (e.g. no V3 tokens on screen). `launchpad` picks whose locker
+ * to read — pass the token's own launchpad for legacy tokens; defaults to the
+ * primary.
  */
-export function useHolderShare(enabled = true): number | undefined {
+export function useHolderShare(enabled = true, launchpad?: Address): number | undefined {
   const lockerQ = useReadContract({
-    address: CONTRACTS.launchpad,
+    address: launchpad ?? CONTRACTS.launchpad,
     abi: launchpadAbi,
     functionName: "feeLocker",
     query: { enabled: LIVE && enabled },
@@ -46,6 +48,6 @@ export function totalFeesEth(token: TokenMarket, holderShare?: number): number {
 
 /** Single-token convenience wrapper around useHolderShare + totalFeesEth. */
 export function useTotalFeesEth(token?: TokenMarket): number {
-  const share = useHolderShare(token?.mode === "v3");
+  const share = useHolderShare(token?.mode === "v3", token?.launchpad);
   return token ? totalFeesEth(token, share) : 0;
 }
