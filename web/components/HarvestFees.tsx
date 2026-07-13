@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatEther } from "viem";
 import { usePublicClient, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { CONTRACTS, launchpadAbi, feeLockerAbi } from "@/lib/contracts";
+import { compact, usdFromEth } from "@/lib/format";
+import { useEthPrice } from "@/lib/usePrice";
 import type { Address, TokenMarket } from "@/lib/types";
 
 /**
@@ -13,7 +16,9 @@ import type { Address, TokenMarket } from "@/lib/types";
  */
 export function HarvestFees({ token }: { token: TokenMarket }) {
   const client = usePublicClient();
+  const ethUsd = useEthPrice();
   const [positionId, setPositionId] = useState<bigint | undefined>();
+  const [pending, setPending] = useState<{ eth: number; tok: number } | undefined>();
 
   const lockerQ = useReadContract({
     address: CONTRACTS.launchpad,
@@ -51,14 +56,47 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
   const busy = isPending || confirming;
 
+  // Quote the uncollected fees by SIMULATING collect() (eth_call — nothing is
+  // executed): the return values are exactly what a harvest would pay out now.
+  useEffect(() => {
+    if (!client || !locker || positionId === undefined) return;
+    let alive = true;
+    (async () => {
+      try {
+        const { result } = await client.simulateContract({
+          address: locker,
+          abi: feeLockerAbi,
+          functionName: "collect",
+          args: [positionId],
+        });
+        const [ethSide, tokSide] = result as readonly [bigint, bigint];
+        if (alive)
+          setPending({ eth: Number(formatEther(ethSide)), tok: Number(formatEther(tokSide)) });
+      } catch {
+        if (alive) setPending(undefined);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [client, locker, positionId, isSuccess]);
+
   if (!locker || positionId === undefined) return null;
 
   return (
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-obsidian-900/50 p-3">
-      <p className="min-w-0 flex-1 text-xs leading-relaxed text-white/45">
-        The pool&apos;s 1% swap fee accrues inside the locked position. Anyone can harvest it —
-        rewards stream to holders and the protocol on collection.
-      </p>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs leading-relaxed text-white/45">
+          The pool&apos;s 1% swap fee accrues inside the locked position. Anyone can harvest it —
+          rewards stream to holders and the protocol on collection.
+        </p>
+        {pending && (
+          <p className="mt-1 text-xs font-medium text-venom-400">
+            Uncollected: {usdFromEth(pending.eth, ethUsd, 2)}
+            {pending.tok > 0 ? ` + ${compact(pending.tok, 2)} ${token.symbol}` : ""}
+          </p>
+        )}
+      </div>
       <button
         onClick={() =>
           writeContract({ address: locker, abi: feeLockerAbi, functionName: "collect", args: [positionId] })

@@ -16,7 +16,7 @@ export const copy = {
     kicker: "Robinhood Chain · Fair-launch protocol",
     title: "Every trade feeds the loop.",
     subtitle:
-      "Launch a token on a fair bonding curve in seconds. Trading fees don't leak to a treasury — they become permanent liquidity, and holders earn a share of them the longer and larger they hold.",
+      "Launch a token on a fair bonding curve — or straight into a Uniswap V3 pool, tradable the second the tx confirms. Fees don't leak to a treasury: they become permanent liquidity, and holders earn a share just by holding.",
     ctaPrimary: "Launch a token",
     ctaSecondary: "Explore the market",
   },
