@@ -34,6 +34,18 @@ export function shortAddr(addr: string): string {
   return addr.length > 10 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr;
 }
 
+/** Absolute date + time down to the minute, e.g. "Jul 12, 2026, 11:42 PM". */
+export function fullDateTime(unixSeconds: number): string {
+  if (!unixSeconds) return "—";
+  return new Date(unixSeconds * 1000).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function timeAgo(unixSeconds: number): string {
   const s = Math.max(1, Math.floor(Date.now() / 1000 - unixSeconds));
   if (s < 60) return `${s}s ago`;

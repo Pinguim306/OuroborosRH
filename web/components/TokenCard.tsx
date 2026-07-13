@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { TokenMarket } from "@/lib/types";
-import { compact, usdFromEth } from "@/lib/format";
+import { compact, usdFromEth, timeAgo } from "@/lib/format";
 import { ProgressBar } from "./ProgressBar";
 
 function toHttp(uri: string): string {
@@ -60,7 +60,7 @@ export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: 
       </div>
 
       <div className="mt-3 flex justify-between text-xs text-white/40">
-        <span>Liq {usdFromEth(token.liquidityRh, ethUsd, 0)}</span>
+        <span>{token.createdAt ? `⧗ ${timeAgo(token.createdAt)}` : "—"}</span>
         <span>{token.graduated ? "Graduated" : `${Math.round(token.graduationProgress * 100)}% to grad`}</span>
       </div>
     </Link>

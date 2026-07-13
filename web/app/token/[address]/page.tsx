@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getToken, mockTrades, mockHolders } from "@/lib/mock/data";
-import { compact, pct, usdFromEth, shortAddr, timeAgo } from "@/lib/format";
+import { compact, pct, usdFromEth, shortAddr, timeAgo, fullDateTime } from "@/lib/format";
 import { NATIVE_SYMBOL } from "@/lib/chain";
 import { LIVE } from "@/lib/contracts";
 import { useLiveToken } from "@/lib/useMarkets";
@@ -77,6 +77,11 @@ export default function TokenPage() {
             )}
           </div>
           <p className="mt-1 max-w-xl text-sm text-white/50">{token.description}</p>
+          {token.createdAt ? (
+            <p className="mt-1 text-xs text-white/35">
+              Created {fullDateTime(token.createdAt)} · {timeAgo(token.createdAt)}
+            </p>
+          ) : null}
         </div>
         <div className="text-right">
           <div className="label">Marketcap</div>
