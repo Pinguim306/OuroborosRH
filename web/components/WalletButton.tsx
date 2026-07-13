@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAccount, useConnect, useDisconnect, type Connector } from "wagmi";
 import { shortAddr } from "@/lib/format";
 
@@ -65,7 +66,10 @@ export function WalletButton() {
           {isPending ? "Connecting…" : "Connect wallet"}
         </button>
 
-        {picker && (
+        {/* Portal to <body>: the nav header's backdrop-blur creates a containing
+            block for position:fixed, which pinned the modal to the header (top of
+            the page, clipped). Rendering outside it centers on the real viewport. */}
+        {picker && typeof document !== "undefined" && createPortal(
           <div
             className="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-4 backdrop-blur-sm"
             onClick={() => setPicker(false)}
@@ -146,7 +150,8 @@ export function WalletButton() {
                 )}
               </div>
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
       </>
     );
