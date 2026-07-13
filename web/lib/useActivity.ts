@@ -21,6 +21,64 @@ function supplyOf(token: TokenMarket): number {
   return token.priceRh > 0 ? token.marketCapRh / token.priceRh : 1_000_000_000;
 }
 
+/** One V3 pool Swap normalized to the same shape as a curve Trade. */
+interface ParsedSwap {
+  bn: bigint;
+  ethAmount: number; // absolute ETH notional of the swap
+  tokenAmount: number;
+  mcap: number; // implied marketcap (ETH) after the swap
+  isBuy: boolean;
+  trader: Address;
+  id: string;
+}
+
+/**
+ * Decode a Uniswap V3 Swap log. Amounts are the pool's deltas (negative = out of
+ * the pool): a buy pulls tokens out (token delta < 0) and pushes ETH in.
+ * sqrtPriceX96 gives the post-swap price, oriented by token0/token1 sort order.
+ */
+function parseV3Swap(
+  l: { args: unknown; blockNumber: bigint; transactionHash: string; logIndex: number },
+  tokenIs0: boolean,
+  supply: number,
+): ParsedSwap {
+  const a = l.args as {
+    sender?: Address;
+    recipient?: Address;
+    amount0?: bigint;
+    amount1?: bigint;
+    sqrtPriceX96?: bigint;
+  };
+  const amtTok = (tokenIs0 ? a.amount0 : a.amount1) ?? 0n;
+  const amtEth = (tokenIs0 ? a.amount1 : a.amount0) ?? 0n;
+  const ratio = Number(a.sqrtPriceX96 ?? 0n) / 2 ** 96;
+  const p10 = ratio * ratio; // token1-per-token0 after the swap
+  const price = tokenIs0 ? p10 : p10 > 0 ? 1 / p10 : 0;
+  return {
+    bn: l.blockNumber,
+    ethAmount: Number(formatEther(amtEth < 0n ? -amtEth : amtEth)),
+    tokenAmount: Number(formatEther(amtTok < 0n ? -amtTok : amtTok)),
+    mcap: price * supply,
+    isBuy: amtTok < 0n,
+    trader: (a.recipient ?? a.sender ?? ZERO) as Address,
+    id: `${l.transactionHash}-${l.logIndex}`,
+  };
+}
+
+/** The launchpad's WETH address — needed to orient V3 pool swaps. */
+async function wethOf(client: PublicClient): Promise<string | undefined> {
+  try {
+    const w = await client.readContract({
+      address: CONTRACTS.launchpad,
+      abi: launchpadAbi,
+      functionName: "weth",
+    });
+    return typeof w === "string" ? w : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Estimate the block ~`secondsAgo` in the past by sampling recent block times. */
 async function cutoffBlock(client: PublicClient, secondsAgo: number): Promise<bigint> {
   try {
@@ -141,36 +199,20 @@ export function useTokenActivity(token?: TokenMarket): Activity {
               fromBlock: 0n,
               toBlock: "latest",
             }),
-            client
-              .readContract({ address: CONTRACTS.launchpad, abi: launchpadAbi, functionName: "weth" })
-              .catch(() => undefined),
+            wethOf(client),
           ]);
-          const tokenIs0 =
-            typeof wethAddr === "string" ? token.address.toLowerCase() < wethAddr.toLowerCase() : true;
+          const tokenIs0 = wethAddr ? token.address.toLowerCase() < wethAddr.toLowerCase() : true;
           for (const l of logs) {
-            const a = l.args as {
-              sender?: Address;
-              recipient?: Address;
-              amount0?: bigint;
-              amount1?: bigint;
-              sqrtPriceX96?: bigint;
-            };
-            // Amounts are the pool's deltas: negative = out of the pool. A buy pulls
-            // tokens out (token delta < 0) and pushes ETH in.
-            const amtTok = (tokenIs0 ? a.amount0 : a.amount1) ?? 0n;
-            const amtEth = (tokenIs0 ? a.amount1 : a.amount0) ?? 0n;
-            const ratio = Number(a.sqrtPriceX96 ?? 0n) / 2 ** 96;
-            const p10 = ratio * ratio; // token1-per-token0 after the swap
-            const price = tokenIs0 ? p10 : p10 > 0 ? 1 / p10 : 0;
+            const s = parseV3Swap(l, tokenIs0, supply);
             parsed.push({
-              bn: l.blockNumber,
-              mcap: price * supply,
+              bn: s.bn,
+              mcap: s.mcap,
               trade: {
-                id: `${l.transactionHash}-${l.logIndex}`,
-                trader: (a.recipient ?? a.sender ?? ZERO) as Address,
-                isBuy: amtTok < 0n,
-                rhAmount: Number(formatEther(amtEth < 0n ? -amtEth : amtEth)),
-                tokenAmount: Number(formatEther(amtTok < 0n ? -amtTok : amtTok)),
+                id: s.id,
+                trader: s.trader,
+                isBuy: s.isBuy,
+                rhAmount: s.ethAmount,
+                tokenAmount: s.tokenAmount,
                 time: 0,
               },
             });
@@ -271,19 +313,33 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
     if (!LIVE || !client || tokens.length === 0) return;
     let alive = true;
     async function load() {
-      const cutoff = await cutoffBlock(client!, DAY);
+      // WETH is only needed to orient V3 pool swaps (token0 vs token1 sort order).
+      const [cutoff, wethAddr] = await Promise.all([
+        cutoffBlock(client!, DAY),
+        tokens.some((t) => t.mode === "v3") ? wethOf(client!) : Promise.resolve(undefined),
+      ]);
       const next = new Map<string, MarketStat>();
       await Promise.all(
         tokens.slice(0, 40).map(async (t) => {
           try {
+            // Instant-V3 tokens have no curve — their trades are the Uniswap pool's
+            // Swap events (t.curve holds the pool address for them).
             const [trades, transfers] = await Promise.all([
-              client!.getContractEvents({
-                address: t.curve,
-                abi: curveAbi,
-                eventName: "Trade",
-                fromBlock: 0n,
-                toBlock: "latest",
-              }),
+              t.mode === "v3"
+                ? client!.getContractEvents({
+                    address: t.curve,
+                    abi: v3PoolAbi,
+                    eventName: "Swap",
+                    fromBlock: 0n,
+                    toBlock: "latest",
+                  })
+                : client!.getContractEvents({
+                    address: t.curve,
+                    abi: curveAbi,
+                    eventName: "Trade",
+                    fromBlock: 0n,
+                    toBlock: "latest",
+                  }),
               client!.getContractEvents({
                 address: t.address,
                 abi: tokenAbi,
@@ -293,16 +349,25 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
               }),
             ]);
             const supply = supplyOf(t);
+            const tokenIs0 = wethAddr ? t.address.toLowerCase() < wethAddr.toLowerCase() : true;
             let vol = 0;
             let vol24 = 0;
             let ath = 0;
             let lastBlock = 0;
             for (const l of trades) {
-              const a = l.args as { nativeAmount?: bigint; newPrice?: bigint };
-              const nat = Number(formatEther(a.nativeAmount ?? 0n));
+              let nat: number;
+              let mcap: number;
+              if (t.mode === "v3") {
+                const s = parseV3Swap(l, tokenIs0, supply);
+                nat = s.ethAmount;
+                mcap = s.mcap;
+              } else {
+                const a = l.args as { nativeAmount?: bigint; newPrice?: bigint };
+                nat = Number(formatEther(a.nativeAmount ?? 0n));
+                mcap = Number(formatEther(a.newPrice ?? 0n)) * supply;
+              }
               vol += nat;
               if (l.blockNumber >= cutoff) vol24 += nat;
-              const mcap = Number(formatEther(a.newPrice ?? 0n)) * supply;
               if (mcap > ath) ath = mcap;
               lastBlock = Number(l.blockNumber);
             }

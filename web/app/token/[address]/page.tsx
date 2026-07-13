@@ -22,6 +22,7 @@ import { TokenAvatar } from "@/components/TokenAvatar";
 import { HarvestFees } from "@/components/HarvestFees";
 import { SocialLinks } from "@/components/SocialLinks";
 import { useTokenMeta } from "@/lib/useMeta";
+import { useTotalFeesEth } from "@/lib/useFees";
 
 const EXPLORER = "https://robinhoodchain.blockscout.com";
 
@@ -41,6 +42,7 @@ export default function TokenPage() {
   const activity = useTokenActivity(token);
   const holdersData = useTokenHolders(token);
   const meta = useTokenMeta(token?.image);
+  const totalFeesEth = useTotalFeesEth(token);
 
   if (LIVE && live.isLoading && !token) {
     return <div className="mx-auto max-w-md px-4 py-32 text-center text-white/50">Loading token…</div>;
@@ -116,7 +118,7 @@ export default function TokenPage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatTile label="Marketcap" value={usdFromEth(token.marketCapRh, ethUsd)} />
             <StatTile label="ATH" value={usdFromEth(athEth, ethUsd)} accent />
-            <StatTile label="Rewards pool" value={usdFromEth(token.rewardsPoolRh, ethUsd)} />
+            <StatTile label="Rewards pool" value={usdFromEth(totalFeesEth, ethUsd)} />
             <StatTile label="24h Volume" value={usdFromEth(vol24, ethUsd)} />
           </div>
 

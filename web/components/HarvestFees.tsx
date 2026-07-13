@@ -28,6 +28,7 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
   });
   const locker = lockerQ.data as Address | undefined;
 
+
   // Resolve the token's locked position id from the locker's PositionLocked event.
   useEffect(() => {
     if (!client || !locker) return;

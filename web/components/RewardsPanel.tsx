@@ -14,6 +14,7 @@ import { compact, rh, usdFromEth } from "@/lib/format";
 import { useEthPrice } from "@/lib/usePrice";
 import { CHAIN_ID, NATIVE_SYMBOL } from "@/lib/chain";
 import { LIVE, tokenAbi } from "@/lib/contracts";
+import { useTotalFeesEth } from "@/lib/useFees";
 
 /**
  * Holder rewards for a single token — NO STAKING. Fees accrue to every holder
@@ -28,6 +29,7 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
   const [simClaimable, setSimClaimable] = useState(() => token.rewardsPoolRh * 0.004);
   const [flash, setFlash] = useState<string | null>(null);
   const ethUsd = useEthPrice();
+  const totalFeesEth = useTotalFeesEth(token);
 
   // --- Live reads ---
   const claimableQ = useReadContract({
@@ -105,7 +107,7 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
         <div className="rounded-xl bg-obsidian-900/60 p-4">
           <div className="label">Pool paid out</div>
           <div className="mt-0.5 font-mono text-sm font-semibold text-white">
-            {usdFromEth(token.rewardsPoolRh, ethUsd, 0)}
+            {usdFromEth(totalFeesEth, ethUsd, 0)}
           </div>
         </div>
       </div>
