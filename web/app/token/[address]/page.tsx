@@ -23,6 +23,14 @@ import { HarvestFees } from "@/components/HarvestFees";
 import { SocialLinks } from "@/components/SocialLinks";
 import { useTokenMeta } from "@/lib/useMeta";
 
+const EXPLORER = "https://robinhoodchain.blockscout.com";
+
+/** Live trade ids are `${txHash}-${logIndex}`; mock ids aren't hashes. */
+function txHashOf(id: string): string | null {
+  const h = id.split("-")[0];
+  return h.startsWith("0x") && h.length === 66 ? h : null;
+}
+
 export default function TokenPage() {
   const params = useParams();
   const address = Array.isArray(params.address) ? params.address[0] : params.address;
@@ -177,19 +185,45 @@ export default function TokenPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {trades.map((t) => (
-                      <tr key={t.id} className="border-t border-white/5">
-                        <td className={`px-5 py-2 font-semibold ${t.isBuy ? "text-venom-400" : "text-red-400"}`}>
-                          {t.isBuy ? "Buy" : "Sell"}
-                        </td>
-                        <td className="px-5 py-2 font-mono text-white/70">{compact(t.rhAmount, 3)}</td>
-                        <td className="px-5 py-2 font-mono text-white/70">{compact(t.tokenAmount, 0)}</td>
-                        <td className="px-5 py-2 font-mono text-white/40">{shortAddr(t.trader)}</td>
-                        <td className="px-5 py-2 text-right text-xs text-white/40">
-                          {t.time ? timeAgo(t.time) : "—"}
-                        </td>
-                      </tr>
-                    ))}
+                    {trades.map((t) => {
+                      const tx = txHashOf(t.id);
+                      return (
+                        <tr key={t.id} className="border-t border-white/5">
+                          <td className={`px-5 py-2 font-semibold ${t.isBuy ? "text-venom-400" : "text-red-400"}`}>
+                            {tx ? (
+                              <a
+                                href={`${EXPLORER}/tx/${tx}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hover:underline"
+                                title="View transaction on the explorer"
+                              >
+                                {t.isBuy ? "Buy" : "Sell"} ↗
+                              </a>
+                            ) : t.isBuy ? (
+                              "Buy"
+                            ) : (
+                              "Sell"
+                            )}
+                          </td>
+                          <td className="px-5 py-2 font-mono text-white/70">{compact(t.rhAmount, 3)}</td>
+                          <td className="px-5 py-2 font-mono text-white/70">{compact(t.tokenAmount, 0)}</td>
+                          <td className="px-5 py-2 font-mono text-white/40">
+                            <a
+                              href={`${EXPLORER}/address/${t.trader}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:text-venom-400 hover:underline"
+                            >
+                              {shortAddr(t.trader)}
+                            </a>
+                          </td>
+                          <td className="px-5 py-2 text-right text-xs text-white/40">
+                            {t.time ? timeAgo(t.time) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -211,7 +245,14 @@ export default function TokenPage() {
                 {holders.map((h, i) => (
                   <div key={h.address} className="flex items-center gap-3 px-5 py-3 text-sm">
                     <span className="w-5 text-white/30">{i + 1}</span>
-                    <span className="flex-1 font-mono text-white/60">{shortAddr(h.address)}</span>
+                    <a
+                      href={`${EXPLORER}/address/${h.address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 font-mono text-white/60 hover:text-venom-400 hover:underline"
+                    >
+                      {shortAddr(h.address)}
+                    </a>
                     <span className="w-24 text-right font-mono text-white/50">
                       {compact(h.balance, 0)} {token.symbol}
                     </span>
