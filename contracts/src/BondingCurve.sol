@@ -28,6 +28,10 @@ contract BondingCurve is ReentrancyGuard {
     OuroToken public immutable token;
     /// @notice Developer / platform address that receives the dev fee.
     address public immutable feeRecipient;
+    /// @notice Where the holder-fee stream goes. address(0) = Loop Rewards (streamed
+    ///         to all holders through the token); anything else = Creator Rewards
+    ///         (paid straight to that address, chosen at launch, immutable).
+    address public immutable rewardsRecipient;
     /// @notice Uniswap-V2-style router used to migrate liquidity at graduation.
     IDexRouter public immutable router;
 
@@ -70,6 +74,7 @@ contract BondingCurve is ReentrancyGuard {
     constructor(
         address _token,
         address _feeRecipient,
+        address _rewardsRecipient,
         address _router,
         uint256 _virtualNative,
         uint256 _curveSupply,
@@ -81,6 +86,7 @@ contract BondingCurve is ReentrancyGuard {
     ) {
         token = OuroToken(payable(_token));
         feeRecipient = _feeRecipient;
+        rewardsRecipient = _rewardsRecipient;
         router = IDexRouter(_router);
         nativeReserve = _virtualNative;
         tokenReserve = _curveSupply;
@@ -216,9 +222,16 @@ contract BondingCurve is ReentrancyGuard {
 
     function _routeFees(uint256 devPart, uint256 liqPart, uint256 holderPart) internal {
         if (devPart > 0) _sendNative(feeRecipient, devPart);
-        if (holderPart > 0) token.distributeRewards{value: holderPart}();
+        if (holderPart > 0) _routeRewards(holderPart);
         // liqPart already retained in nativeReserve as permanent liquidity.
         emit FeeRouted(devPart, liqPart, holderPart);
+    }
+
+    /// @dev Loop Rewards streams through the token to every holder; Creator Rewards
+    ///      pays the launch-time recipient directly.
+    function _routeRewards(uint256 amount) internal {
+        if (rewardsRecipient == address(0)) token.distributeRewards{value: amount}();
+        else _sendNative(rewardsRecipient, amount);
     }
 
     function _maybeGraduate() internal {
@@ -264,10 +277,10 @@ contract BondingCurve is ReentrancyGuard {
         // Freeze exclusions forever — no one can exclude a holder afterwards.
         token.renounceAuthority();
 
-        // Any refunded ETH is streamed to holders as rewards — the griefer's skew ends
-        // up paying the community rather than bricking the launch.
+        // Any refunded ETH follows the rewards route (holders or creator) — the
+        // griefer's skew ends up paying the community rather than bricking the launch.
         uint256 ethLeft = address(this).balance;
-        if (ethLeft > 0) token.distributeRewards{value: ethLeft}();
+        if (ethLeft > 0) _routeRewards(ethLeft);
 
         emit Graduated(_pair, ethLiq, tokenLiq);
     }

@@ -90,6 +90,11 @@ export default function TokenPage() {
             ) : token.graduated ? (
               <span className="chip border-venom-500/40 text-venom-400">✦ Graduated</span>
             ) : null}
+            {token.creatorFees && (
+              <span className="chip border-acid/40 text-acid" title="Trade fees pay the creator, not holders">
+                👑 Creator Rewards
+              </span>
+            )}
           </div>
           <p className="mt-1 max-w-xl text-sm text-white/50">
             {meta?.description || token.description}

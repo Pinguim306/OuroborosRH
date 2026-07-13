@@ -17,12 +17,12 @@ const ZERO = "0x0000000000000000000000000000000000000000";
 const DEAD = "0x000000000000000000000000000000000000dead";
 const DAY = 24 * 3600;
 
-function supplyOf(token: TokenMarket): number {
+export function supplyOf(token: TokenMarket): number {
   return token.priceRh > 0 ? token.marketCapRh / token.priceRh : 1_000_000_000;
 }
 
 /** One V3 pool Swap normalized to the same shape as a curve Trade. */
-interface ParsedSwap {
+export interface ParsedSwap {
   bn: bigint;
   ethAmount: number; // absolute ETH notional of the swap
   tokenAmount: number;
@@ -37,7 +37,7 @@ interface ParsedSwap {
  * the pool): a buy pulls tokens out (token delta < 0) and pushes ETH in.
  * sqrtPriceX96 gives the post-swap price, oriented by token0/token1 sort order.
  */
-function parseV3Swap(
+export function parseV3Swap(
   l: { args: unknown; blockNumber: bigint; transactionHash: string; logIndex: number },
   tokenIs0: boolean,
   supply: number,
@@ -66,7 +66,7 @@ function parseV3Swap(
 }
 
 /** The launchpad's WETH address — needed to orient V3 pool swaps. */
-async function wethOf(client: PublicClient): Promise<string | undefined> {
+export async function wethOf(client: PublicClient): Promise<string | undefined> {
   try {
     const w = await client.readContract({
       address: CONTRACTS.launchpad,
@@ -108,7 +108,7 @@ export interface Candle {
 }
 
 /** Latest block number/timestamp + estimated seconds-per-block, sampled once. */
-async function blockClock(
+export async function blockClock(
   client: PublicClient,
 ): Promise<{ latestNum: bigint; latestTs: number; spb: number }> {
   const latestNum = await client.getBlockNumber();

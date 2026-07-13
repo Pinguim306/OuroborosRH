@@ -8,6 +8,7 @@ import { WalletButton } from "./WalletButton";
 
 const links = [
   { href: "/discover", label: "Discover" },
+  { href: "/leaderboard", label: "Leaderboard" },
   { href: "/rewards", label: copy.nav.rewards },
 ];
 

@@ -66,7 +66,7 @@ contract V3LaunchTest is Test {
 
     function _launchV3(uint256 devBuy) internal returns (OuroToken t, address pool) {
         (address tk, address pl) =
-            launchpad.createTokenV3{value: CREATION_FEE + devBuy}("Viper", "VPR", "ipfs://v", devBuy);
+            launchpad.createTokenV3{value: CREATION_FEE + devBuy}("Viper", "VPR", "ipfs://v", devBuy, false);
         return (OuroToken(payable(tk)), pl);
     }
 
@@ -94,7 +94,7 @@ contract V3LaunchTest is Test {
         assertEq(tokenIs0 ? a1 : a0, 0); // single-sided: no ETH side
 
         // Locker registered the position.
-        (address regToken, bool regIs0) = locker.positions(1);
+        (address regToken, bool regIs0,) = locker.positions(1);
         assertEq(regToken, address(t));
         assertEq(regIs0, tokenIs0);
 
@@ -115,14 +115,14 @@ contract V3LaunchTest is Test {
     function testV3CreationFeeAndRefund() public {
         uint256 devBefore = dev.balance;
         uint256 meBefore = address(this).balance;
-        launchpad.createTokenV3{value: CREATION_FEE + 1 ether}("X", "X", "", 0); // 1 ETH excess
+        launchpad.createTokenV3{value: CREATION_FEE + 1 ether}("X", "X", "", 0, false); // 1 ETH excess
         assertEq(dev.balance - devBefore, CREATION_FEE);
         assertEq(meBefore - address(this).balance, CREATION_FEE); // excess refunded
     }
 
     function testV3DevBuyIsFirstSwap() public {
         vm.prank(alice);
-        (address tk,) = launchpad.createTokenV3{value: CREATION_FEE + 2 ether}("Y", "Y", "", 2 ether);
+        (address tk,) = launchpad.createTokenV3{value: CREATION_FEE + 2 ether}("Y", "Y", "", 2 ether, false);
 
         assertEq(swapRouter.swapCount(), 1);
         assertEq(swapRouter.lastValue(), 2 ether);
@@ -147,12 +147,12 @@ contract V3LaunchTest is Test {
         });
         Launchpad fresh = new Launchpad(address(this), dev, address(1), CREATION_FEE, p);
         vm.expectRevert(Launchpad.V3NotConfigured.selector);
-        fresh.createTokenV3{value: CREATION_FEE}("Z", "Z", "", 0);
+        fresh.createTokenV3{value: CREATION_FEE}("Z", "Z", "", 0, false);
     }
 
     function testCurveModeStillWorks() public {
         // Regression: the V2 bonding-curve path is untouched by the V3 config.
-        (address tk, address curve) = launchpad.createToken{value: CREATION_FEE}("Loop", "LOOP", "", 0);
+        (address tk, address curve) = launchpad.createToken{value: CREATION_FEE}("Loop", "LOOP", "", 0, false);
         assertFalse(launchpad.isV3Token(tk));
         assertEq(OuroToken(payable(tk)).balanceOf(curve), SUPPLY);
     }

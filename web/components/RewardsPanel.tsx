@@ -23,6 +23,7 @@ import { useTotalFeesEth } from "@/lib/useFees";
  */
 export function RewardsPanel({ token }: { token: TokenMarket }) {
   const { address, isConnected } = useAccount();
+  const creatorMode = Boolean(token.creatorFees);
 
   // --- Demo state (only used when !LIVE) ---
   const [holding] = useState(() => (token.priceRh > 0 ? (token.marketCapRh / token.priceRh) * 0.004 : 0));
@@ -84,6 +85,24 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
       return;
     }
     writeContract({ chainId: CHAIN_ID, address: token.address, abi: tokenAbi, functionName: "claim" });
+  }
+
+  // Creator Rewards launch: the fee share pays the creator's wallet, so there is
+  // no holder pool to claim from — explain instead of showing a dead claim UI.
+  if (creatorMode) {
+    return (
+      <div className="glass p-5">
+        <div className="flex items-center justify-between">
+          <h3 className="font-display text-lg font-bold">Rewards</h3>
+          <span className="chip border-acid/40 text-acid">👑 Creator Rewards</span>
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-white/45">
+          This token was launched in Creator Rewards mode: the fee share that Loop
+          Rewards tokens stream to holders is paid to the creator&apos;s wallet instead.
+          Holding {token.symbol} does not accrue {NATIVE_SYMBOL} rewards.
+        </p>
+      </div>
+    );
   }
 
   return (

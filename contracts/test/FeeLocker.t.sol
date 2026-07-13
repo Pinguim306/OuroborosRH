@@ -56,7 +56,7 @@ contract FeeLockerTest is Test {
                 tickUpper1: 207200
             })
         );
-        (address tk,) = launchpad.createTokenV3{value: CREATION_FEE}("Viper", "VPR", "", 0);
+        (address tk,) = launchpad.createTokenV3{value: CREATION_FEE}("Viper", "VPR", "", 0, false);
         token = OuroToken(payable(tk));
 
         // Fund the mock NPM with WETH so it can pay out the ETH side of a collect.
@@ -66,7 +66,7 @@ contract FeeLockerTest is Test {
 
     function testCollectSplitsEthSide() public {
         // 1 ETH of WETH-side fees + 500 tokens of token-side fees are pending.
-        (, bool tokenIs0) = locker.positions(positionId);
+        (, bool tokenIs0,) = locker.positions(positionId);
         if (tokenIs0) npm.setPendingFees(500 ether, 1 ether);
         else npm.setPendingFees(1 ether, 500 ether);
 
@@ -94,7 +94,7 @@ contract FeeLockerTest is Test {
         // The protocol share follows launchpad.feeRecipient() at collect time.
         address newVault = address(0xBEEF);
         launchpad.setFeeRecipient(newVault);
-        (, bool tokenIs0) = locker.positions(positionId);
+        (, bool tokenIs0,) = locker.positions(positionId);
         if (tokenIs0) npm.setPendingFees(0, 1 ether);
         else npm.setPendingFees(1 ether, 0);
 
@@ -113,6 +113,39 @@ contract FeeLockerTest is Test {
     function testRegisterOnlyLaunchpad() public {
         vm.prank(cranker);
         vm.expectRevert(FeeLocker.NotLaunchpad.selector);
-        locker.register(2, address(token), true);
+        locker.register(2, address(token), true, address(0));
+    }
+
+    function testCreatorRewardsModeRoutesHolderShareToCreator() public {
+        // Launch a second V3 token in Creator Rewards mode from a distinct creator.
+        address creator = address(0xCAFE);
+        vm.deal(creator, 1 ether);
+        vm.prank(creator);
+        (address tk,) = launchpad.createTokenV3{value: CREATION_FEE}("Solo", "SOLO", "", 0, true);
+        assertTrue(launchpad.isCreatorFeeToken(tk));
+
+        uint256 pid = positionId + 1; // mock NPM mints sequential ids
+        (address regToken,, address rewardsTo) = locker.positions(pid);
+        assertEq(regToken, tk);
+        assertEq(rewardsTo, creator);
+
+        bool tokenIs0 = tk < address(weth);
+        if (tokenIs0) npm.setPendingFees(0, 1 ether);
+        else npm.setPendingFees(1 ether, 0);
+
+        uint256 creatorBefore = creator.balance;
+        uint256 devBefore = dev.balance;
+        uint256 distributedBefore =
+            OuroToken(payable(tk)).totalRewardsDistributed() + OuroToken(payable(tk)).pendingRewards();
+
+        vm.prank(cranker);
+        locker.collect(pid);
+
+        // 40% straight to the creator, 60% to the protocol, nothing streamed to holders.
+        assertEq(creator.balance - creatorBefore, 0.4 ether);
+        assertEq(dev.balance - devBefore, 0.6 ether);
+        uint256 distributedAfter =
+            OuroToken(payable(tk)).totalRewardsDistributed() + OuroToken(payable(tk)).pendingRewards();
+        assertEq(distributedAfter - distributedBefore, 0);
     }
 }

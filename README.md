@@ -31,6 +31,14 @@ to balance; connect a wallet and **claim anytime**.
   the protocol; the caller gets nothing). With zero holders, the holder share
   waits as `pendingRewards` for the next buyer — it can never be drained.
 
+At launch the creator picks a **rewards mode**, immutable forever
+(`LAUNCHPAD_VERSION ≥ 2`; the site auto-detects and hides the option on v1
+deployments):
+
+- 🐍 **Loop Rewards** — the fee share streams to every holder (the classic loop);
+- 👑 **Creator Rewards** — that same share is paid to the creator's wallet
+  instead. Such tokens are badged on their page and accrue nothing to holders.
+
 ## The FeeLocker
 
 V3 position NFTs live in a locker with **no owner and a single value-moving
@@ -42,7 +50,7 @@ un-ruggable by construction, while fees stay harvestable.
 | Path         | What |
 |--------------|------|
 | `contracts/` | Foundry contracts — Launchpad (both modes), BondingCurve, OuroToken (dividends + post-grad tax), FeeLocker — **reference, unaudited** |
-| `web/`       | Next.js + TypeScript + Tailwind + wagmi/viem front-end (Discover, launch, trading both modes, rewards, docs/terms) |
+| `web/`       | Next.js + TypeScript + Tailwind + wagmi/viem front-end (Discover, launch, trading both modes, rewards + trading PnL, leaderboard, live feed, docs/terms) |
 | `web/API.md` | Public REST trade API (`/api/v1/*`) for bots — non-custodial, returns unsigned txs |
 
 ## Quick start
@@ -74,6 +82,9 @@ contract is deployed.
 | `NEXT_PUBLIC_X_URL` | X/Twitter button in the footer |
 | `NEXT_PUBLIC_HIDDEN_TOKENS` | Comma-separated token addresses hidden from listings |
 | `LAUNCHPAD_API_KEY` | Optional auth for the public trade API |
+| `TELEGRAM_BOT_TOKEN` | @BotFather bot token — enables auto-announcing every launch to a Telegram channel (secret) |
+| `TELEGRAM_CHAT_ID` | Channel to announce in (`@channelname` or `-100…`); the bot must be a channel admin |
+| `NEXT_PUBLIC_SITE_URL` | Public site origin used in announcement links (default `https://ouroborosrh.fun`) |
 
 ## ⚠️ Disclaimer
 
