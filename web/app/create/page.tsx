@@ -21,6 +21,8 @@ export default function CreatePage() {
   });
   const [status, setStatus] = useState<"idle" | "deploying" | "done">("idle");
   const [devBuy, setDevBuy] = useState("");
+  // Launch mode: bonding curve (graduates to V2) or straight into a Uniswap V3 pool.
+  const [mode, setMode] = useState<"curve" | "v3">("curve");
 
   // Image upload state
   const fileRef = useRef<HTMLInputElement>(null);
@@ -49,8 +51,11 @@ export default function CreatePage() {
   // a small safety margin keeps integer rounding from tripping the on-chain cap.
   const maxDevBuyEth = useMemo(() => maxDevBuy(curveParams), [curveParams]);
   const devBuyNum = parseFloat(devBuy) || 0;
-  const devBuyOverCap = maxDevBuyEth > 0 && devBuyNum > maxDevBuyEth;
-  const clampedDevBuy = maxDevBuyEth > 0 ? Math.min(devBuyNum, maxDevBuyEth) : devBuyNum;
+  // The 2% anti-whale cap only exists on the bonding curve — V3 pools have no hook
+  // for it, so in V3 mode the dev buy is unclamped.
+  const devBuyOverCap = mode === "curve" && maxDevBuyEth > 0 && devBuyNum > maxDevBuyEth;
+  const clampedDevBuy =
+    mode === "curve" && maxDevBuyEth > 0 ? Math.min(devBuyNum, maxDevBuyEth) : devBuyNum;
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { data: receipt, isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
@@ -174,7 +179,7 @@ export default function CreatePage() {
     writeContract({
       address: CONTRACTS.launchpad,
       abi: launchpadAbi,
-      functionName: "createToken",
+      functionName: mode === "v3" ? "createTokenV3" : "createToken",
       args: [form.name, form.symbol, metadataURI, devBuyWei],
       value: fee + devBuyWei,
     });
@@ -261,12 +266,49 @@ export default function CreatePage() {
               </Field>
             </div>
 
+            {/* Launch mode: bonding curve (classic) vs instant Uniswap V3 pool. */}
+            <div>
+              <span className="label mb-1.5 block">Launch mode</span>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    {
+                      key: "curve",
+                      title: "Bonding curve",
+                      desc: "Classic launch. 2% anti-whale cap, holder rewards from trade fees, graduates to Uniswap V2 at 4 ETH.",
+                    },
+                    {
+                      key: "v3",
+                      title: "Instant V3 pool",
+                      desc: "Launches straight into a Uniswap V3 pool. Tradable the second the tx confirms, DexScreener from trade one. No max-buy cap.",
+                    },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setMode(opt.key)}
+                    className={`rounded-xl border p-3 text-left transition ${
+                      mode === opt.key
+                        ? "border-venom-500/60 bg-venom-500/10"
+                        : "border-white/10 bg-obsidian-900/60 hover:border-white/25"
+                    }`}
+                  >
+                    <div className={`text-sm font-semibold ${mode === opt.key ? "text-venom-400" : "text-white/80"}`}>
+                      {opt.title}
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-white/45">{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Dev buy — the creator can buy their own launch first, capped at the
                 same 2% anti-whale limit as everyone else. */}
             <div>
               <div className="mb-1.5 flex items-center justify-between">
                 <span className="label">Dev buy ({NATIVE_SYMBOL}) · optional</span>
-                {maxDevBuyEth > 0 && (
+                {mode === "curve" && maxDevBuyEth > 0 && (
                   <button
                     type="button"
                     onClick={() => setDevBuy(maxDevBuyEth.toFixed(4))}
@@ -287,8 +329,9 @@ export default function CreatePage() {
                 <span className="chip shrink-0">{NATIVE_SYMBOL}</span>
               </div>
               <p className="mt-1.5 text-[11px] text-white/40">
-                Buy your token in the same transaction, before anyone else. Limited to the 2% max-buy
-                cap — larger amounts are clamped to the max.
+                {mode === "curve"
+                  ? "Buy your token in the same transaction, before anyone else. Limited to the 2% max-buy cap — larger amounts are clamped to the max."
+                  : "Executed as the pool's very first swap, inside the launch transaction — impossible to front-run. No cap in V3 mode."}
               </p>
               {devBuyOverCap && (
                 <p className="mt-1 text-[11px] text-acid">
@@ -300,13 +343,23 @@ export default function CreatePage() {
 
           <div className="mt-6 rounded-xl border border-white/5 bg-obsidian-900/50 p-4 text-xs text-white/50">
             <div className="mb-2 font-semibold text-white/70">Launch parameters</div>
-            <ul className="grid grid-cols-2 gap-y-1">
-              <li>Supply: <span className="text-white/70">1,000,000,000</span></li>
-              <li>Trade fee: <span className="text-white/70">1.5%</span></li>
-              <li>Graduation: <span className="text-white/70">4 {NATIVE_SYMBOL} raised</span></li>
-              <li>Max buy: <span className="text-white/70">2% of supply</span></li>
-              <li>Rewards: <span className="text-venom-400">to holders, no staking</span></li>
-            </ul>
+            {mode === "curve" ? (
+              <ul className="grid grid-cols-2 gap-y-1">
+                <li>Supply: <span className="text-white/70">1,000,000,000</span></li>
+                <li>Trade fee: <span className="text-white/70">1.5%</span></li>
+                <li>Graduation: <span className="text-white/70">4 {NATIVE_SYMBOL} raised</span></li>
+                <li>Max buy: <span className="text-white/70">2% of supply</span></li>
+                <li>Rewards: <span className="text-venom-400">to holders, no staking</span></li>
+              </ul>
+            ) : (
+              <ul className="grid grid-cols-2 gap-y-1">
+                <li>Supply: <span className="text-white/70">1,000,000,000</span></li>
+                <li>Pool fee: <span className="text-white/70">1% (Uniswap V3)</span></li>
+                <li>Liquidity: <span className="text-white/70">locked forever</span></li>
+                <li>Max buy: <span className="text-white/70">none</span></li>
+                <li>Rewards: <span className="text-venom-400">from pool fees, no staking</span></li>
+              </ul>
+            )}
             <div className="mt-3 space-y-1 border-t border-white/5 pt-3">
               <div className="flex items-center justify-between">
                 <span className="text-white/60">One-time creation fee</span>
@@ -348,9 +401,34 @@ export default function CreatePage() {
                 </Link>
               </div>
               {LIVE && newTokenAddress && (
-                <p className="mt-2 break-all font-mono text-[11px] text-white/40">
-                  {newTokenAddress}
-                </p>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText(newTokenAddress)}
+                    title="Copy contract address"
+                    className="mt-2 break-all font-mono text-[11px] text-white/50 underline decoration-dotted hover:text-white"
+                  >
+                    {newTokenAddress} ⧉
+                  </button>
+                  <div className="mt-2 flex flex-wrap items-center justify-center gap-3 text-[11px]">
+                    <a
+                      href={`https://dexscreener.com/robinhood/${newTokenAddress}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-venom-400 hover:underline"
+                    >
+                      DexScreener ↗
+                    </a>
+                    <a
+                      href={`https://robinhoodchain.blockscout.com/token/${newTokenAddress}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-venom-400 hover:underline"
+                    >
+                      Explorer ↗
+                    </a>
+                  </div>
+                </>
               )}
             </div>
           ) : (

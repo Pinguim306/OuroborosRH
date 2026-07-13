@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { formatEther, maxUint256, parseEther } from "viem";
+import { encodeFunctionData, formatEther, maxUint256, parseEther } from "viem";
 import {
   useAccount,
   useReadContract,
@@ -12,7 +12,7 @@ import type { Address, TokenMarket } from "@/lib/types";
 import { copy } from "@/lib/copy";
 import { compact, rh } from "@/lib/format";
 import { NATIVE_SYMBOL, ROBINHOOD_CONTRACTS } from "@/lib/chain";
-import { LIVE, curveAbi, tokenAbi, routerAbi } from "@/lib/contracts";
+import { CONTRACTS, LIVE, curveAbi, tokenAbi, routerAbi, launchpadAbi, swapRouter02Abi } from "@/lib/contracts";
 
 // Total per-trade fee on the curve. The internal split lives in the contract.
 const FEE = 0.015; // 1.5%
@@ -22,7 +22,12 @@ const SLIPPAGE_BPS = 500n; // 5% max slippage on curve trades
 const GRAD_SLIPPAGE_BPS = 600n; // ~6%
 
 const ROUTER = ROBINHOOD_CONTRACTS.uniswapV2Router as Address;
+const SWAP02 = ROBINHOOD_CONTRACTS.swapRouter02 as Address;
 const ZERO = "0x0000000000000000000000000000000000000000" as const;
+// SwapRouter02 sentinel: swap output stays in the router (for a follow-up unwrap).
+const ADDRESS_THIS = "0x0000000000000000000000000000000000000002" as Address;
+const V3_FEE_TIER = 10000; // 1% — the tier every instant-V3 pool is created with
+const V3_POOL_FEE = 0.01;
 
 function safeParseEther(v: string): bigint {
   try {
@@ -41,8 +46,9 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
 
   const num = parseFloat(amount) || 0;
   const amountWei = safeParseEther(amount);
-  const graduated = token.graduated; // trade on the DEX pair via the router
-  const spender: Address = graduated ? ROUTER : token.curve; // who needs the sell allowance
+  const isV3 = token.mode === "v3"; // instant-V3 launch: all trading on the V3 pool
+  const graduated = !isV3 && token.graduated; // curve token now trading on the V2 pair
+  const spender: Address = isV3 ? SWAP02 : graduated ? ROUTER : token.curve; // sell allowance target
 
   // --- Live reads (gated; hooks always run) ---
   const balanceQ = useReadContract({
@@ -81,7 +87,14 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
     functionName: "WETH",
     query: { enabled: LIVE && graduated },
   });
-  const weth = wethQ.data as Address | undefined;
+  // V3 leg: WETH comes from the launchpad's V3 config.
+  const wethV3Q = useReadContract({
+    address: CONTRACTS.launchpad,
+    abi: launchpadAbi,
+    functionName: "weth",
+    query: { enabled: LIVE && isV3 },
+  });
+  const weth = (isV3 ? wethV3Q.data : wethQ.data) as Address | undefined;
   const buyPath = weth ? ([weth, token.address] as const) : undefined;
   const sellPath = weth ? ([token.address, weth] as const) : undefined;
   const gradBuyQ = useReadContract({
@@ -136,19 +149,20 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
       const e = outAmount(gradSellQ);
       return e > 0n ? rh(Number(formatEther(e)), 4) : "—";
     }
-    // Curve / demo estimate.
+    // Curve / V3 / demo estimate from the current price (V3 pays the 1% pool fee).
+    const feeRate = isV3 ? V3_POOL_FEE : FEE;
     if (mode === "buy") {
-      const net = num * (1 - FEE);
+      const net = num * (1 - feeRate);
       const tokensOut = token.priceRh > 0 ? net / token.priceRh : 0;
       return `${compact(tokensOut, 2)} ${token.symbol}`;
     }
     const gross = num * token.priceRh;
-    return rh(gross * (1 - FEE), 4);
+    return rh(gross * (1 - feeRate), 4);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graduated, mode, gradBuyQ.data, gradSellQ.data, num, token.priceRh, token.symbol]);
+  }, [graduated, isV3, mode, gradBuyQ.data, gradSellQ.data, num, token.priceRh, token.symbol]);
 
   function minOut(x: bigint): bigint {
-    const bps = graduated ? GRAD_SLIPPAGE_BPS : SLIPPAGE_BPS;
+    const bps = graduated || isV3 ? GRAD_SLIPPAGE_BPS : SLIPPAGE_BPS;
     return (x * (10_000n - bps)) / 10_000n;
   }
 
@@ -177,6 +191,64 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
         functionName: "approve",
         args: [spender, maxUint256],
       });
+      return;
+    }
+
+    if (isV3) {
+      if (!address || !weth) return;
+      // Min-out from the slot0-derived estimate with the wider slippage buffer.
+      if (mode === "buy") {
+        const est = token.priceRh > 0 ? (num * (1 - V3_POOL_FEE)) / token.priceRh : 0;
+        const minTokens = minOut(safeParseEther(est > 0 ? est.toFixed(18) : "0"));
+        writeContract({
+          address: SWAP02,
+          abi: swapRouter02Abi,
+          functionName: "exactInputSingle",
+          args: [
+            {
+              tokenIn: weth,
+              tokenOut: token.address,
+              fee: V3_FEE_TIER,
+              recipient: address,
+              amountIn: amountWei,
+              amountOutMinimum: minTokens,
+              sqrtPriceLimitX96: 0n,
+            },
+          ],
+          value: amountWei, // router wraps the ETH
+        });
+      } else {
+        // Sell: swap to WETH held by the router, then unwrap to ETH for the seller —
+        // both steps in one multicall so the user never touches WETH.
+        const estEth = num * token.priceRh * (1 - V3_POOL_FEE);
+        const minEth = minOut(safeParseEther(estEth > 0 ? estEth.toFixed(18) : "0"));
+        const swapData = encodeFunctionData({
+          abi: swapRouter02Abi,
+          functionName: "exactInputSingle",
+          args: [
+            {
+              tokenIn: token.address,
+              tokenOut: weth,
+              fee: V3_FEE_TIER,
+              recipient: ADDRESS_THIS,
+              amountIn: amountWei,
+              amountOutMinimum: minEth,
+              sqrtPriceLimitX96: 0n,
+            },
+          ],
+        });
+        const unwrapData = encodeFunctionData({
+          abi: swapRouter02Abi,
+          functionName: "unwrapWETH9",
+          args: [minEth, address],
+        });
+        writeContract({
+          address: SWAP02,
+          abi: swapRouter02Abi,
+          functionName: "multicall",
+          args: [[swapData, unwrapData]],
+        });
+      }
       return;
     }
 
@@ -224,7 +296,7 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
   }
 
   const busy = LIVE && (isPending || confirming);
-  const gradNotReady = LIVE && graduated && !weth;
+  const gradNotReady = LIVE && (graduated || isV3) && !weth;
   const disabled = num <= 0 || busy || (LIVE && !isConnected) || gradNotReady;
 
   function actionLabel(): string {
@@ -239,6 +311,11 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
       {graduated && (
         <div className="mb-3 rounded-lg border border-venom-500/20 bg-venom-500/5 px-3 py-2 text-[11px] text-venom-400/90">
           ✦ Graduated — trades route through the Uniswap pair (1% fee-on-transfer applies).
+        </div>
+      )}
+      {isV3 && (
+        <div className="mb-3 rounded-lg border border-venom-500/20 bg-venom-500/5 px-3 py-2 text-[11px] text-venom-400/90">
+          ⚡ Trades route through the Uniswap V3 pool (1% pool fee).
         </div>
       )}
       <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-obsidian-900 p-1">

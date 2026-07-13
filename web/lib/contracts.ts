@@ -1,13 +1,19 @@
 import type { Address } from "./types";
 
 /**
- * Deployed contract addresses. Fill these in after running the Foundry deploy
- * script (`forge script script/Deploy.s.sol`). While they're the zero address the
- * app runs entirely on the mock-data layer so every page stays browsable.
+ * Deployed contract addresses. NEXT_PUBLIC_LAUNCHPAD_ADDRESS accepts a comma-
+ * separated list: the FIRST address is the primary launchpad (new launches go
+ * there); the rest are legacy launchpads whose markets are still read and merged
+ * into the listings, so upgrading the contract never wipes the site's history.
+ * While unset/zero the app runs entirely on the mock-data layer.
  */
+export const LAUNCHPADS: Address[] = (process.env.NEXT_PUBLIC_LAUNCHPAD_ADDRESS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter((s) => s.startsWith("0x") && s.length === 42) as Address[];
+
 export const CONTRACTS = {
-  launchpad: (process.env.NEXT_PUBLIC_LAUNCHPAD_ADDRESS ??
-    "0x0000000000000000000000000000000000000000") as Address,
+  launchpad: (LAUNCHPADS[0] ?? "0x0000000000000000000000000000000000000000") as Address,
 };
 
 export const isDeployed = (a: Address) =>
@@ -32,6 +38,29 @@ export const launchpadAbi = [
       { name: "curve", type: "address" },
     ],
   },
+  {
+    type: "function",
+    name: "createTokenV3",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "symbol", type: "string" },
+      { name: "metadataURI", type: "string" },
+      { name: "devBuy", type: "uint256" },
+    ],
+    outputs: [
+      { name: "token", type: "address" },
+      { name: "pool", type: "address" },
+    ],
+  },
+  {
+    type: "function",
+    name: "isV3Token",
+    stateMutability: "view",
+    inputs: [{ name: "token", type: "address" }],
+    outputs: [{ type: "bool" }],
+  },
+  { type: "function", name: "weth", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   {
     type: "function",
     name: "creationFee",
@@ -311,5 +340,68 @@ export const routerAbi = [
       { name: "deadline", type: "uint256" },
     ],
     outputs: [],
+  },
+] as const;
+
+/** Uniswap V3 pool — just the price slot for instant-V3 markets. */
+export const v3PoolAbi = [
+  {
+    type: "function",
+    name: "slot0",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [
+      { name: "sqrtPriceX96", type: "uint160" },
+      { name: "tick", type: "int24" },
+      { name: "observationIndex", type: "uint16" },
+      { name: "observationCardinality", type: "uint16" },
+      { name: "observationCardinalityNext", type: "uint16" },
+      { name: "feeProtocol", type: "uint8" },
+      { name: "unlocked", type: "bool" },
+    ],
+  },
+] as const;
+
+/** Uniswap SwapRouter02 — V3 swaps for instant-V3 tokens. exactInputSingle has no
+ *  deadline field on router02; sells use multicall(swap -> unwrapWETH9) so the
+ *  seller receives native ETH instead of WETH. */
+export const swapRouter02Abi = [
+  {
+    type: "function",
+    name: "exactInputSingle",
+    stateMutability: "payable",
+    inputs: [
+      {
+        name: "params",
+        type: "tuple",
+        components: [
+          { name: "tokenIn", type: "address" },
+          { name: "tokenOut", type: "address" },
+          { name: "fee", type: "uint24" },
+          { name: "recipient", type: "address" },
+          { name: "amountIn", type: "uint256" },
+          { name: "amountOutMinimum", type: "uint256" },
+          { name: "sqrtPriceLimitX96", type: "uint160" },
+        ],
+      },
+    ],
+    outputs: [{ name: "amountOut", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "unwrapWETH9",
+    stateMutability: "payable",
+    inputs: [
+      { name: "amountMinimum", type: "uint256" },
+      { name: "recipient", type: "address" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "multicall",
+    stateMutability: "payable",
+    inputs: [{ name: "data", type: "bytes[]" }],
+    outputs: [{ name: "results", type: "bytes[]" }],
   },
 ] as const;

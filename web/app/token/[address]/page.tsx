@@ -74,9 +74,11 @@ export default function TokenPage() {
           <div className="flex items-center gap-2">
             <h1 className="font-display text-2xl font-bold">{token.name}</h1>
             <span className="chip">{token.symbol}</span>
-            {token.graduated && (
+            {token.mode === "v3" ? (
+              <span className="chip border-venom-500/40 text-venom-400">⚡ V3</span>
+            ) : token.graduated ? (
               <span className="chip border-venom-500/40 text-venom-400">✦ Graduated</span>
-            )}
+            ) : null}
           </div>
           <p className="mt-1 max-w-xl text-sm text-white/50">{token.description}</p>
           {token.createdAt ? (
@@ -109,7 +111,9 @@ export default function TokenPage() {
 
           {/* Chart: DexScreener once graduated (has a live DEX pair), else our
               on-chain marketcap chart for the bonding-curve phase. */}
-          {token.graduated && dexscreenerEmbedUrl(token.pair) ? (
+          {(token.mode === "v3" || token.graduated) && dexscreenerEmbedUrl(token.pair) ? (
+            // V3 launches chart on DexScreener from their very first trade; curve
+            // tokens switch to it after graduating.
             <DexScreenerChart pair={token.pair} />
           ) : LIVE && activity.candles.length > 0 ? (
             <CandleChart candles={activity.candles} ethUsd={ethUsd} />
@@ -117,23 +121,37 @@ export default function TokenPage() {
             <MarketcapChart series={series} ethUsd={ethUsd} />
           )}
 
-          {/* Bonding curve / graduation */}
-          <div className="glass p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-semibold">Bonding curve</h3>
-              <span className="text-xs text-white/40">
-                Graduates at 4 {NATIVE_SYMBOL} raised · max buy 2%
-              </span>
-            </div>
-            {token.graduated ? (
-              <div className="rounded-xl bg-venom-500/10 p-4 text-center text-sm text-venom-400">
-                This token filled its curve and graduated to Uniswap V2. The migrated liquidity is
-                permanent — its LP tokens were burned — and trading now happens on the DEX pair.
+          {/* Market status: V3 pool, graduated, or bonding-curve progress */}
+          {token.mode === "v3" ? (
+            <div className="glass p-6">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="font-semibold">Uniswap V3 pool</h3>
+                <span className="text-xs text-white/40">1% pool fee · liquidity locked</span>
               </div>
-            ) : (
-              <ProgressBar value={token.graduationProgress} label="Progress to graduation" />
-            )}
-          </div>
+              <div className="rounded-xl bg-venom-500/10 p-4 text-center text-sm text-venom-400">
+                This token launched straight into a Uniswap V3 pool — no bonding curve. Its
+                liquidity is locked forever; the pool&apos;s 1% swap fee is harvested for the
+                protocol and streamed to holders.
+              </div>
+            </div>
+          ) : (
+            <div className="glass p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="font-semibold">Bonding curve</h3>
+                <span className="text-xs text-white/40">
+                  Graduates at 4 {NATIVE_SYMBOL} raised · max buy 2%
+                </span>
+              </div>
+              {token.graduated ? (
+                <div className="rounded-xl bg-venom-500/10 p-4 text-center text-sm text-venom-400">
+                  This token filled its curve and graduated to Uniswap V2. The migrated liquidity is
+                  permanent — its LP tokens were burned — and trading now happens on the DEX pair.
+                </div>
+              ) : (
+                <ProgressBar value={token.graduationProgress} label="Progress to graduation" />
+              )}
+            </div>
+          )}
 
           {/* Trades */}
           <div className="glass overflow-hidden">

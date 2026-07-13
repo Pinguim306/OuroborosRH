@@ -5,6 +5,8 @@ export interface TokenMarket {
   curve: Address;
   rewards: Address;
   pair?: Address; // Uniswap V2 pair, set once the token graduates
+  mode?: "curve" | "v3"; // launch mode: bonding curve (default) or instant V3 pool
+  launchpad?: Address; // which launchpad registered this market (multi-launchpad)
   name: string;
   symbol: string;
   description: string;
