@@ -61,6 +61,7 @@ export const launchpadAbi = [
     outputs: [{ type: "bool" }],
   },
   { type: "function", name: "weth", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { type: "function", name: "feeLocker", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   {
     type: "function",
     name: "creationFee",
@@ -343,8 +344,21 @@ export const routerAbi = [
   },
 ] as const;
 
-/** Uniswap V3 pool — just the price slot for instant-V3 markets. */
+/** Uniswap V3 pool — price slot + Swap events for instant-V3 markets. */
 export const v3PoolAbi = [
+  {
+    type: "event",
+    name: "Swap",
+    inputs: [
+      { name: "sender", type: "address", indexed: true },
+      { name: "recipient", type: "address", indexed: true },
+      { name: "amount0", type: "int256", indexed: false },
+      { name: "amount1", type: "int256", indexed: false },
+      { name: "sqrtPriceX96", type: "uint160", indexed: false },
+      { name: "liquidity", type: "uint128", indexed: false },
+      { name: "tick", type: "int24", indexed: false },
+    ],
+  },
   {
     type: "function",
     name: "slot0",
@@ -403,5 +417,27 @@ export const swapRouter02Abi = [
     stateMutability: "payable",
     inputs: [{ name: "data", type: "bytes[]" }],
     outputs: [{ name: "results", type: "bytes[]" }],
+  },
+] as const;
+
+/** FeeLocker — harvest a V3 position's accrued pool fees (permissionless). */
+export const feeLockerAbi = [
+  {
+    type: "function",
+    name: "collect",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [
+      { name: "ethSide", type: "uint256" },
+      { name: "tokenSide", type: "uint256" },
+    ],
+  },
+  {
+    type: "event",
+    name: "PositionLocked",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "token", type: "address", indexed: true },
+    ],
   },
 ] as const;

@@ -19,6 +19,7 @@ import { CandleChart } from "@/components/CandleChart";
 import { DexScreenerChart } from "@/components/DexScreenerChart";
 import { dexscreenerEmbedUrl } from "@/lib/chain";
 import { TokenAvatar } from "@/components/TokenAvatar";
+import { HarvestFees } from "@/components/HarvestFees";
 import { SocialLinks } from "@/components/SocialLinks";
 import { useTokenMeta } from "@/lib/useMeta";
 
@@ -133,6 +134,7 @@ export default function TokenPage() {
                 liquidity is locked forever; the pool&apos;s 1% swap fee is harvested for the
                 protocol and streamed to holders.
               </div>
+              <HarvestFees token={token} />
             </div>
           ) : (
             <div className="glass p-6">
