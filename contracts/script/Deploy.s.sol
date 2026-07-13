@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {Launchpad} from "src/Launchpad.sol";
+import {FeeLocker} from "src/FeeLocker.sol";
+import {INonfungiblePositionManager} from "src/interfaces/IUniswapV3.sol";
 
 /// @notice Deploys the Ouroboros Launchpad with default params.
 ///         Run: forge script script/Deploy.s.sol --rpc-url $RPC --broadcast
@@ -71,10 +73,14 @@ contract Deploy is Script {
 
         vm.startBroadcast(pk);
         Launchpad launchpad = new Launchpad(owner, feeRecipient, router, creationFee, params);
-        launchpad.setV3Config(positionManager, swapRouter02, holderShareBps, v3);
+        // The FeeLocker is deployed separately (embedding it in the Launchpad pushed
+        // the factory past the EIP-170 contract size limit) and wired via setV3Config.
+        address weth = INonfungiblePositionManager(positionManager).WETH9();
+        FeeLocker feeLocker = new FeeLocker(positionManager, address(launchpad), weth, holderShareBps);
+        launchpad.setV3Config(positionManager, swapRouter02, address(feeLocker), v3);
         vm.stopBroadcast();
 
         console2.log("Launchpad deployed at:", address(launchpad));
-        console2.log("FeeLocker deployed at:", address(launchpad.feeLocker()));
+        console2.log("FeeLocker deployed at:", address(feeLocker));
     }
 }

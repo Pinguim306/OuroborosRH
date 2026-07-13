@@ -46,7 +46,8 @@ contract V3LaunchTest is Test {
         });
         MockDexRouter v2router = new MockDexRouter(address(new MockDexFactory()), address(new MockWETH()));
         launchpad = new Launchpad(address(this), dev, address(v2router), CREATION_FEE, p);
-        launchpad.setV3Config(address(npm), address(swapRouter), 4000, _v3Params());
+        FeeLocker locker = new FeeLocker(address(npm), address(launchpad), address(weth), 4000);
+        launchpad.setV3Config(address(npm), address(swapRouter), address(locker), _v3Params());
 
         vm.deal(alice, 100 ether);
     }
