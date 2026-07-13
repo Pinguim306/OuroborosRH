@@ -21,7 +21,9 @@ export const isDeployed = (a: Address) =>
 
 export const LIVE = isDeployed(CONTRACTS.launchpad);
 
-/** Minimal ABIs — only the entrypoints the frontend calls. */
+/** Minimal ABIs — only the entrypoints the frontend calls. The create functions
+ *  appear twice: the 4-arg overload matches v1 launchpads, the 5-arg one (with the
+ *  Loop/Creator rewards flag) matches v2+ — viem picks the overload by arg count. */
 export const launchpadAbi = [
   {
     type: "function",
@@ -32,6 +34,22 @@ export const launchpadAbi = [
       { name: "symbol", type: "string" },
       { name: "metadataURI", type: "string" },
       { name: "devBuy", type: "uint256" },
+    ],
+    outputs: [
+      { name: "token", type: "address" },
+      { name: "curve", type: "address" },
+    ],
+  },
+  {
+    type: "function",
+    name: "createToken",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "symbol", type: "string" },
+      { name: "metadataURI", type: "string" },
+      { name: "devBuy", type: "uint256" },
+      { name: "creatorFees", type: "bool" },
     ],
     outputs: [
       { name: "token", type: "address" },
@@ -52,6 +70,36 @@ export const launchpadAbi = [
       { name: "token", type: "address" },
       { name: "pool", type: "address" },
     ],
+  },
+  {
+    type: "function",
+    name: "createTokenV3",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "symbol", type: "string" },
+      { name: "metadataURI", type: "string" },
+      { name: "devBuy", type: "uint256" },
+      { name: "creatorFees", type: "bool" },
+    ],
+    outputs: [
+      { name: "token", type: "address" },
+      { name: "pool", type: "address" },
+    ],
+  },
+  {
+    type: "function",
+    name: "LAUNCHPAD_VERSION",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "isCreatorFeeToken",
+    stateMutability: "view",
+    inputs: [{ name: "token", type: "address" }],
+    outputs: [{ type: "bool" }],
   },
   {
     type: "function",

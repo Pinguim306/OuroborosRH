@@ -11,6 +11,7 @@ import { useHolderShare, totalFeesEth } from "@/lib/useFees";
 import type { TokenMarket } from "@/lib/types";
 import { StatTile } from "@/components/StatTile";
 import { LoopDiagram } from "@/components/LoopDiagram";
+import { LivePulse } from "@/components/LivePulse";
 
 export default function HomePage() {
   const ethUsd = useEthPrice();
@@ -55,6 +56,9 @@ export default function HomePage() {
         <StatTile label="Tokens launched" value={compact(stats.tokens, 0)} />
         <StatTile label="Explore" value="Discover →" sub="Browse every token" />
       </section>
+
+      {/* Live feed + King of the Hill (renders only once there is activity) */}
+      {LIVE && <LivePulse tokens={all} />}
 
       {/* How the loop works */}
       <section className="py-16 md:py-24">

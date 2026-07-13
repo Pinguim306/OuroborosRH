@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { formatEther, parseEther, parseEventLogs } from "viem";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
@@ -23,6 +23,9 @@ export default function CreatePage() {
   const [devBuy, setDevBuy] = useState("");
   // Launch mode: bonding curve (graduates to V2) or straight into a Uniswap V3 pool.
   const [mode, setMode] = useState<"curve" | "v3">("curve");
+  // Rewards mode: Loop Rewards streams the fee share to all holders (classic);
+  // Creator Rewards pays it to the creator's wallet. Fixed forever at launch.
+  const [rewards, setRewards] = useState<"loop" | "creator">("loop");
 
   // Image upload state
   const fileRef = useRef<HTMLInputElement>(null);
@@ -45,6 +48,15 @@ export default function CreatePage() {
     functionName: "params",
     query: { enabled: LIVE },
   });
+  // v1 launchpads don't have the rewards-mode flag (or this getter) — the read
+  // fails there, the selector stays hidden and the 4-arg create signature is used.
+  const { data: lpVersion } = useReadContract({
+    address: CONTRACTS.launchpad,
+    abi: launchpadAbi,
+    functionName: "LAUNCHPAD_VERSION",
+    query: { enabled: LIVE },
+  });
+  const supportsRewardsMode = !LIVE || (typeof lpVersion === "bigint" && lpVersion >= 2n);
 
   // Largest dev buy that still fits under the anti-whale cap (same 2% every buyer
   // gets). Computed from the launch params so it tracks whatever they're set to;
@@ -81,6 +93,20 @@ export default function CreatePage() {
       return undefined;
     }
   }, [receipt]);
+
+  // Ping the Telegram announcement endpoint once the launch confirms. Fire-and-
+  // forget: a failed announcement never affects the launch UX. The endpoint
+  // re-verifies everything on-chain and no-ops when the bot isn't configured.
+  const announcedRef = useRef(false);
+  useEffect(() => {
+    if (!LIVE || !isSuccess || !newTokenAddress || announcedRef.current) return;
+    announcedRef.current = true;
+    fetch("/api/announce", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: newTokenAddress }),
+    }).catch(() => {});
+  }, [isSuccess, newTokenAddress]);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -183,12 +209,17 @@ export default function CreatePage() {
     const devBuyWei = clampedDevBuy > 0 ? parseEther(clampedDevBuy.toFixed(18)) : 0n;
     const fee = (creationFee as bigint | undefined) ?? parseEther("0.01"); // excess is refunded on-chain
 
+    // v2 launchpads take the rewards-mode flag; v1 keeps the legacy 4-arg call.
+    const args = supportsRewardsMode
+      ? ([form.name, form.symbol, metadataURI, devBuyWei, rewards === "creator"] as const)
+      : ([form.name, form.symbol, metadataURI, devBuyWei] as const);
+
     writeContract({
       chainId: CHAIN_ID,
       address: CONTRACTS.launchpad,
       abi: launchpadAbi,
       functionName: mode === "v3" ? "createTokenV3" : "createToken",
-      args: [form.name, form.symbol, metadataURI, devBuyWei],
+      args,
       value: fee + devBuyWei,
     });
   }
@@ -311,6 +342,54 @@ export default function CreatePage() {
               </div>
             </div>
 
+            {/* Rewards mode: who receives the fee stream — every holder (the loop)
+                or the creator's wallet. Immutable once launched. */}
+            {supportsRewardsMode && (
+              <div>
+                <span className="label mb-1.5 block">Rewards mode</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      {
+                        key: "loop",
+                        title: "🐍 Loop Rewards",
+                        desc:
+                          mode === "curve"
+                            ? "The 0.4% holder fee streams to every holder automatically — the classic Ouroboros loop."
+                            : "40% of harvested pool fees stream to every holder automatically — the classic Ouroboros loop.",
+                      },
+                      {
+                        key: "creator",
+                        title: "👑 Creator Rewards",
+                        desc:
+                          mode === "curve"
+                            ? "The 0.4% holder fee is paid straight to your wallet on every trade instead."
+                            : "The 40% holder share of harvested pool fees is paid straight to your wallet instead.",
+                      },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setRewards(opt.key)}
+                      className={`rounded-xl border p-3 text-left transition ${
+                        rewards === opt.key
+                          ? "border-venom-500/60 bg-venom-500/10"
+                          : "border-white/10 bg-obsidian-900/60 hover:border-white/25"
+                      }`}
+                    >
+                      <div
+                        className={`text-sm font-semibold ${rewards === opt.key ? "text-venom-400" : "text-white/80"}`}
+                      >
+                        {opt.title}
+                      </div>
+                      <p className="mt-1 text-[11px] leading-relaxed text-white/45">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Dev buy — the creator can buy their own launch first, capped at the
                 same 2% anti-whale limit as everyone else. */}
             <div>
@@ -357,7 +436,12 @@ export default function CreatePage() {
                 <li>Trade fee: <span className="text-white/70">1.5%</span></li>
                 <li>Graduation: <span className="text-white/70">4 {NATIVE_SYMBOL} raised</span></li>
                 <li>Max buy: <span className="text-white/70">2% of supply</span></li>
-                <li>Rewards: <span className="text-venom-400">to holders, no staking</span></li>
+                <li>
+                  Rewards:{" "}
+                  <span className="text-venom-400">
+                    {rewards === "creator" ? "to the creator" : "to holders, no staking"}
+                  </span>
+                </li>
               </ul>
             ) : (
               <ul className="grid grid-cols-2 gap-y-1">
@@ -365,7 +449,12 @@ export default function CreatePage() {
                 <li>Pool fee: <span className="text-white/70">1% (Uniswap V3)</span></li>
                 <li>Liquidity: <span className="text-white/70">locked forever</span></li>
                 <li>Max buy: <span className="text-white/70">none</span></li>
-                <li>Rewards: <span className="text-venom-400">from pool fees, no staking</span></li>
+                <li>
+                  Rewards:{" "}
+                  <span className="text-venom-400">
+                    {rewards === "creator" ? "pool fees to the creator" : "from pool fees, no staking"}
+                  </span>
+                </li>
               </ul>
             )}
             <div className="mt-3 space-y-1 border-t border-white/5 pt-3">

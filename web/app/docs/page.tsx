@@ -178,6 +178,19 @@ export default function DocsPage() {
               see everything you&apos;ve earned across the tokens you hold, and claim whenever you
               want. Hold longer and you are simply present for more inflows.
             </p>
+            <p>
+              At launch the creator picks one of two <strong>rewards modes</strong>, fixed forever:
+            </p>
+            <KeyVals
+              rows={[
+                ["🐍 Loop Rewards", "the fee share streams to every holder — the classic loop"],
+                ["👑 Creator Rewards", "the same fee share is paid to the creator's wallet instead"],
+              ]}
+            />
+            <p>
+              Creator Rewards tokens are clearly badged on their token page, and their Rewards
+              panel explains that holding them does not accrue {NATIVE_SYMBOL}.
+            </p>
           </Section>
 
           <Section id="graduation" title="Graduation">

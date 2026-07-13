@@ -99,7 +99,7 @@ function mapToken(
 /** Per-market batched reads. Failing reads resolve to undefined and are harmless:
  *  curve getters fail on V3 pools, slot0 fails on curves, isV3Token fails on old
  *  launchpads — each side of the fork only trusts its own reads. */
-const STATS_PER_MARKET = 9;
+const STATS_PER_MARKET = 10;
 
 function statsCalls(m: MarketTuple, launchpad: Address) {
   return [
@@ -112,6 +112,8 @@ function statsCalls(m: MarketTuple, launchpad: Address) {
     { address: m.curve, abi: curveAbi, functionName: "pair" } as const,
     { address: launchpad, abi: launchpadAbi, functionName: "isV3Token", args: [m.token] } as const,
     { address: m.curve, abi: v3PoolAbi, functionName: "slot0" } as const,
+    // Fails (→ false) on v1 launchpads, which predate the Creator Rewards mode.
+    { address: launchpad, abi: launchpadAbi, functionName: "isCreatorFeeToken", args: [m.token] } as const,
   ];
 }
 
@@ -136,6 +138,7 @@ function fromStats(
     asAddr(r[b + 6]?.result),
   );
   t.launchpad = launchpad;
+  t.creatorFees = Boolean(r[b + 9]?.result);
   const isV3 = Boolean(r[b + 7]?.result);
   if (isV3) {
     t.mode = "v3";

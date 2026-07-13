@@ -21,6 +21,10 @@ import {
 ///         `feeRecipient` collects the per-trade platform fee (`devFeeBps`) and a
 ///         fixed creation fee charged on every launch.
 contract Launchpad is Ownable, ReentrancyGuard {
+    /// @notice Bumped when the create functions' ABI changes; the frontend reads this
+    ///         to know which signature to call (older deployments lack the getter).
+    uint256 public constant LAUNCHPAD_VERSION = 2;
+
     struct CurveParams {
         uint256 totalSupply; // full token supply, all sold via the curve
         uint256 virtualNative; // virtual native seed for the starting price
@@ -73,6 +77,11 @@ contract Launchpad is Ownable, ReentrancyGuard {
     /// @notice True for tokens launched straight into a V3 pool (their Market.curve
     ///         field holds the pool address instead of a bonding curve).
     mapping(address => bool) public isV3Token;
+
+    /// @notice True for tokens launched in Creator Rewards mode: the fee share that
+    ///         Loop Rewards streams to holders is paid to the creator instead. Chosen
+    ///         at launch, immutable for the token's lifetime.
+    mapping(address => bool) public isCreatorFeeToken;
 
     struct Market {
         address token;
@@ -184,11 +193,17 @@ contract Launchpad is Ownable, ReentrancyGuard {
     ///         devBuy`; any excess is refunded. The dev buy is subject to the same
     ///         anti-whale cap (`maxBuyBps`) as every other buyer, so it reverts if it
     ///         would exceed that share of supply.
+    ///
+    ///         `creatorFees` picks the rewards mode, fixed forever at launch:
+    ///         false = Loop Rewards (the holder fee streams to all holders — the
+    ///         classic loop); true = Creator Rewards (that same fee is paid to the
+    ///         creator's wallet instead).
     function createToken(
         string calldata name,
         string calldata symbol,
         string calldata metadataURI,
-        uint256 devBuy
+        uint256 devBuy,
+        bool creatorFees
     ) external payable nonReentrant returns (address token, address curve) {
         if (msg.value < creationFee + devBuy) revert InsufficientCreationFee();
         CurveParams memory p = params;
@@ -203,6 +218,7 @@ contract Launchpad is Ownable, ReentrancyGuard {
         BondingCurve c = new BondingCurve(
             address(t),
             feeRecipient,
+            creatorFees ? msg.sender : address(0),
             router,
             p.virtualNative,
             p.totalSupply,
@@ -230,6 +246,7 @@ contract Launchpad is Ownable, ReentrancyGuard {
         //    and refund the remainder. (L2 fix.)
         token = address(t);
         curve = address(c);
+        if (creatorFees) isCreatorFeeToken[token] = true;
         _recordMarket(token, curve, name, symbol, metadataURI);
         _settle(c, devBuy);
     }
@@ -246,11 +263,16 @@ contract Launchpad is Ownable, ReentrancyGuard {
     ///         transfer tax — the protocol's take is the pool fee tier itself. The 2%
     ///         anti-whale cap does not apply in this mode (V3 has no such hook), and
     ///         `devBuy` executes as the pool's very first swap, in this transaction.
+    ///
+    ///         `creatorFees` picks the rewards mode, fixed forever at launch: false =
+    ///         Loop Rewards (the FeeLocker's holder share of harvested pool fees
+    ///         streams to all holders); true = Creator Rewards (it pays the creator).
     function createTokenV3(
         string calldata name,
         string calldata symbol,
         string calldata metadataURI,
-        uint256 devBuy
+        uint256 devBuy,
+        bool creatorFees
     ) external payable nonReentrant returns (address token, address pool) {
         if (msg.value < creationFee + devBuy) revert InsufficientCreationFee();
         V3Params memory v = v3Params;
@@ -268,12 +290,13 @@ contract Launchpad is Ownable, ReentrancyGuard {
         //    liquidity to the FeeLocker. Pool and locker are excluded from dividends
         //    before they ever hold tokens.
         pool = _createV3Pool(t, v);
-        uint256 positionId = _mintV3Position(t, v);
+        uint256 positionId = _mintV3Position(t, v, creatorFees ? msg.sender : address(0));
 
         // 3. Freeze the dividend config forever, record, and emit.
         t.renounceAuthority();
         _recordMarket(token, pool, name, symbol, metadataURI);
         isV3Token[token] = true;
+        if (creatorFees) isCreatorFeeToken[token] = true;
         emit TokenLaunchedV3(token, pool, positionId);
 
         // 4. Creation fee, optional dev buy (the pool's first swap), refund.
@@ -297,7 +320,11 @@ contract Launchpad is Ownable, ReentrancyGuard {
 
     /// @dev Mint the full supply as a single-sided position (all tokens, no ETH)
     ///      directly to the FeeLocker, then register it and burn any rounding dust.
-    function _mintV3Position(OuroToken t, V3Params memory v) internal returns (uint256 positionId) {
+    ///      `rewardsRecipient` = 0 for Loop Rewards, creator address for Creator Rewards.
+    function _mintV3Position(OuroToken t, V3Params memory v, address rewardsRecipient)
+        internal
+        returns (uint256 positionId)
+    {
         bool tokenIs0 = address(t) < weth;
         uint256 supply = t.balanceOf(address(this));
         t.approve(address(positionManager), supply);
@@ -318,7 +345,7 @@ contract Launchpad is Ownable, ReentrancyGuard {
             })
         );
         t.approve(address(positionManager), 0);
-        feeLocker.register(positionId, address(t), tokenIs0);
+        feeLocker.register(positionId, address(t), tokenIs0, rewardsRecipient);
 
         // Rounding dust the mint didn't take is burned (excluded first, so it can
         // never dilute holder rewards).

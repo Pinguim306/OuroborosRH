@@ -11,6 +11,7 @@ import {
 import { tokenAbi } from "@/lib/contracts";
 import { CHAIN_ID } from "@/lib/chain";
 import { useLiveMarkets } from "@/lib/useMarkets";
+import { usePnL, type TokenPnl } from "@/lib/usePnL";
 import type { TokenMarket } from "@/lib/types";
 import { copy } from "@/lib/copy";
 import { compact, usdFromEth } from "@/lib/format";
@@ -57,7 +58,19 @@ export function LivePortfolio() {
     }))
     .filter((p) => p.balance > 0 || p.claimableRh > 0);
 
+  // Trading PnL (cost basis from on-chain events) for the held tokens only.
+  const pnl = usePnL(
+    positions.map((p) => p.token),
+    address,
+  );
+
   const totalClaimable = positions.reduce((s, p) => s + p.claimableRh, 0);
+  const totalValue = positions.reduce((s, p) => s + p.balance * p.token.priceRh, 0);
+  const totalNetPnl = positions.reduce((s, p) => {
+    const c = pnl.get(p.token.address.toLowerCase());
+    if (!c) return s;
+    return s + p.balance * p.token.priceRh + c.receivedEth - c.investedEth;
+  }, 0);
 
   if (!isConnected) {
     return (
@@ -69,10 +82,15 @@ export function LivePortfolio() {
 
   return (
     <>
-      <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3">
+      <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatTile label="Total claimable" value={usdFromEth(totalClaimable, ethUsd, 2)} accent />
+        <StatTile label="Portfolio value" value={usdFromEth(totalValue, ethUsd, 2)} />
+        <StatTile
+          label="Trading PnL"
+          value={`${totalNetPnl >= 0 ? "+" : "−"}${usdFromEth(Math.abs(totalNetPnl), ethUsd, 2)}`}
+          sub={totalNetPnl >= 0 ? "in profit" : "underwater"}
+        />
         <StatTile label="Tokens held" value={String(positions.length)} />
-        <StatTile label="Staking required" value="None" sub="Rewards accrue automatically" />
       </div>
 
       {isLoading || q.isLoading ? (
@@ -82,7 +100,12 @@ export function LivePortfolio() {
       ) : (
         <div className="mt-8 space-y-3">
           {positions.map((p) => (
-            <PositionRow key={p.token.address} position={p} ethUsd={ethUsd} />
+            <PositionRow
+              key={p.token.address}
+              position={p}
+              ethUsd={ethUsd}
+              pnl={pnl.get(p.token.address.toLowerCase())}
+            />
           ))}
         </div>
       )}
@@ -90,10 +113,23 @@ export function LivePortfolio() {
   );
 }
 
-function PositionRow({ position: p, ethUsd }: { position: Position; ethUsd: number }) {
+function PositionRow({
+  position: p,
+  ethUsd,
+  pnl,
+}: {
+  position: Position;
+  ethUsd: number;
+  pnl?: TokenPnl;
+}) {
   const { writeContract, data: hash, isPending } = useWriteContract();
   const { isLoading: confirming } = useWaitForTransactionReceipt({ hash });
   const busy = isPending || confirming;
+
+  const valueEth = p.balance * p.token.priceRh;
+  // Trading PnL: what the bag is worth now + everything cashed out − everything
+  // paid in. Claimed holder rewards aren't part of it.
+  const netEth = pnl ? valueEth + pnl.receivedEth - pnl.investedEth : undefined;
 
   return (
     <div className="glass flex flex-wrap items-center gap-4 p-4 md:flex-nowrap">
@@ -110,6 +146,25 @@ function PositionRow({ position: p, ethUsd }: { position: Position; ethUsd: numb
           </div>
         </div>
       </Link>
+
+      <div className="text-center">
+        <div className="label">Value</div>
+        <div className="font-mono text-sm font-semibold text-white/80">
+          {usdFromEth(valueEth, ethUsd, 2)}
+        </div>
+      </div>
+
+      {netEth !== undefined && (
+        <div className="text-center">
+          <div className="label">PnL</div>
+          <div
+            className={`font-mono text-sm font-semibold ${netEth >= 0 ? "text-venom-400" : "text-red-400"}`}
+          >
+            {netEth >= 0 ? "+" : "−"}
+            {usdFromEth(Math.abs(netEth), ethUsd, 2)}
+          </div>
+        </div>
+      )}
 
       <div className="text-center">
         <div className="label">Claimable</div>

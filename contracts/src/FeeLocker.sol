@@ -39,6 +39,9 @@ contract FeeLocker is ReentrancyGuard {
     struct Position {
         address token;
         bool tokenIs0; // whether the launched token is token0 of the pair
+        // Where the holder-share of collected ETH fees goes. address(0) = Loop
+        // Rewards (streamed to all holders); else Creator Rewards (paid directly).
+        address rewardsRecipient;
     }
 
     mapping(uint256 => Position) public positions; // tokenId => position info
@@ -63,9 +66,11 @@ contract FeeLocker is ReentrancyGuard {
 
     /// @notice Record a freshly minted position NFT. Only the launchpad may register,
     ///         in the same transaction that mints the position to this locker.
-    function register(uint256 tokenId, address token, bool tokenIs0) external {
+    ///         `rewardsRecipient` = address(0) streams the holder share to all holders
+    ///         (Loop Rewards); any other address receives it directly (Creator Rewards).
+    function register(uint256 tokenId, address token, bool tokenIs0, address rewardsRecipient) external {
         if (msg.sender != launchpad) revert NotLaunchpad();
-        positions[tokenId] = Position({token: token, tokenIs0: tokenIs0});
+        positions[tokenId] = Position({token: token, tokenIs0: tokenIs0, rewardsRecipient: rewardsRecipient});
         emit PositionLocked(tokenId, token);
     }
 
@@ -86,11 +91,18 @@ contract FeeLocker is ReentrancyGuard {
 
         address protocol = ILaunchpadFees(launchpad).feeRecipient();
 
-        // ETH side: unwrap, stream the holder share into the token, rest to protocol.
+        // ETH side: unwrap, route the holder share (to all holders in Loop Rewards
+        // mode, or straight to the creator in Creator Rewards mode), rest to protocol.
         if (ethSide > 0) {
             IWETH9(weth).withdraw(ethSide);
             uint256 toHolders = (ethSide * holderShareBps) / BPS;
-            if (toHolders > 0) IDividendToken(p.token).distributeRewards{value: toHolders}();
+            if (toHolders > 0) {
+                if (p.rewardsRecipient == address(0)) {
+                    IDividendToken(p.token).distributeRewards{value: toHolders}();
+                } else {
+                    _sendNative(p.rewardsRecipient, toHolders);
+                }
+            }
             uint256 toProtocol = ethSide - toHolders;
             if (toProtocol > 0) _sendNative(protocol, toProtocol);
             emit FeesCollected(tokenId, p.token, toHolders, toProtocol, tokenSide);
