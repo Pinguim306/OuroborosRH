@@ -44,8 +44,10 @@ contract Deploy is Script {
         // ------------------------------------------------------------------ //
         //  Instant-V3 launch mode                                            //
         // ------------------------------------------------------------------ //
-        // Uniswap V3 NonfungiblePositionManager + SwapRouter02 on Robinhood Chain.
-        address positionManager = vm.envOr("V3_POSITION_MANAGER", 0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
+        // Uniswap V3 NonfungiblePositionManager + SwapRouter02 on Robinhood Chain
+        // (chain 4663 has its own deployment — addresses from @uniswap/sdk-core's
+        // CHAIN_TO_ADDRESSES_MAP, NOT the Ethereum-mainnet canonical ones).
+        address positionManager = vm.envOr("V3_POSITION_MANAGER", 0x73991a25C818Bf1f1128dEAaB1492D45638DE0D3);
         address swapRouter02 = vm.envOr("V3_SWAP_ROUTER", 0xCaf681a66D020601342297493863E78C959E5cb2);
 
         // Initial pool price: 1e-9 WETH per token => 1 ETH marketcap for the 1B
