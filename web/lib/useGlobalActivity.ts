@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
 import { curveAbi, v3PoolAbi, LIVE } from "./contracts";
-import { blockClock, parseV3Swap, supplyOf, wethOf } from "./useActivity";
+import { blockClock, parseV3Swap, supplyOf, wethOf, v3TradersByTx, INFRA_ADDRESSES } from "./useActivity";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -78,31 +78,41 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
             try {
               const supply = supplyOf(t);
               const tokenIs0 = weth ? t.address.toLowerCase() < weth.toLowerCase() : true;
-              const logs =
-                t.mode === "v3"
-                  ? await client!.getContractEvents({
+              const isV3 = t.mode === "v3";
+              const [logs, traders] = await Promise.all([
+                isV3
+                  ? client!.getContractEvents({
                       address: t.curve, // the pool
                       abi: v3PoolAbi,
                       eventName: "Swap",
                       fromBlock: 0n,
                       toBlock: "latest",
                     })
-                  : await client!.getContractEvents({
+                  : client!.getContractEvents({
                       address: t.curve,
                       abi: curveAbi,
                       eventName: "Trade",
                       fromBlock: 0n,
                       toBlock: "latest",
-                    });
+                    }),
+                // V3 Swap events name the relaying router, not the wallet — the
+                // token Transfer in the same tx names the real trader.
+                isV3
+                  ? v3TradersByTx(client!, t.address, t.curve)
+                  : Promise.resolve(undefined),
+              ]);
               for (const l of logs) {
                 let trader: Address;
                 let isBuy: boolean;
                 let eth: number;
-                if (t.mode === "v3") {
+                if (isV3) {
                   const s = parseV3Swap(l, tokenIs0, supply);
-                  trader = s.trader;
                   isBuy = s.isBuy;
                   eth = s.ethAmount;
+                  trader =
+                    (isBuy
+                      ? traders?.buyerByTx.get(l.transactionHash)
+                      : traders?.sellerByTx.get(l.transactionHash)) ?? s.trader;
                 } else {
                   const a = l.args as {
                     trader: Address;
@@ -138,10 +148,12 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
         all.sort((a, b) => (a.bn === b.bn ? 0 : a.bn > b.bn ? -1 : 1));
         const trades = all.slice(0, FEED_SIZE);
 
-        // Trader leaderboard.
+        // Trader leaderboard. Routers/aggregators never make the board, even when
+        // a swap couldn't be attributed to a wallet.
         const byTrader = new Map<string, TraderStat>();
         for (const tr of all) {
           const k = tr.trader.toLowerCase();
+          if (INFRA_ADDRESSES.has(k)) continue;
           const s = byTrader.get(k) ?? { address: tr.trader, volumeEth: 0, trades: 0 };
           s.volumeEth += tr.ethAmount;
           s.trades += 1;
