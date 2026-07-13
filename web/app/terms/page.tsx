@@ -99,7 +99,18 @@ export default function TermsPage() {
           </p>
         </Clause>
 
-        <Clause n={8} title="Prohibited uses">
+        <Clause n={8} title="Ouroboros Points">
+          <p>
+            The interface may display &quot;points&quot; or similar scores derived from public
+            on-chain activity. Points are a reputation metric only: they are not money, securities,
+            tokens, or property; they have no guaranteed monetary value; and they confer no right,
+            claim, or entitlement to any current or future asset, distribution, or benefit. Scoring
+            rules may be changed, reset, or discontinued at any time. Activity intended to game the
+            scoring (including wash trading) may be excluded.
+          </p>
+        </Clause>
+
+        <Clause n={9} title="Prohibited uses">
           <p>You agree not to use the Protocol or interface to:</p>
           <ul className="mt-3 space-y-2">
             <Bullet>Violate any applicable law, regulation, or sanctions program.</Bullet>
@@ -115,7 +126,7 @@ export default function TermsPage() {
           </ul>
         </Clause>
 
-        <Clause n={9} title="No warranties">
+        <Clause n={10} title="No warranties">
           <p>
             The interface and the Protocol are provided &quot;as is&quot; and &quot;as available,&quot;
             without warranties of any kind, whether express or implied, including merchantability,
@@ -124,7 +135,7 @@ export default function TermsPage() {
           </p>
         </Clause>
 
-        <Clause n={10} title="Limitation of liability">
+        <Clause n={11} title="Limitation of liability">
           <p>
             To the maximum extent permitted by law, the operators of Ouroboros and their contributors
             will not be liable for any indirect, incidental, special, consequential, or exemplary
@@ -133,7 +144,7 @@ export default function TermsPage() {
           </p>
         </Clause>
 
-        <Clause n={11} title="Changes to these terms">
+        <Clause n={12} title="Changes to these terms">
           <p>
             We may update these Terms from time to time. Changes are effective when posted. Your
             continued use of the interface after changes are posted constitutes acceptance of the

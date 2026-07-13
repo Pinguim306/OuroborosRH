@@ -19,6 +19,7 @@ const sections = [
   { id: "rewards", label: "Holder rewards" },
   { id: "graduation", label: "Graduation" },
   { id: "v3", label: "Instant V3 launch" },
+  { id: "points", label: "Ouroboros Points" },
   { id: "safety", label: "Safety & anti-whale" },
   { id: "faq", label: "FAQ" },
 ] as const;
@@ -228,6 +229,29 @@ export default function DocsPage() {
               page; the split is enforced on-chain, so the caller receives nothing. Buys pay
               the fee in {NATIVE_SYMBOL}; sells pay it in the token, and that token side goes
               to the protocol. V3-mode tokens carry no transfer tax.
+            </p>
+          </Section>
+
+          <Section id="points" title="Ouroboros Points">
+            <p>
+              <strong>Season 1 is live.</strong> Points are a reputation score computed entirely
+              from public on-chain events — no signup, no snapshot, nothing to opt into. Using the
+              loop is earning:
+            </p>
+            <KeyVals
+              rows={[
+                ["Trade", "1,000 pts per ETH of buy/sell volume (curve or V3)"],
+                ["Launch", "500 pts per token launched"],
+                ["Build volume", "100 pts per ETH of volume your tokens generate"],
+                ["Ape early", "250 pts for being one of a token's first 10 buyers"],
+                ["Graduate", "2,000 pts when a token you created graduates"],
+              ]}
+            />
+            <p>
+              Anti-wash rule: volume only counts on tokens at least 3 distinct wallets have traded.
+              See the live board on the <Link href="/points" className="lnk">Points</Link> page.
+              Points are a reputation metric only — they carry no guaranteed monetary value, yield,
+              or future entitlement of any kind.
             </p>
           </Section>
 

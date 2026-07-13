@@ -39,6 +39,15 @@ deployments):
 - 👑 **Creator Rewards** — that same share is paid to the creator's wallet
   instead. Such tokens are badged on their page and accrue nothing to holders.
 
+## Ouroboros Points (Season 1)
+
+A reputation score computed **entirely from public on-chain events** — no
+signup, no snapshots, verifiable by anyone (`/points`): 1,000 pts / ETH traded,
+500 pts per launch, 100 pts / ETH of volume your tokens generate, 250 pts for
+being one of a token's first 10 buyers, 2,000 pts per graduation. Volume only
+counts on tokens ≥ 3 distinct wallets have traded (anti-wash). Points carry no
+guaranteed monetary value or future entitlement.
+
 ## The FeeLocker
 
 V3 position NFTs live in a locker with **no owner and a single value-moving
@@ -50,7 +59,7 @@ un-ruggable by construction, while fees stay harvestable.
 | Path         | What |
 |--------------|------|
 | `contracts/` | Foundry contracts — Launchpad (both modes), BondingCurve, OuroToken (dividends + post-grad tax), FeeLocker — **reference, unaudited** |
-| `web/`       | Next.js + TypeScript + Tailwind + wagmi/viem front-end (Discover, launch, trading both modes, rewards + trading PnL, leaderboard, live feed, docs/terms) |
+| `web/`       | Next.js + TypeScript + Tailwind + wagmi/viem front-end (Discover, launch, trading both modes, rewards + trading PnL, **Ouroboros Points**, leaderboard, live feed, docs/terms) |
 | `web/API.md` | Public REST trade API (`/api/v1/*`) for bots — non-custodial, returns unsigned txs |
 
 ## Quick start
