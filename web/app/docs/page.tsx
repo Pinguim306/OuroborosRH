@@ -18,6 +18,7 @@ const sections = [
   { id: "fees", label: "Fees" },
   { id: "rewards", label: "Holder rewards" },
   { id: "graduation", label: "Graduation" },
+  { id: "v3", label: "Instant V3 launch" },
   { id: "safety", label: "Safety & anti-whale" },
   { id: "faq", label: "FAQ" },
 ] as const;
@@ -155,6 +156,13 @@ export default function DocsPage() {
               runs Ouroboros. The fee split and recipient are configurable by the protocol owner, but
               the three destinations are fixed in the contract.
             </p>
+            <p>
+              After a curve token <strong>graduates</strong>, a <strong>1% trade tax</strong>{" "}
+              (hard-capped at 2%) applies to swaps against its DEX pair and flows to the
+              protocol vault — wallet-to-wallet transfers are never taxed. Instant-V3 tokens
+              instead pay the pool&apos;s own 1% fee tier (see{" "}
+              <a href="#v3" className="lnk">Instant V3 launch</a>).
+            </p>
           </Section>
 
           <Section id="rewards" title="Holder rewards">
@@ -181,6 +189,31 @@ export default function DocsPage() {
             <p>
               Graduated tokens keep trading — the market simply moves onto a deep, locked DEX pool,
               and the token&apos;s page switches to a live DEX chart.
+            </p>
+          </Section>
+
+          <Section id="v3" title="Instant V3 launch">
+            <p>
+              Besides the bonding curve, the Launch page offers a second mode:{" "}
+              <strong>Instant V3 pool</strong>. The token launches straight into a Uniswap V3
+              pool — no curve, no graduation. It is tradable the second the launch transaction
+              confirms, with full DexScreener history from the very first trade.
+            </p>
+            <KeyVals
+              rows={[
+                ["Liquidity", "entire supply, locked forever in the FeeLocker (un-ruggable)"],
+                ["Pool fee", "1% on every swap — harvested for the protocol and holders"],
+                ["Holder rewards", "40% of harvested ETH fees, claimable as usual (no staking)"],
+                ["Max buy", "none (V3 has no hook for a cap)"],
+                ["Dev buy", "executes as the pool's first swap — cannot be front-run"],
+              ]}
+            />
+            <p>
+              The 1% pool fee accrues inside the locked position and is released by a
+              permissionless <strong>Harvest</strong> — anyone can trigger it from the token
+              page; the split is enforced on-chain, so the caller receives nothing. Buys pay
+              the fee in {NATIVE_SYMBOL}; sells pay it in the token, and that token side goes
+              to the protocol. V3-mode tokens carry no transfer tax.
             </p>
           </Section>
 
