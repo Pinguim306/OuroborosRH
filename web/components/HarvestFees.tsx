@@ -28,15 +28,6 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
   });
   const locker = lockerQ.data as Address | undefined;
 
-  // ETH-side fees are split on harvest: holderShareBps to holders, rest to the
-  // protocol — surfaced so "uncollected" matches what actually lands in the pool.
-  const shareQ = useReadContract({
-    address: locker,
-    abi: feeLockerAbi,
-    functionName: "holderShareBps",
-    query: { enabled: !!locker },
-  });
-  const holderShare = typeof shareQ.data === "bigint" ? Number(shareQ.data) / 10_000 : undefined;
 
   // Resolve the token's locked position id from the locker's PositionLocked event.
   useEffect(() => {
@@ -104,14 +95,6 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
         {pending && (
           <p className="mt-1 text-xs font-medium text-venom-400">
             Uncollected: {usdFromEth(pending.eth, ethUsd, 2)}
-            {holderShare !== undefined && pending.eth > 0 && (
-              <span className="font-normal text-white/45">
-                {" "}
-                — {usdFromEth(pending.eth * holderShare, ethUsd, 2)} to holders (
-                {Math.round(holderShare * 100)}%), {usdFromEth(pending.eth * (1 - holderShare), ethUsd, 2)} to
-                the protocol
-              </span>
-            )}
           </p>
         )}
       </div>
