@@ -49,6 +49,13 @@ export default function CreatePage() {
   // Largest dev buy that still fits under the anti-whale cap (same 2% every buyer
   // gets). Computed from the launch params so it tracks whatever they're set to;
   // a small safety margin keeps integer rounding from tripping the on-chain cap.
+  // Live creation fee (owner-configurable on-chain; 0 = free, gas only).
+  const feeEth = LIVE
+    ? creationFee !== undefined
+      ? Number(formatEther(creationFee as bigint))
+      : undefined
+    : 0.01;
+
   const maxDevBuyEth = useMemo(() => maxDevBuy(curveParams), [curveParams]);
   const devBuyNum = parseFloat(devBuy) || 0;
   // The 2% anti-whale cap only exists on the bonding curve — V3 pools have no hook
@@ -174,7 +181,7 @@ export default function CreatePage() {
 
     // Clamp the dev buy to the cap so a rounding overshoot can't revert the launch.
     const devBuyWei = clampedDevBuy > 0 ? parseEther(clampedDevBuy.toFixed(18)) : 0n;
-    const fee = (creationFee as bigint | undefined) ?? parseEther("0.01");
+    const fee = (creationFee as bigint | undefined) ?? parseEther("0.01"); // excess is refunded on-chain
 
     writeContract({
       address: CONTRACTS.launchpad,
@@ -363,7 +370,13 @@ export default function CreatePage() {
             <div className="mt-3 space-y-1 border-t border-white/5 pt-3">
               <div className="flex items-center justify-between">
                 <span className="text-white/60">One-time creation fee</span>
-                <span className="font-mono font-semibold text-acid">0.01 {NATIVE_SYMBOL}</span>
+                <span className="font-mono font-semibold text-acid">
+                  {feeEth === undefined
+                    ? "…"
+                    : feeEth === 0
+                      ? "Free — gas only"
+                      : `${feeEth} ${NATIVE_SYMBOL}`}
+                </span>
               </div>
               {devBuyNum > 0 && (
                 <>
@@ -376,7 +389,7 @@ export default function CreatePage() {
                   <div className="flex items-center justify-between border-t border-white/5 pt-1">
                     <span className="text-white/70">Total</span>
                     <span className="font-mono font-semibold text-white">
-                      {(0.01 + clampedDevBuy).toFixed(4)} {NATIVE_SYMBOL}
+                      {((feeEth ?? 0) + clampedDevBuy).toFixed(4)} {NATIVE_SYMBOL}
                     </span>
                   </div>
                 </>

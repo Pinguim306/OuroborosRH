@@ -41,7 +41,7 @@ contract Deploy is Script {
 
         // Creation fee charged on every launch (native coin = ETH on Robinhood Chain).
         // Adjustable later via setCreationFee.
-        uint256 creationFee = 0.01 ether;
+        uint256 creationFee = 0; // free launches — users pay only gas (setCreationFee to change)
 
         // ------------------------------------------------------------------ //
         //  Instant-V3 launch mode                                            //

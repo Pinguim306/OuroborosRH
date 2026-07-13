@@ -29,7 +29,7 @@ Holders  ◄── claim (native) ──  OuroToken (dividend token)
 
 Per-trade fee **1.5%**, split three ways between permanent liquidity, holder
 rewards, and a platform fee. Plus a fixed **creation fee** in the native coin (ETH)
-charged on every launch — `0.01 ETH` by default.
+charged on every launch — configurable via `setCreationFee` (currently 0: launches cost only gas).
 
 Launch defaults also include a **graduation target of 4 ETH** raised and an
 **anti-whale max buy of 2% of supply per transaction** during the curve
@@ -80,5 +80,5 @@ forge script script/Deploy.s.sol --rpc-url $RPC --broadcast
 > `faucet.testnet.chain.robinhood.com`) — these contracts are unaudited.
 
 The deploy script reads `FEE_RECIPIENT` from the environment (falling back to the
-deployer) and sets a creation fee of `0.01 ETH`. Copy the printed `Launchpad`
+deployer) with a zero creation fee (launches cost only gas). Copy the printed `Launchpad`
 address into `web/lib/contracts.ts` (or `NEXT_PUBLIC_LAUNCHPAD_ADDRESS`).
