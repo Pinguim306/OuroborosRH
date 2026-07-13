@@ -15,6 +15,7 @@ import { ProgressBar } from "@/components/ProgressBar";
 import { TradeWidget } from "@/components/TradeWidget";
 import { RewardsPanel } from "@/components/RewardsPanel";
 import { MarketcapChart } from "@/components/MarketcapChart";
+import { CandleChart } from "@/components/CandleChart";
 import { DexScreenerChart } from "@/components/DexScreenerChart";
 import { dexscreenerEmbedUrl } from "@/lib/chain";
 import { TokenAvatar } from "@/components/TokenAvatar";
@@ -110,6 +111,8 @@ export default function TokenPage() {
               on-chain marketcap chart for the bonding-curve phase. */}
           {token.graduated && dexscreenerEmbedUrl(token.pair) ? (
             <DexScreenerChart pair={token.pair} />
+          ) : LIVE && activity.candles.length > 0 ? (
+            <CandleChart candles={activity.candles} ethUsd={ethUsd} />
           ) : (
             <MarketcapChart series={series} ethUsd={ethUsd} />
           )}

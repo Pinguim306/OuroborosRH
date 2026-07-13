@@ -40,15 +40,75 @@ async function cutoffBlock(client: PublicClient, secondsAgo: number): Promise<bi
   }
 }
 
+/** A candlestick point. Time is unix seconds; O/H/L/C are marketcap in ETH. */
+export interface Candle {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+/** Latest block number/timestamp + estimated seconds-per-block, sampled once. */
+async function blockClock(
+  client: PublicClient,
+): Promise<{ latestNum: bigint; latestTs: number; spb: number }> {
+  const latestNum = await client.getBlockNumber();
+  const sample = latestNum > 5000n ? 5000n : latestNum;
+  const [latest, older] = await Promise.all([
+    client.getBlock({ blockNumber: latestNum }),
+    client.getBlock({ blockNumber: latestNum - sample }),
+  ]);
+  const dt = Number(latest.timestamp - older.timestamp);
+  const n = Number(sample);
+  const spb = n > 0 && dt > 0 ? dt / n : 2;
+  return { latestNum, latestTs: Number(latest.timestamp), spb };
+}
+
+/** Round a raw seconds span to a "nice" candle interval. */
+function niceInterval(seconds: number): number {
+  const steps = [60, 300, 900, 1800, 3600, 14400, 43200, 86400, 604800];
+  for (const s of steps) if (seconds <= s) return s;
+  return steps[steps.length - 1];
+}
+
+/** Bucket time-stamped marketcap points into ~80 OHLC candles. */
+function buildCandles(points: { t: number; v: number }[]): Candle[] {
+  if (points.length === 0) return [];
+  points.sort((a, b) => a.t - b.t);
+  const span = points[points.length - 1].t - points[0].t;
+  const interval = niceInterval(span > 0 ? span / 80 : 60);
+  const map = new Map<number, Candle>();
+  for (const p of points) {
+    const bucket = Math.floor(p.t / interval) * interval;
+    const c = map.get(bucket);
+    if (!c) map.set(bucket, { time: bucket, open: p.v, high: p.v, low: p.v, close: p.v });
+    else {
+      c.high = Math.max(c.high, p.v);
+      c.low = Math.min(c.low, p.v);
+      c.close = p.v;
+    }
+  }
+  return [...map.values()].sort((a, b) => a.time - b.time);
+}
+
 export interface Activity {
   trades: Trade[];
   volume24hEth: number;
   athMcapEth: number;
   series: number[]; // marketcap (ETH) per trade — for the chart
+  candles: Candle[]; // OHLC marketcap (ETH) for the candlestick chart
   isLoading: boolean;
 }
 
-const EMPTY: Activity = { trades: [], volume24hEth: 0, athMcapEth: 0, series: [], isLoading: LIVE };
+const EMPTY: Activity = {
+  trades: [],
+  volume24hEth: 0,
+  athMcapEth: 0,
+  series: [],
+  candles: [],
+  isLoading: LIVE,
+};
 
 export function useTokenActivity(token?: TokenMarket): Activity {
   const client = usePublicClient();
@@ -63,7 +123,7 @@ export function useTokenActivity(token?: TokenMarket): Activity {
     let alive = true;
     (async () => {
       try {
-        const [logs, cutoff] = await Promise.all([
+        const [logs, clock] = await Promise.all([
           client.getContractEvents({
             address: curve,
             abi: curveAbi,
@@ -71,12 +131,15 @@ export function useTokenActivity(token?: TokenMarket): Activity {
             fromBlock: 0n,
             toBlock: "latest",
           }),
-          cutoffBlock(client, DAY),
+          blockClock(client),
         ]);
+        const back = BigInt(Math.max(1, Math.floor(DAY / clock.spb)));
+        const cutoff = clock.latestNum > back ? clock.latestNum - back : 0n;
         const supply = supplyOf(token);
         let vol24 = 0;
         let ath = 0;
         const series: number[] = [];
+        const points: { t: number; v: number }[] = [];
         const all: Trade[] = [];
         for (const l of logs) {
           const a = l.args as {
@@ -91,6 +154,9 @@ export function useTokenActivity(token?: TokenMarket): Activity {
           if (l.blockNumber >= cutoff) vol24 += nat;
           if (mcap > ath) ath = mcap;
           series.push(mcap);
+          // Estimate this trade's time from the sampled seconds-per-block.
+          const estTime = clock.latestTs - Number(clock.latestNum - l.blockNumber) * clock.spb;
+          points.push({ t: Math.round(estTime), v: mcap });
           all.push({
             id: `${l.transactionHash}-${l.logIndex}`,
             trader: a.trader,
@@ -119,7 +185,9 @@ export function useTokenActivity(token?: TokenMarket): Activity {
           t.time = ts.get(recentLogs[i].blockNumber) ?? 0;
         });
 
-        if (alive) setData({ trades: recent, volume24hEth: vol24, athMcapEth: ath, series, isLoading: false });
+        const candles = buildCandles(points);
+        if (alive)
+          setData({ trades: recent, volume24hEth: vol24, athMcapEth: ath, series, candles, isLoading: false });
       } catch {
         if (alive) setData({ ...EMPTY, isLoading: false });
       }
