@@ -23,18 +23,10 @@ Every token is a **dividend token**: rewards accrue automatically, proportional
 to balance; connect a wallet and **claim anytime**.
 
 The pool's 1% fee accrues in the locked position; a **permissionless Harvest**
-collects it — the split is enforced on-chain (40% of the ETH side to holders,
-the rest + token side to the protocol; the caller gets nothing). With zero
-holders, the holder share waits as `pendingRewards` for the next buyer — it can
-never be drained.
-
-Harvesting is **automatic** when the keeper is configured (`KEEPER_PRIVATE_KEY`):
-the site cranks `collect()` after trades and page views once pending fees reach
-`HARVEST_THRESHOLD_ETH` (default 0.01 ETH). Spend guards make the keeper self-funding: it only
-harvests when the moved value is ≥20× the gas cost (and 60% of every harvest
-goes to the protocol wallet — ≈40× the gas), one attempt per token per 5 min,
-max 20 harvests/hour. Without a keeper, the token page shows a manual Harvest
-button instead.
+(button on the token page) collects it — the split is enforced on-chain (40% of
+the ETH side to holders, the rest + token side to the protocol; the caller gets
+nothing). With zero holders, the holder share waits as `pendingRewards` for the
+next buyer — it can never be drained.
 
 At launch the creator picks a **rewards mode**, immutable forever
 (`LAUNCHPAD_VERSION ≥ 2`; the site auto-detects and hides the option on v1
@@ -99,8 +91,6 @@ contract is deployed.
 | `TELEGRAM_BOT_TOKEN` | @BotFather bot token — enables auto-announcing every launch to a Telegram channel (secret) |
 | `TELEGRAM_CHAT_ID` | Channel to announce in (`@channelname` or `-100…`); the bot must be a channel admin |
 | `NEXT_PUBLIC_SITE_URL` | Public site origin used in announcement links (default `https://ouroborosrh.fun`) |
-| `KEEPER_PRIVATE_KEY` | Auto-harvest keeper — a FRESH wallet holding a little ETH for gas only (secret; never the protocol/owner key). Unset = manual Harvest button |
-| `HARVEST_THRESHOLD_ETH` | Pending ETH-side fees that trigger an auto-harvest (default `0.01`) |
 
 ## ⚠️ Disclaimer
 

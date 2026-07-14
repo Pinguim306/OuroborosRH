@@ -127,15 +127,6 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
     if (!needsApproval) setAmount("");
     balanceQ.refetch?.();
     allowanceQ.refetch?.();
-    // Every V3 trade grows the pool's pending fees — poke the auto-harvest keeper
-    // (fire-and-forget; the endpoint no-ops when disabled or below threshold).
-    if (isV3 && !needsApproval) {
-      fetch("/api/harvest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: token.address }),
-      }).catch(() => {});
-    }
     const t = setTimeout(() => {
       setFlash(null);
       reset();
