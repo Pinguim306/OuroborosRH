@@ -20,30 +20,6 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
   const ethUsd = useEthPrice();
   const [positionId, setPositionId] = useState<bigint | undefined>();
   const [pending, setPending] = useState<{ eth: number; tok: number } | undefined>();
-  // When the auto-harvest keeper is configured server-side, the manual button is
-  // replaced by an "auto" note, and opening this page opportunistically cranks it.
-  const [auto, setAuto] = useState<boolean | undefined>();
-
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/harvest")
-      .then((r) => r.json())
-      .then((j) => {
-        if (!alive) return;
-        setAuto(Boolean(j?.enabled));
-        if (j?.enabled) {
-          fetch("/api/harvest", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token: token.address }),
-          }).catch(() => {});
-        }
-      })
-      .catch(() => alive && setAuto(false));
-    return () => {
-      alive = false;
-    };
-  }, [token.address]);
 
   // The position NFT lives in the FeeLocker of the launchpad that CREATED this
   // token — for legacy tokens that is not the current primary launchpad.
@@ -115,29 +91,25 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-obsidian-900/50 p-3">
       <div className="min-w-0 flex-1">
         <p className="text-xs leading-relaxed text-white/45">
-          {auto
-            ? "The pool's 1% swap fee accrues inside the locked position and is harvested automatically — rewards stream to holders with no clicks needed."
-            : "The pool's 1% swap fee accrues inside the locked position. Anyone can harvest it — rewards stream to holders and the protocol on collection."}
+          The pool&apos;s 1% swap fee accrues inside the locked position. Anyone can harvest it —
+          rewards stream to holders and the protocol on collection.
         </p>
         {pending && (
           <p className="mt-1 text-xs font-medium text-venom-400">
             Uncollected: {usdFromEth(pending.eth, ethUsd, 2)}
-            {auto && <span className="font-normal text-white/40"> — auto-harvests soon</span>}
           </p>
         )}
       </div>
-      {!auto && (
-        <button
-          onClick={() =>
-            writeContract({ chainId: CHAIN_ID, address: locker, abi: feeLockerAbi, functionName: "collect", args: [positionId] })
-          }
-          disabled={busy}
-          className="btn-ghost shrink-0"
-        >
-          {busy ? "Harvesting…" : isSuccess ? "✓ Harvested" : "Harvest fees"}
-        </button>
-      )}
-      {!auto && error && (
+      <button
+        onClick={() =>
+          writeContract({ chainId: CHAIN_ID, address: locker, abi: feeLockerAbi, functionName: "collect", args: [positionId] })
+        }
+        disabled={busy}
+        className="btn-ghost shrink-0"
+      >
+        {busy ? "Harvesting…" : isSuccess ? "✓ Harvested" : "Harvest fees"}
+      </button>
+      {error && (
         <p className="w-full text-[11px] text-red-400">
           {(error as { shortMessage?: string }).shortMessage ?? "Harvest failed."}
         </p>
