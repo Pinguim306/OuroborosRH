@@ -41,7 +41,6 @@ contract CoilSwapRouterV3 is Ownable, ReentrancyGuard {
     uint256 public interfaceFeeBps;
 
     uint256 public constant MAX_INTERFACE_FEE_BPS = 100; // 1%
-    uint24 public constant FEE_TIER = 10_000; // 1% tier — the tier instant-V3 pools use
     uint256 private constant BPS = 10_000;
 
     error DeadlinePassed();
@@ -85,9 +84,11 @@ contract CoilSwapRouterV3 is Ownable, ReentrancyGuard {
         emit FeeRecipientUpdated(v);
     }
 
-    /// @notice Buy `token` with ETH (exact input). Interface fee is skimmed off the ETH; the rest
-    ///   is swapped WETH→token and delivered to `recipient` (0 → caller).
-    function buy(address token, uint256 minAmountOut, address recipient, uint256 deadline)
+    /// @notice Buy `token` with ETH (exact input) through the v3 pool at fee tier `poolFee` (e.g.
+    ///   100 / 500 / 3000 / 10000). The interface fee is skimmed off the ETH; the rest is swapped
+    ///   WETH->token and delivered to `recipient` (0 -> caller). The frontend picks `poolFee` by
+    ///   probing which tier has a pool, so any token with a v3 pool in any tier is tradeable.
+    function buy(address token, uint24 poolFee, uint256 minAmountOut, address recipient, uint256 deadline)
         external
         payable
         nonReentrant
@@ -104,7 +105,7 @@ contract CoilSwapRouterV3 is Ownable, ReentrancyGuard {
             ISwapRouter02.ExactInputSingleParams({
                 tokenIn: weth,
                 tokenOut: token,
-                fee: FEE_TIER,
+                fee: poolFee,
                 recipient: recipient,
                 amountIn: swapAmount,
                 amountOutMinimum: minAmountOut,
@@ -115,9 +116,10 @@ contract CoilSwapRouterV3 is Ownable, ReentrancyGuard {
         emit Swapped(msg.sender, weth, token, msg.value, fee, amountOut);
     }
 
-    /// @notice Sell `amountIn` of `token` for ETH (exact input). Interface fee is skimmed off the
-    ///   token; the rest is swapped token→WETH, unwrapped, and the ETH sent to `recipient`.
-    function sell(address token, uint256 amountIn, uint256 minAmountOut, address recipient, uint256 deadline)
+    /// @notice Sell `amountIn` of `token` for ETH (exact input) through the v3 pool at fee tier
+    ///   `poolFee`. Interface fee is skimmed off the token; the rest is swapped token->WETH,
+    ///   unwrapped, and the ETH sent to `recipient`.
+    function sell(address token, uint24 poolFee, uint256 amountIn, uint256 minAmountOut, address recipient, uint256 deadline)
         external
         nonReentrant
         returns (uint256 amountOut)
@@ -135,7 +137,7 @@ contract CoilSwapRouterV3 is Ownable, ReentrancyGuard {
             ISwapRouter02.ExactInputSingleParams({
                 tokenIn: token,
                 tokenOut: weth,
-                fee: FEE_TIER,
+                fee: poolFee,
                 recipient: address(this),
                 amountIn: swapAmount,
                 amountOutMinimum: minAmountOut,
