@@ -14,9 +14,9 @@ import {CoilSwapRouter} from "../../src/CoilSwapRouter.sol";
 
 /// @dev End-to-end proof of the CoilSwapRouter against a live local v4 stack: a real swap through
 ///   the router skims the interface fee to the protocol wallet and delivers the output to the
-///   trader. On a Coil token it also triggers the hook's own protocol fee — double revenue.
+///   trader. On a Coil token it also triggers the coil's own protocol fee — double revenue.
 contract CoilSwapRouterE2ETest is PosmTestSetup {
-    CoilHook hook;
+    CoilHook coil;
     CoilSwapRouter router;
 
     address constant HOOK_ADDR = address(uint160(0xCAfE000000000000000000000000000000000088));
@@ -50,12 +50,12 @@ contract CoilSwapRouterE2ETest is PosmTestSetup {
             ),
             HOOK_ADDR
         );
-        hook = CoilHook(payable(HOOK_ADDR));
+        coil = CoilHook(payable(HOOK_ADDR));
 
         sqrtPriceX96 = TickMath.getSqrtPriceAtTick(TICK_UPPER);
         uint160 sqrtLower = TickMath.getSqrtPriceAtTick(TICK_LOWER);
         seedLiquidity = LiquidityAmounts.getLiquidityForAmount1(sqrtLower, sqrtPriceX96, SUPPLY);
-        hook.seed(sqrtPriceX96, TICK_LOWER, TICK_UPPER, seedLiquidity);
+        coil.seed(sqrtPriceX96, TICK_LOWER, TICK_UPPER, seedLiquidity);
 
         router = new CoilSwapRouter(IPoolManager(address(manager)), address(this), ifaceWallet, IFEE_BPS);
     }
@@ -63,15 +63,15 @@ contract CoilSwapRouterE2ETest is PosmTestSetup {
     function _key() internal view returns (PoolKey memory) {
         return PoolKey({
             currency0: Currency.wrap(address(0)),
-            currency1: Currency.wrap(address(hook)),
-            fee: hook.POOL_FEE(),
-            tickSpacing: hook.TICK_SPACING(),
-            hooks: IHooks(address(hook))
+            currency1: Currency.wrap(address(coil)),
+            fee: coil.POOL_FEE(),
+            tickSpacing: coil.TICK_SPACING(),
+            hooks: IHooks(address(coil))
         });
     }
 
     /// @dev Buy a Coil token through the router: interface fee lands, trader gets tokens, and the
-    ///   hook's protocol fee also accrues — both cuts to the protocol side.
+    ///   coil's protocol fee also accrues — both cuts to the protocol side.
     function test_Swap_TakesInterfaceFee_AndHookFee() public {
         uint256 ethIn = 5 ether;
         vm.deal(alice, ethIn);
@@ -85,12 +85,12 @@ contract CoilSwapRouterE2ETest is PosmTestSetup {
         // Interface fee skimmed to the interface wallet.
         assertEq(ifaceWallet.balance - ifaceBefore, ethIn * IFEE_BPS / 10_000, "interface fee taken");
         // Trader received the output.
-        assertEq(hook.balanceOf(alice), out, "alice received output");
+        assertEq(coil.balanceOf(alice), out, "alice received output");
         assertGt(out, 0);
-        // The hook's own protocol fee accrued on the swapped (post-interface-fee) amount.
+        // The coil's own protocol fee accrued on the swapped (post-interface-fee) amount.
         uint256 swapAmount = ethIn - (ethIn * IFEE_BPS / 10_000);
         uint256 hookFee = swapAmount * (P_BPS + H_BPS + B_BPS) / 10_000;
-        assertEq(hook.protocolAccruedETH(), hookFee * P_BPS / (P_BPS + H_BPS + B_BPS), "hook protocol fee too");
+        assertEq(coil.protocolAccruedETH(), hookFee * P_BPS / (P_BPS + H_BPS + B_BPS), "coil protocol fee too");
     }
 
     /// @dev Selling the token back routes the interface fee on the token side.
@@ -103,14 +103,14 @@ contract CoilSwapRouterE2ETest is PosmTestSetup {
         // Now sell half back through the router (token in → interface fee in token).
         uint256 sellAmount = bought / 2;
         vm.prank(alice);
-        hook.approve(address(router), sellAmount);
+        coil.approve(address(router), sellAmount);
 
-        uint256 ifaceTokBefore = hook.balanceOf(ifaceWallet);
+        uint256 ifaceTokBefore = coil.balanceOf(ifaceWallet);
         uint256 ethBefore = alice.balance;
         vm.prank(alice);
         uint256 ethOut = router.swapExactInSingle(_key(), false, sellAmount, 0, alice, block.timestamp + 1);
 
-        assertEq(hook.balanceOf(ifaceWallet) - ifaceTokBefore, sellAmount * IFEE_BPS / 10_000, "token-side interface fee");
+        assertEq(coil.balanceOf(ifaceWallet) - ifaceTokBefore, sellAmount * IFEE_BPS / 10_000, "token-side interface fee");
         assertEq(alice.balance - ethBefore, ethOut, "alice got ETH out");
         assertGt(ethOut, 0);
     }
