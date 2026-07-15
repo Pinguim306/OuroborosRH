@@ -82,6 +82,57 @@ export const coilSwapRouterAbi = [
   },
 ] as const;
 
+/**
+ * The v4 launch factory (CoilLaunchpad). `NEXT_PUBLIC_COIL_LAUNCHPAD` is the deployed address;
+ * while unset the browser launch flow shows a "not live yet" state.
+ */
+export const COIL_LAUNCHPAD = ((process.env.NEXT_PUBLIC_COIL_LAUNCHPAD ?? "").trim() ||
+  "0x0000000000000000000000000000000000000000") as Address;
+
+export const LAUNCH_LIVE = isDeployed(COIL_LAUNCHPAD);
+
+/** The BEFORE_SWAP | BEFORE_SWAP_RETURNS_DELTA flag bits every CoilHook address encodes in its
+ *  low 14 bits (0x88). A token launched by the CoilLaunchpad IS its hook, so this alone tells a
+ *  Coil (v4) token from any other token — no RPC call needed. */
+export const COIL_HOOK_FLAGS = 0x88n;
+export const HOOK_FLAG_MASK = 0x3fffn; // low 14 bits
+
+export function isCoilToken(token: Address): boolean {
+  return (BigInt(token) & HOOK_FLAG_MASK) === COIL_HOOK_FLAGS;
+}
+
+export const coilLaunchpadV4Abi = [
+  {
+    type: "function",
+    name: "createTokenV4",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "symbol", type: "string" },
+      { name: "metadataURI", type: "string" },
+      { name: "salt", type: "bytes32" },
+      { name: "creatorRewards", type: "bool" },
+    ],
+    outputs: [
+      { name: "token", type: "address" },
+      { name: "positionId", type: "uint256" },
+    ],
+  },
+  {
+    type: "function",
+    name: "hookInitCodeHash",
+    stateMutability: "view",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "symbol", type: "string" },
+      { name: "creator", type: "address" },
+    ],
+    outputs: [{ type: "bytes32" }],
+  },
+  { type: "function", name: "creationFee", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "tokenSupply", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+] as const;
+
 /** Minimal ABIs — only the entrypoints the frontend calls. The create functions
  *  appear twice: the 4-arg overload matches v1 launchpads, the 5-arg one (with the
  *  Loop/Creator rewards flag) matches v2+ — viem picks the overload by arg count. */
