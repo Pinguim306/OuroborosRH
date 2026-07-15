@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 /** GET /api/v1 — service index for integrators (e.g. Telegram trade bots). */
 export async function GET() {
   return ok({
-    service: "Ouroboros Launchpad Trade API",
+    service: "Coil Launchpad Trade API",
     version: "1",
     chainId: CHAIN_ID,
     nativeSymbol: NATIVE_SYMBOL,

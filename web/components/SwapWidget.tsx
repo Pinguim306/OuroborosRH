@@ -12,13 +12,20 @@ import {
 import type { Address } from "@/lib/types";
 import { CHAIN_ID, NATIVE_SYMBOL, ROBINHOOD_CONTRACTS } from "@/lib/chain";
 import {
+  COIL_LAUNCHPAD,
   COIL_SWAP_ROUTER,
+  COIL_SWAP_ROUTER_V3,
+  LAUNCH_LIVE,
   SWAP_LIVE,
+  V3_FEE_LIVE,
+  coilLaunchpadV4Abi,
   coilPoolKey,
   coilSwapRouterAbi,
+  coilSwapRouterV3Abi,
   isCoilToken,
   swapRouter02Abi,
   tokenAbi,
+  type CoilMarket,
 } from "@/lib/contracts";
 import { WalletButton } from "./WalletButton";
 
@@ -59,7 +66,20 @@ export function SwapWidget() {
     [tokenInput],
   );
   const isV4 = token ? isCoilToken(token) : false;
-  const spender = isV4 ? COIL_SWAP_ROUTER : SWAP02;
+  const useV3Fee = !isV4 && V3_FEE_LIVE; // non-Coil token routed through the fee wrapper
+  const spender = isV4 ? COIL_SWAP_ROUTER : useV3Fee ? COIL_SWAP_ROUTER_V3 : SWAP02;
+  const feeCharged = isV4 || useV3Fee; // an interface fee applies on this route
+
+  // --- Token picker: the Coil tokens launched by the v4 factory (newest first) ---
+  const { data: marketsRaw } = useReadContract({
+    chainId: CHAIN_ID,
+    address: COIL_LAUNCHPAD,
+    abi: coilLaunchpadV4Abi,
+    functionName: "getMarkets",
+    args: [0n, 24n],
+    query: { enabled: LAUNCH_LIVE },
+  });
+  const markets = (marketsRaw as readonly CoilMarket[] | undefined) ?? [];
   const amountWei = safeParseEther(amount);
   const isBuy = mode === "buy";
   const deadline = useMemo(() => BigInt(Math.floor(Date.now() / 1000) + 1200), [amount, mode]);
@@ -131,11 +151,28 @@ export function SwapWidget() {
           ]
         : undefined,
     value: isBuy ? amountWei : 0n,
-    query: { enabled: quoteReady && !isV4 && !!weth },
+    query: { enabled: quoteReady && !isV4 && !useV3Fee && !!weth },
   });
 
-  const quotedOut = ((isV4 ? simV4?.result : simV3?.result) as bigint | undefined) ?? 0n;
-  const simError = isV4 ? errV4 : errV3;
+  // --- v3 fee-wrapper quote: simulate CoilSwapRouterV3.buy/sell ---
+  const { data: simV3Fee, error: errV3Fee } = useSimulateContract({
+    chainId: CHAIN_ID,
+    address: COIL_SWAP_ROUTER_V3,
+    abi: coilSwapRouterV3Abi,
+    functionName: isBuy ? "buy" : "sell",
+    args: (token
+      ? isBuy
+        ? [token, 0n, address ?? COIL_SWAP_ROUTER_V3, deadline]
+        : [token, amountWei, 0n, address ?? COIL_SWAP_ROUTER_V3, deadline]
+      : undefined) as never,
+    value: isBuy ? amountWei : 0n,
+    query: { enabled: quoteReady && useV3Fee },
+  });
+
+  const quotedOut = ((isV4 ? simV4?.result : useV3Fee ? simV3Fee?.result : simV3?.result) as
+    | bigint
+    | undefined) ?? 0n;
+  const simError = isV4 ? errV4 : useV3Fee ? errV3Fee : errV3;
   const minOut = (quotedOut * (10000n - slippage)) / 10000n;
 
   // --- Writes ---
@@ -179,7 +216,29 @@ export function SwapWidget() {
       });
       return;
     }
-    // v3 via SwapRouter02
+    if (useV3Fee) {
+      // Non-Coil token, but routed through the fee wrapper so the interface fee is charged.
+      if (isBuy) {
+        writeContract({
+          chainId: CHAIN_ID,
+          address: COIL_SWAP_ROUTER_V3,
+          abi: coilSwapRouterV3Abi,
+          functionName: "buy",
+          args: [token, minOut, address, deadline],
+          value: amountWei,
+        });
+      } else {
+        writeContract({
+          chainId: CHAIN_ID,
+          address: COIL_SWAP_ROUTER_V3,
+          abi: coilSwapRouterV3Abi,
+          functionName: "sell",
+          args: [token, amountWei, minOut, address, deadline],
+        });
+      }
+      return;
+    }
+    // v3 via SwapRouter02 (no interface fee)
     if (!weth) return;
     if (isBuy) {
       writeContract({
@@ -262,6 +321,8 @@ export function SwapWidget() {
           <div className="mt-1.5">
             {isV4 ? (
               <span className="chip border-venom-500/60 text-white">Coil v4 · interface fee</span>
+            ) : useV3Fee ? (
+              <span className="chip border-venom-500/60 text-white">Uniswap v3 · interface fee</span>
             ) : (
               <span className="chip">Uniswap v3</span>
             )}
@@ -273,6 +334,25 @@ export function SwapWidget() {
           </p>
         )}
       </div>
+
+      {/* Coil token picker */}
+      {markets.length > 0 && (
+        <div>
+          <label className="label">Coil tokens</label>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {markets.map((m) => (
+              <button
+                key={m.token}
+                onClick={() => setTokenInput(m.token)}
+                title={m.name}
+                className={`chip ${token?.toLowerCase() === m.token.toLowerCase() ? "border-venom-500/60 text-white" : ""}`}
+              >
+                {m.symbol}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div>
         <label className="label">You pay ({inSym})</label>
@@ -294,17 +374,19 @@ export function SwapWidget() {
       </div>
 
       {/* slippage */}
-      <div className="flex items-center gap-2">
-        <span className="label">Max slippage</span>
-        {SLIPPAGE_OPTIONS.map((o) => (
-          <button
-            key={o.label}
-            onClick={() => setSlippage(o.bps)}
-            className={`chip ${slippage === o.bps ? "border-venom-500/60 text-white" : ""}`}
-          >
-            {o.label}
-          </button>
-        ))}
+      <div>
+        <label className="label">Max slippage</label>
+        <div className="mt-1 flex flex-wrap gap-2">
+          {SLIPPAGE_OPTIONS.map((o) => (
+            <button
+              key={o.label}
+              onClick={() => setSlippage(o.bps)}
+              className={`chip ${slippage === o.bps ? "border-venom-500/60 text-white" : ""}`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* quote */}
@@ -354,7 +436,7 @@ export function SwapWidget() {
       )}
 
       <p className="text-center text-[11px] text-white/30">
-        {isV4
+        {feeCharged
           ? "Routed through Coil · a small interface fee supports the protocol."
           : "Routed through Uniswap v3 on Robinhood Chain."}
       </p>

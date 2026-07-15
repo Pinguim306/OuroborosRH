@@ -31,6 +31,42 @@ export const COIL_SWAP_ROUTER = ((process.env.NEXT_PUBLIC_COIL_SWAP_ROUTER ?? ""
 
 export const SWAP_LIVE = isDeployed(COIL_SWAP_ROUTER);
 
+/** The v3 interface-fee wrapper (CoilSwapRouterV3). When set, non-Coil (v3) tokens route through
+ *  it so the interface fee is charged on any token; otherwise they route through SwapRouter02
+ *  directly (no fee). */
+export const COIL_SWAP_ROUTER_V3 = ((process.env.NEXT_PUBLIC_COIL_SWAP_ROUTER_V3 ?? "").trim() ||
+  "0x0000000000000000000000000000000000000000") as Address;
+
+export const V3_FEE_LIVE = isDeployed(COIL_SWAP_ROUTER_V3);
+
+export const coilSwapRouterV3Abi = [
+  {
+    type: "function",
+    name: "buy",
+    stateMutability: "payable",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "minAmountOut", type: "uint256" },
+      { name: "recipient", type: "address" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amountOut", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "sell",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "amountIn", type: "uint256" },
+      { name: "minAmountOut", type: "uint256" },
+      { name: "recipient", type: "address" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amountOut", type: "uint256" }],
+  },
+] as const;
+
 /** CoilHook pool constants (immutable in the contract): the LP fee is 0 (all capture via the
  *  hook), tickSpacing is 200, and the hook IS the token, so `hooks == token`. */
 export const COIL_POOL_FEE = 0;
@@ -131,7 +167,41 @@ export const coilLaunchpadV4Abi = [
   },
   { type: "function", name: "creationFee", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "tokenSupply", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "marketsCount", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  {
+    type: "function",
+    name: "getMarkets",
+    stateMutability: "view",
+    inputs: [
+      { name: "offset", type: "uint256" },
+      { name: "limit", type: "uint256" },
+    ],
+    outputs: [
+      {
+        type: "tuple[]",
+        components: [
+          { name: "token", type: "address" },
+          { name: "creator", type: "address" },
+          { name: "creatorRewards", type: "bool" },
+          { name: "name", type: "string" },
+          { name: "symbol", type: "string" },
+          { name: "metadataURI", type: "string" },
+          { name: "createdAt", type: "uint256" },
+        ],
+      },
+    ],
+  },
 ] as const;
+
+export type CoilMarket = {
+  token: Address;
+  creator: Address;
+  creatorRewards: boolean;
+  name: string;
+  symbol: string;
+  metadataURI: string;
+  createdAt: bigint;
+};
 
 /** Minimal ABIs — only the entrypoints the frontend calls. The create functions
  *  appear twice: the 4-arg overload matches v1 launchpads, the 5-arg one (with the

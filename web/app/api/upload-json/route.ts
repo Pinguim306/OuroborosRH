@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     website: str(body.website, 300) ?? "",
     twitter: str(body.twitter, 300) ?? "",
     telegram: str(body.telegram, 300) ?? "",
-    createdOn: "https://ouroborosrh.fun",
+    createdOn: (process.env.NEXT_PUBLIC_SITE_URL ?? "https://ouroborosrh.fun").replace(/\/$/, ""),
   };
 
   try {
