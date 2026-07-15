@@ -3,9 +3,9 @@ import Link from "next/link";
 import { NATIVE_SYMBOL } from "@/lib/chain";
 
 export const metadata: Metadata = {
-  title: "Docs — Ouroboros",
+  title: "Docs — Coil",
   description:
-    "How the Ouroboros launchpad works: instant Uniswap V3 launches, locked liquidity, the fee loop, holder rewards, and safety.",
+    "How the Coil launchpad works: instant Uniswap V3 launches, locked liquidity, the fee loop, holder rewards, and safety.",
 };
 
 /** Sidebar / on-page navigation. Each entry maps to a section id below. */
@@ -16,7 +16,7 @@ const sections = [
   { id: "dev-buy", label: "Dev buy" },
   { id: "fees", label: "Fees & harvest" },
   { id: "rewards", label: "Holder rewards" },
-  { id: "points", label: "Ouroboros Points" },
+  { id: "points", label: "Coil Points" },
   { id: "legacy", label: "Legacy curve tokens" },
   { id: "safety", label: "Safety" },
   { id: "faq", label: "FAQ" },
@@ -49,7 +49,7 @@ export default function DocsPage() {
           <header className="mb-10">
             <div className="label">Docs</div>
             <h1 className="mt-2 font-display text-4xl font-extrabold tracking-tight">
-              How Ouroboros works
+              How Coil works
             </h1>
             <p className="mt-3 text-white/55">
               A fair-launch protocol where every token is born on a live Uniswap V3 pool with its
@@ -60,7 +60,7 @@ export default function DocsPage() {
 
           <Section id="intro" title="Introduction">
             <p>
-              Ouroboros is a launchpad on Robinhood Chain. Every launch goes{" "}
+              Coil is a launchpad on Robinhood Chain. Every launch goes{" "}
               <strong>straight into a Uniswap V3 pool</strong>: the token is tradable the second the
               launch transaction confirms, with full DexScreener history from the very first trade.
               The difference is <strong>the loop</strong>: the pool&apos;s swap fees don&apos;t leak
@@ -172,7 +172,7 @@ export default function DocsPage() {
             </p>
           </Section>
 
-          <Section id="points" title="Ouroboros Points">
+          <Section id="points" title="Coil Points">
             <p>
               <strong>Season 1 is live.</strong> Points are a reputation score computed entirely
               from public on-chain events — no signup, no snapshot, nothing to opt into. Using the
@@ -196,7 +196,7 @@ export default function DocsPage() {
 
           <Section id="legacy" title="Legacy curve tokens">
             <p>
-              Earlier versions of Ouroboros launched tokens on a bonding curve that migrated to a
+              Earlier versions of Coil launched tokens on a bonding curve that migrated to a
               DEX pair once filled. New launches no longer use that path, but every legacy token
               keeps working exactly as before: its page, trading, rewards, and (where applicable)
               its DEX pair remain fully functional.
@@ -219,7 +219,7 @@ export default function DocsPage() {
                 human can ever exclude a holder from rewards.
               </Bullet>
               <Bullet>
-                <strong>Unaudited.</strong> Ouroboros is reference software. Nothing here is financial
+                <strong>Unaudited.</strong> Coil is reference software. Nothing here is financial
                 advice. Trade responsibly and only with what you can afford to lose.
               </Bullet>
             </ul>
@@ -241,7 +241,7 @@ export default function DocsPage() {
             <Faq q="Who receives the fees?">
               The pool&apos;s 1% swap fee is harvested on-chain: 40% of the {NATIVE_SYMBOL} side goes
               to holders (or to the creator, on Creator Rewards tokens), the rest goes to the
-              protocol — the wallet that operates Ouroboros.
+              protocol — the wallet that operates Coil.
             </Faq>
           </Section>
 

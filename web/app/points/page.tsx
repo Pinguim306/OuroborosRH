@@ -29,7 +29,7 @@ const RULES = [
     icon: "🔄",
     title: "Trade",
     pts: `${fmt(PTS_PER_ETH_VOLUME)} pts / ETH`,
-    desc: "Every ETH of buy or sell volume across every Ouroboros token.",
+    desc: "Every ETH of buy or sell volume across every Coil token.",
   },
   {
     icon: "🚀",
@@ -67,10 +67,10 @@ export default function PointsPage() {
         <div>
           <span className="chip border-venom-500/30 text-venom-400">Season {SEASON} · live</span>
           <h1 className="mt-3 font-display text-4xl font-extrabold tracking-tight">
-            Ouroboros <span className="text-gradient">Points</span>
+            Coil <span className="text-gradient">Points</span>
           </h1>
           <p className="mt-2 max-w-2xl text-white/55">
-            Every trade, launch and early ape on Ouroboros earns points. The score is computed
+            Every trade, launch and early ape on Coil earns points. The score is computed
             purely from on-chain events — no signups, no snapshots, nothing to opt into. Just use
             the loop.
           </p>

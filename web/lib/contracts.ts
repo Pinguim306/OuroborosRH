@@ -21,6 +21,67 @@ export const isDeployed = (a: Address) =>
 
 export const LIVE = isDeployed(CONTRACTS.launchpad);
 
+/**
+ * The v4 Swap tab. `NEXT_PUBLIC_COIL_SWAP_ROUTER` is the deployed CoilSwapRouter; while unset the
+ * Swap tab shows a "not live yet" state. Coil (v4) tokens are the hook itself, so their pool is
+ * fully determined by the token address — see `coilPoolKey`.
+ */
+export const COIL_SWAP_ROUTER = ((process.env.NEXT_PUBLIC_COIL_SWAP_ROUTER ?? "").trim() ||
+  "0x0000000000000000000000000000000000000000") as Address;
+
+export const SWAP_LIVE = isDeployed(COIL_SWAP_ROUTER);
+
+/** CoilHook pool constants (immutable in the contract): the LP fee is 0 (all capture via the
+ *  hook), tickSpacing is 200, and the hook IS the token, so `hooks == token`. */
+export const COIL_POOL_FEE = 0;
+export const COIL_TICK_SPACING = 200;
+const ETH_CURRENCY = "0x0000000000000000000000000000000000000000" as Address;
+
+/** Build the v4 PoolKey for a Coil token (currency0 = native ETH < currency1 = the token). */
+export function coilPoolKey(token: Address) {
+  return {
+    currency0: ETH_CURRENCY,
+    currency1: token,
+    fee: COIL_POOL_FEE,
+    tickSpacing: COIL_TICK_SPACING,
+    hooks: token, // the CoilHook is the token
+  } as const;
+}
+
+export const coilSwapRouterAbi = [
+  {
+    type: "function",
+    name: "swapExactInSingle",
+    stateMutability: "payable",
+    inputs: [
+      {
+        name: "key",
+        type: "tuple",
+        components: [
+          { name: "currency0", type: "address" },
+          { name: "currency1", type: "address" },
+          { name: "fee", type: "uint24" },
+          { name: "tickSpacing", type: "int24" },
+          { name: "hooks", type: "address" },
+        ],
+      },
+      { name: "zeroForOne", type: "bool" },
+      { name: "amountIn", type: "uint256" },
+      { name: "minAmountOut", type: "uint256" },
+      { name: "recipient", type: "address" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amountOut", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "interfaceFeeBps",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+] as const;
+
 /** Minimal ABIs — only the entrypoints the frontend calls. The create functions
  *  appear twice: the 4-arg overload matches v1 launchpads, the 5-arg one (with the
  *  Loop/Creator rewards flag) matches v2+ — viem picks the overload by arg count. */
@@ -352,7 +413,7 @@ export const tokenAbi = [
 ] as const;
 
 /** Minimal Uniswap-V2 router ABI for post-graduation DEX trades (fee-on-transfer
- *  aware — Ouroboros tokens take a 1% tax on DEX trades, so standard swaps revert). */
+ *  aware — Coil tokens take a 1% tax on DEX trades, so standard swaps revert). */
 export const routerAbi = [
   { type: "function", name: "WETH", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   {

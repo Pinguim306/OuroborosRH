@@ -3,9 +3,9 @@ import Link from "next/link";
 import { copy } from "@/lib/copy";
 
 export const metadata: Metadata = {
-  title: "Terms of Use — Ouroboros",
+  title: "Terms of Use — Coil",
   description:
-    "Terms of Use for the Ouroboros launchpad — eligibility, risks, no financial advice, prohibited uses, and disclaimers.",
+    "Terms of Use for the Coil launchpad — eligibility, risks, no financial advice, prohibited uses, and disclaimers.",
 };
 
 const LAST_UPDATED = "July 2026";
@@ -22,7 +22,7 @@ export default function TermsPage() {
       <div className="space-y-8">
         <Clause n={1} title="Acceptance of these terms">
           <p>
-            Ouroboros (the &quot;Protocol&quot;) is a set of smart contracts and a web interface that
+            Coil (the &quot;Protocol&quot;) is a set of smart contracts and a web interface that
             let anyone launch and trade tokens on Robinhood Chain. By accessing or using the interface
             or the Protocol, you agree to these Terms of Use. If you do not agree, do not use the
             interface or the Protocol.
@@ -99,7 +99,7 @@ export default function TermsPage() {
           </p>
         </Clause>
 
-        <Clause n={8} title="Ouroboros Points">
+        <Clause n={8} title="Coil Points">
           <p>
             The interface may display &quot;points&quot; or similar scores derived from public
             on-chain activity. Points are a reputation metric only: they are not money, securities,
@@ -137,7 +137,7 @@ export default function TermsPage() {
 
         <Clause n={11} title="Limitation of liability">
           <p>
-            To the maximum extent permitted by law, the operators of Ouroboros and their contributors
+            To the maximum extent permitted by law, the operators of Coil and their contributors
             will not be liable for any indirect, incidental, special, consequential, or exemplary
             damages, or for any loss of profits, assets, or data, arising out of or relating to your
             use of the interface or the Protocol — even if advised of the possibility of such damages.

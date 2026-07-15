@@ -8,15 +8,15 @@
 
 html,
 body {
-  background-color: #05070a;
-  color: #e6f0ea;
+  background-color: #05060d;
+  color: #e7eafc;
 }
 
 body {
   min-height: 100vh;
   background-image:
-    radial-gradient(60rem 40rem at 80% -10%, rgba(34, 229, 132, 0.1), transparent 60%),
-    radial-gradient(50rem 30rem at 0% 0%, rgba(200, 255, 77, 0.06), transparent 55%);
+    radial-gradient(60rem 40rem at 80% -10%, rgba(139, 92, 255, 0.12), transparent 60%),
+    radial-gradient(50rem 30rem at 0% 0%, rgba(55, 232, 255, 0.07), transparent 55%);
   background-attachment: fixed;
 }
 
@@ -26,7 +26,7 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(34, 229, 132, 0.25);
+  background: rgba(139, 92, 255, 0.25);
   border-radius: 999px;
 }
 ::-webkit-scrollbar-track {
@@ -67,7 +67,7 @@ body {
 }
 
 .text-gradient {
-  background: linear-gradient(120deg, #7dffb2 0%, #22e584 40%, #c8ff4d 100%);
+  background: linear-gradient(120deg, #b7a6ff 0%, #8b5cff 40%, #37e8ff 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

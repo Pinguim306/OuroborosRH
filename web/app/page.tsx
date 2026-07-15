@@ -66,7 +66,7 @@ export default function HomePage() {
           <span className="text-2xl">🐍</span>
           <div>
             <div className="text-sm font-bold text-white">
-              Season 1 is live — every trade earns <span className="text-venom-400">Ouroboros Points</span>
+              Season 1 is live — every trade earns <span className="text-venom-400">Coil Points</span>
             </div>
             <div className="mt-0.5 text-xs text-white/45">
               Trade, launch, ape early. Scored 100% from on-chain activity.

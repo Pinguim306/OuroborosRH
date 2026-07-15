@@ -299,7 +299,7 @@ export default function CreatePage() {
                       {
                         key: "loop",
                         title: "🐍 Loop Rewards",
-                        desc: "40% of harvested pool fees stream to every holder automatically — the classic Ouroboros loop.",
+                        desc: "40% of harvested pool fees stream to every holder automatically — the classic Coil loop.",
                       },
                       {
                         key: "creator",
