@@ -545,12 +545,12 @@ export default function CreatePage() {
           )}
         </div>
 
-        {/* Live preview */}
+        {/* Live preview — mirrors the token card on the home grid. */}
         <div className="md:sticky md:top-20 md:self-start">
           <div className="label mb-2">Live preview</div>
           <div className="glass p-4">
-            <div className="flex items-start gap-3">
-              <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-obsidian-800 text-2xl">
+            <div className="flex items-center gap-3">
+              <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-xl bg-obsidian-800 text-4xl">
                 {imagePreview ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={imagePreview} alt="preview" className="h-full w-full object-cover" />
@@ -558,18 +558,49 @@ export default function CreatePage() {
                   "🪙"
                 )}
               </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-semibold text-white">{form.name || "Your token"}</span>
-                  <span className="chip !px-2 !py-0.5">{form.symbol || "TICK"}</span>
-                </div>
-                <p className="mt-0.5 line-clamp-2 text-xs text-white/45">
-                  {form.description || "Your description will appear here."}
-                </p>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-base font-semibold text-white">{form.name || "Your token"}</div>
+                <span className="chip mt-1 inline-flex !px-2 !py-0.5">{form.symbol || "TICK"}</span>
               </div>
             </div>
-            <div className="mt-4 flex items-center justify-center rounded-lg border border-venom-500/20 bg-venom-500/5 py-2 text-xs font-semibold text-venom-400">
-              ⚡ Live on Uniswap {mode === "v4" ? "v4" : "V3"} from second one
+
+            <div className="mt-4 grid grid-cols-2 gap-2 text-center">
+              <div>
+                <div className="label">Marketcap</div>
+                <div className="mt-0.5 text-sm font-semibold text-white">—</div>
+              </div>
+              <div>
+                <div className="label">24h Volume</div>
+                <div className="mt-0.5 text-sm font-semibold text-venom-400">—</div>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between text-xs text-white/40">
+              <div className="flex items-center gap-2">
+                <span>⧗ new</span>
+                {(form.x || form.website) && (
+                  <span className="flex items-center gap-1">
+                    {form.x && (
+                      <span className="grid h-6 w-6 place-items-center rounded-md border border-white/10 text-white/55">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.45-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117l11.966 15.644Z" />
+                        </svg>
+                      </span>
+                    )}
+                    {form.website && (
+                      <span className="grid h-6 w-6 place-items-center rounded-md border border-white/10 text-white/55">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18" />
+                        </svg>
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full bg-venom-500/10 px-2 py-0.5 text-[10px] font-semibold text-venom-400">
+                ⚡ Uniswap {mode === "v4" ? "v4" : "V3"}
+              </span>
             </div>
           </div>
           <p className="mt-3 text-xs leading-relaxed text-white/35">
