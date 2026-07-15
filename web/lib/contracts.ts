@@ -172,6 +172,27 @@ export function isCoilToken(token: Address): boolean {
   return (BigInt(token) & HOOK_FLAG_MASK) === COIL_HOOK_FLAGS;
 }
 
+/** Token addresses that must never surface anywhere on the site — listings, trending, search, the
+ *  swap token picker, and their own /token/<address> page. Sourced from a hardcoded always-hidden
+ *  list (internal/test tokens) plus NEXT_PUBLIC_HIDDEN_TOKENS (comma-separated). Case-insensitive.
+ *  The tokens still exist on-chain; this only removes them from the UI. */
+const ALWAYS_HIDDEN: string[] = [
+  "0x14557a71a1851317949e99e1ba0e6cd51b9d0088", // MPC — internal test token
+];
+
+const HIDDEN_TOKENS = new Set(
+  [
+    ...ALWAYS_HIDDEN,
+    ...(process.env.NEXT_PUBLIC_HIDDEN_TOKENS ?? "").split(","),
+  ]
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+export function isHiddenToken(address?: string): boolean {
+  return !!address && HIDDEN_TOKENS.has(address.toLowerCase());
+}
+
 export const coilLaunchpadV4Abi = [
   {
     type: "function",

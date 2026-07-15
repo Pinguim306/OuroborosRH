@@ -3,7 +3,16 @@
 import { useMemo } from "react";
 import { formatEther } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
-import { CONTRACTS, LAUNCHPADS, LIVE, launchpadAbi, curveAbi, tokenAbi, v3PoolAbi } from "./contracts";
+import {
+  CONTRACTS,
+  LAUNCHPADS,
+  LIVE,
+  launchpadAbi,
+  curveAbi,
+  tokenAbi,
+  v3PoolAbi,
+  isHiddenToken,
+} from "./contracts";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -30,18 +39,6 @@ const bn = (x: unknown): bigint => (typeof x === "bigint" ? x : 0n);
 const num = (x: unknown): number => Number(formatEther(bn(x)));
 
 /**
- * Token addresses to hide from the listings (Discover, home). Set as a comma-
- * separated list in NEXT_PUBLIC_HIDDEN_TOKENS. This only filters the lists — the
- * tokens still exist on-chain and their /token/<address> page still works.
- */
-const HIDDEN_TOKENS = new Set(
-  (process.env.NEXT_PUBLIC_HIDDEN_TOKENS ?? "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean),
-);
-
-/**
  * Hidden time cutoff: any token launched BEFORE this instant is dropped from the listings, so old
  * contracts can be swept off the site without touching code. Set NEXT_PUBLIC_HIDE_TOKENS_BEFORE in
  * the Vercel env to either a unix timestamp (seconds; 13-digit millis are accepted too) or a date
@@ -63,8 +60,7 @@ function parseCutoff(raw?: string): number {
 const HIDE_BEFORE = parseCutoff(process.env.NEXT_PUBLIC_HIDE_TOKENS_BEFORE);
 
 const isHidden = (t: TokenMarket): boolean =>
-  HIDDEN_TOKENS.has(t.address.toLowerCase()) ||
-  (HIDE_BEFORE > 0 && t.createdAt > 0 && t.createdAt < HIDE_BEFORE);
+  isHiddenToken(t.address) || (HIDE_BEFORE > 0 && t.createdAt > 0 && t.createdAt < HIDE_BEFORE);
 
 function imageFrom(metadataURI: string): string {
   // Image URLs (uploaded to IPFS or a remote host) render as an <img>; short

@@ -25,6 +25,7 @@ import {
   coilSwapRouterAbi,
   coilSwapRouterV3Abi,
   isCoilToken,
+  isHiddenToken,
   swapRouter02Abi,
   tokenAbi,
   uniswapV3FactoryAbi,
@@ -120,7 +121,9 @@ export function SwapWidget() {
     args: [0n, 24n],
     query: { enabled: LAUNCH_LIVE },
   });
-  const markets = (marketsRaw as readonly CoilMarket[] | undefined) ?? [];
+  const markets = ((marketsRaw as readonly CoilMarket[] | undefined) ?? []).filter(
+    (m) => !isHiddenToken(m.token),
+  );
 
   // on-chain symbol for a nicer label (esp. imported tokens)
   const { data: onchainSym } = useReadContract({
