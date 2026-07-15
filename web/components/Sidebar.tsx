@@ -12,7 +12,7 @@ const NAV: Item[] = [
   { href: "/swap", label: "Swap", icon: "🔁" },
   { href: "/points", label: "Points", icon: "🎯" },
   { href: "/leaderboard", label: "Leaderboard", icon: "🏆" },
-  { href: "/rewards", label: copy.nav.rewards, icon: "💧" },
+  { href: "/rewards", label: copy.nav.rewards, icon: "💸" },
   { href: "/about", label: "About", icon: "✨" },
   { href: "/docs", label: "How it works", icon: "📖" },
 ];
