@@ -80,6 +80,7 @@ export default function CreatePage() {
       : 0.01;
 
   const devBuyNum = parseFloat(devBuy) || 0;
+  const devBuyWei = devBuyNum > 0 ? parseEther(devBuyNum.toFixed(18)) : 0n;
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { data: receipt, isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
@@ -209,7 +210,6 @@ export default function CreatePage() {
       return;
     }
 
-    const devBuyWei = devBuyNum > 0 ? parseEther(devBuyNum.toFixed(18)) : 0n;
     const fee = (creationFee as bigint | undefined) ?? parseEther("0.01"); // excess is refunded on-chain
 
     // Every launch goes straight into a Uniswap V3 pool. v2 launchpads take the
@@ -381,28 +381,28 @@ export default function CreatePage() {
               </div>
             )}
 
-            {/* Dev buy — executed as the pool's first swap, in the launch tx (V3 only). */}
-            {mode === "v3" && (
-              <div>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <span className="label">Dev buy ({NATIVE_SYMBOL}) · optional</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    className="field font-mono"
-                    value={devBuy}
-                    onChange={(e) => setDevBuy(e.target.value.replace(/[^0-9.]/g, ""))}
-                    inputMode="decimal"
-                    placeholder="0.0"
-                  />
-                  <span className="chip shrink-0">{NATIVE_SYMBOL}</span>
-                </div>
-                <p className="mt-1.5 text-[11px] text-white/40">
-                  Executed as the pool&apos;s very first swap, inside the launch transaction —
-                  impossible to front-run.
-                </p>
+            {/* Dev buy — V3: the pool's first swap inside the launch tx (front-run-proof).
+                v4: a follow-up buy fired right after launch, through Coil Swap. */}
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="label">Dev buy ({NATIVE_SYMBOL}) · optional</span>
               </div>
-            )}
+              <div className="flex items-center gap-2">
+                <input
+                  className="field font-mono"
+                  value={devBuy}
+                  onChange={(e) => setDevBuy(e.target.value.replace(/[^0-9.]/g, ""))}
+                  inputMode="decimal"
+                  placeholder="0.0"
+                />
+                <span className="chip shrink-0">{NATIVE_SYMBOL}</span>
+              </div>
+              <p className="mt-1.5 text-[11px] text-white/40">
+                {mode === "v4"
+                  ? "Bought for you in a second transaction right after launch, through Coil Swap."
+                  : "Executed as the pool's very first swap, inside the launch transaction — impossible to front-run."}
+              </p>
+            </div>
           </div>
 
           <div className="mt-6 rounded-xl border border-white/5 bg-obsidian-900/50 p-4 text-xs text-white/50">
@@ -440,7 +440,7 @@ export default function CreatePage() {
                       : `${feeEth} ${NATIVE_SYMBOL}`}
                 </span>
               </div>
-              {mode === "v3" && devBuyNum > 0 && (
+              {devBuyNum > 0 && (
                 <>
                   <div className="flex items-center justify-between">
                     <span className="text-white/60">Dev buy</span>
@@ -464,6 +464,7 @@ export default function CreatePage() {
               name={form.name}
               symbol={form.symbol}
               creatorRewards={rewards === "creator"}
+              devBuyWei={devBuyWei}
               buildMetadataURI={buildMetadataURI}
             />
           ) : (

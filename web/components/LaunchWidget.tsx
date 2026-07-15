@@ -1,16 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { zeroAddress, type Address, type Hex } from "viem";
+import { formatEther, zeroAddress, type Address, type Hex } from "viem";
 import {
   useAccount,
   usePublicClient,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { CHAIN_ID } from "@/lib/chain";
-import { COIL_LAUNCHPAD, LAUNCH_LIVE, coilLaunchpadV4Abi } from "@/lib/contracts";
+import { CHAIN_ID, NATIVE_SYMBOL } from "@/lib/chain";
+import {
+  COIL_LAUNCHPAD,
+  COIL_SWAP_ROUTER,
+  LAUNCH_LIVE,
+  SWAP_LIVE,
+  coilLaunchpadV4Abi,
+  coilPoolKey,
+  coilSwapRouterAbi,
+} from "@/lib/contracts";
 import { mineSalt } from "@/lib/mineSalt";
 import { WalletButton } from "./WalletButton";
 
@@ -28,11 +36,15 @@ export function LaunchWidget({
   name,
   symbol,
   creatorRewards,
+  devBuyWei,
   buildMetadataURI,
 }: {
   name: string;
   symbol: string;
   creatorRewards: boolean;
+  /** Optional dev buy (in wei). v4 can't buy atomically in the launch tx, so if set we fire a
+   *  follow-up buy through the CoilSwapRouter once the launch confirms. */
+  devBuyWei: bigint;
   /** Uploads image + pins metadata JSON, returning the on-chain metadataURI ("" if nothing to pin).
    *  Throws with a message on failure. Shared with the V3 flow. */
   buildMetadataURI: () => Promise<string>;
@@ -47,7 +59,46 @@ export function LaunchWidget({
   const [hash, setHash] = useState<Hex | undefined>();
   const [err, setErr] = useState<string | null>(null);
 
+  // Dev buy (v4): fired as a separate tx after the launch confirms.
+  const [buyHash, setBuyHash] = useState<Hex | undefined>();
+  const [buyNote, setBuyNote] = useState<string | null>(null);
+  const buyStartedRef = useRef(false);
+
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+  const { isLoading: buyConfirming, isSuccess: buySuccess } = useWaitForTransactionReceipt({
+    hash: buyHash,
+  });
+
+  // Once the launch is mined, fire the optional dev buy as a second tx (v4 can't do it atomically).
+  // The launch already succeeded, so a failed/declined dev buy is a soft note, never a hard error.
+  useEffect(() => {
+    if (!isSuccess || buyStartedRef.current) return;
+    if (devBuyWei <= 0n || !tokenAddr || !address) return;
+    buyStartedRef.current = true;
+    if (!SWAP_LIVE) {
+      setBuyNote("Dev buy skipped — swap router not configured. Buy manually on the Swap tab.");
+      return;
+    }
+    (async () => {
+      try {
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
+        const bh = await writeContractAsync({
+          chainId: CHAIN_ID,
+          address: COIL_SWAP_ROUTER,
+          abi: coilSwapRouterAbi,
+          functionName: "swapExactInSingle",
+          args: [coilPoolKey(tokenAddr), true, devBuyWei, 0n, address, deadline],
+          value: devBuyWei,
+        });
+        setBuyHash(bh);
+      } catch (e) {
+        setBuyNote(
+          (e as { shortMessage?: string }).shortMessage ??
+            "Dev buy didn't go through — you can still buy on the Swap tab.",
+        );
+      }
+    })();
+  }, [isSuccess, tokenAddr, address, devBuyWei, writeContractAsync]);
 
   async function launch() {
     if (!publicClient || !isConnected || !address) return;
@@ -152,6 +203,23 @@ export function LaunchWidget({
                 </a>
               </div>
               <div className="mt-1 text-xs text-white/50">Live ✓ — tradable on the Swap tab.</div>
+              {devBuyWei > 0n && (
+                <div className="mt-2 border-t border-white/5 pt-2 text-xs">
+                  {buySuccess ? (
+                    <span className="text-venom-400">
+                      Dev buy done ✓ — bought {formatEther(devBuyWei)} {NATIVE_SYMBOL} of ${symbol}.
+                    </span>
+                  ) : buyConfirming || buyHash ? (
+                    <span className="text-white/50">
+                      Confirming your {formatEther(devBuyWei)} {NATIVE_SYMBOL} dev buy…
+                    </span>
+                  ) : buyNote ? (
+                    <span className="text-amber-400">{buyNote}</span>
+                  ) : (
+                    <span className="text-white/50">Approve the dev buy in your wallet…</span>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -171,7 +239,9 @@ export function LaunchWidget({
 
       {err && <p className="text-xs text-red-400">{err}</p>}
       <p className="text-center text-[11px] text-white/30">
-        One transaction: deploys the token into a live v4 pool, seeds all liquidity, renounces ownership.
+        {devBuyWei > 0n
+          ? "Two transactions: deploy the token into a live v4 pool (liquidity locked, ownership renounced), then your dev buy through Coil Swap."
+          : "One transaction: deploys the token into a live v4 pool, seeds all liquidity, renounces ownership."}
       </p>
     </div>
   );
