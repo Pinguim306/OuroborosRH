@@ -3,6 +3,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { AppShell } from "@/components/AppShell";
 import { SearchProvider } from "@/components/SearchProvider";
+import { AuthProvider } from "@/components/AuthProvider";
 import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
@@ -16,9 +17,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="font-display antialiased">
         <Providers>
-          <SearchProvider>
-            <AppShell>{children}</AppShell>
-          </SearchProvider>
+          <AuthProvider>
+            <SearchProvider>
+              <AppShell>{children}</AppShell>
+            </SearchProvider>
+          </AuthProvider>
         </Providers>
         <Analytics />
       </body>

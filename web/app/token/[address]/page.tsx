@@ -21,6 +21,7 @@ import { dexscreenerEmbedUrl } from "@/lib/chain";
 import { TokenAvatar } from "@/components/TokenAvatar";
 import { HarvestFees } from "@/components/HarvestFees";
 import { SocialLinks } from "@/components/SocialLinks";
+import { TokenChat } from "@/components/TokenChat";
 import { useTokenMeta } from "@/lib/useMeta";
 import { useTotalFeesEth } from "@/lib/useFees";
 
@@ -271,6 +272,9 @@ export default function TokenPage() {
               </div>
             )}
           </div>
+
+          {/* Community chat */}
+          <TokenChat token={token.address} />
         </div>
 
         {/* Right: actions */}
