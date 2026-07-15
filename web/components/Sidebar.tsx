@@ -28,10 +28,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex h-full flex-col gap-1 p-3">
       <Link href="/" onClick={onNavigate} className="mb-3 flex items-center gap-2.5 px-2 py-1">
         <Logo size={30} className="animate-spin-slow" />
-        <span className="font-display text-lg font-extrabold tracking-tight">
-          {copy.brand}
-          <span className="text-venom-400">.</span>
-        </span>
+        <span className="font-display text-lg font-extrabold tracking-tight">{copy.brand}</span>
       </Link>
 
       <nav className="flex flex-col gap-0.5">
