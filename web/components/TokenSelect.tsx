@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { isAddress } from "viem";
 import type { Address } from "@/lib/types";
 import { NATIVE_SYMBOL } from "@/lib/chain";
-import { isCoilToken, type CoilMarket } from "@/lib/contracts";
+import { isCoilToken, isHiddenToken, type CoilMarket } from "@/lib/contracts";
 
 /** null address = native ETH. */
 export type TokenChoice = { address: Address | null; symbol: string; name?: string };
@@ -76,7 +76,8 @@ export function TokenSelect({
     );
   }, [s, markets]);
 
-  const pasted = isAddress(q.trim()) ? (q.trim() as Address) : null;
+  const pastedRaw = isAddress(q.trim()) ? (q.trim() as Address) : null;
+  const pasted = pastedRaw && !isHiddenToken(pastedRaw) ? pastedRaw : null; // never surface hidden tokens
   const pastedListed = pasted && markets.some((m) => m.token.toLowerCase() === pasted.toLowerCase());
   const showEth = !s || NATIVE_SYMBOL.toLowerCase().includes(s) || "ether".includes(s);
 

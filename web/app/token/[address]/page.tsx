@@ -5,7 +5,7 @@ import Link from "next/link";
 import { getToken, mockTrades, mockHolders } from "@/lib/mock/data";
 import { compact, pct, usdFromEth, shortAddr, timeAgo, fullDateTime } from "@/lib/format";
 import { NATIVE_SYMBOL } from "@/lib/chain";
-import { LIVE } from "@/lib/contracts";
+import { LIVE, isHiddenToken } from "@/lib/contracts";
 import { useLiveToken } from "@/lib/useMarkets";
 import { useTokenActivity, useTokenHolders } from "@/lib/useActivity";
 import { useEthPrice } from "@/lib/usePrice";
@@ -36,8 +36,9 @@ function txHashOf(id: string): string | null {
 export default function TokenPage() {
   const params = useParams();
   const address = Array.isArray(params.address) ? params.address[0] : params.address;
-  const live = useLiveToken(address as Address | undefined);
-  const token = LIVE ? live.token : address ? getToken(address) : undefined;
+  const hidden = isHiddenToken(address); // internal/test tokens resolve to "not found" everywhere
+  const live = useLiveToken(hidden ? undefined : (address as Address | undefined));
+  const token = hidden ? undefined : LIVE ? live.token : address ? getToken(address) : undefined;
 
   const ethUsd = useEthPrice();
   const activity = useTokenActivity(token);
@@ -45,7 +46,7 @@ export default function TokenPage() {
   const meta = useTokenMeta(token?.image);
   const totalFeesEth = useTotalFeesEth(token);
 
-  if (LIVE && live.isLoading && !token) {
+  if (!hidden && LIVE && live.isLoading && !token) {
     return <div className="mx-auto max-w-md px-4 py-32 text-center text-white/50">Loading token…</div>;
   }
 
