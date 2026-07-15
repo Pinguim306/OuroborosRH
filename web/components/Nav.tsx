@@ -9,7 +9,6 @@ import { WalletButton } from "./WalletButton";
 const links = [
   { href: "/discover", label: "Discover" },
   { href: "/swap", label: "Swap" },
-  { href: "/launch", label: "Launch v4" },
   { href: "/points", label: "Points" },
   { href: "/leaderboard", label: "Leaderboard" },
   { href: "/rewards", label: copy.nav.rewards },
