@@ -39,6 +39,7 @@ const SLIPPAGE_OPTIONS = [
   { label: "3%", bps: 300n },
   { label: "5%", bps: 500n },
 ];
+const MAX_SLIPPAGE_PCT = 49; // hard ceiling on the custom slippage input
 
 const SWAP02 = ROBINHOOD_CONTRACTS.swapRouter02 as Address;
 const V3_FACTORY = ROBINHOOD_CONTRACTS.uniswapV3Factory as Address;
@@ -98,6 +99,7 @@ export function SwapWidget() {
   const [dir, setDir] = useState<"buy" | "sell">("buy"); // buy = pay ETH; sell = pay token
   const [amount, setAmount] = useState("");
   const [slippage, setSlippage] = useState(300n);
+  const [customSlip, setCustomSlip] = useState(""); // when non-empty, overrides the preset chips
   const [flash, setFlash] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -274,6 +276,27 @@ export function SwapWidget() {
       return () => clearTimeout(t);
     }
   }, [isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function onCustomSlip(raw: string) {
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    if (cleaned === "") {
+      setCustomSlip("");
+      return;
+    }
+    const n = parseFloat(cleaned);
+    if (Number.isNaN(n)) {
+      setCustomSlip(cleaned);
+      return;
+    }
+    const clamped = Math.min(n, MAX_SLIPPAGE_PCT);
+    setCustomSlip(n > MAX_SLIPPAGE_PCT ? String(MAX_SLIPPAGE_PCT) : cleaned);
+    setSlippage(BigInt(Math.round(clamped * 100)));
+  }
+  function pickPreset(bps: bigint) {
+    setSlippage(bps);
+    setCustomSlip("");
+  }
+  const highSlippage = slippage > 500n; // >5% — warn about MEV / bad fills
 
   function onPick(t: TokenChoice) {
     if (t.address === null) {
@@ -467,13 +490,31 @@ export function SwapWidget() {
         {SLIPPAGE_OPTIONS.map((o) => (
           <button
             key={o.label}
-            onClick={() => setSlippage(o.bps)}
-            className={`chip ${slippage === o.bps ? "border-venom-500/60 text-white" : ""}`}
+            onClick={() => pickPreset(o.bps)}
+            className={`chip ${slippage === o.bps && !customSlip ? "border-venom-500/60 text-white" : ""}`}
           >
             {o.label}
           </button>
         ))}
+        <span
+          className={`chip flex items-center gap-1 !py-0 ${customSlip ? "border-venom-500/60 text-white" : ""}`}
+        >
+          <input
+            inputMode="decimal"
+            placeholder="Custom"
+            value={customSlip}
+            onChange={(e) => onCustomSlip(e.target.value)}
+            className="w-16 bg-transparent py-1.5 text-center outline-none placeholder:text-white/30"
+          />
+          <span className="text-white/40">%</span>
+        </span>
       </div>
+      {highSlippage && (
+        <p className="px-1 text-[11px] text-amber-400">
+          High slippage ({(Number(slippage) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%) —
+          you may receive far less. Max {MAX_SLIPPAGE_PCT}%.
+        </p>
+      )}
 
       {token && isV4 && !SWAP_LIVE && (
         <p className="px-1 text-xs text-amber-400">

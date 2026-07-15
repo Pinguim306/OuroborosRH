@@ -8,9 +8,18 @@ import { copy } from "@/lib/copy";
 import { CHAIN_ID, NATIVE_SYMBOL } from "@/lib/chain";
 import { LIVE, CONTRACTS, launchpadAbi } from "@/lib/contracts";
 import { ProgressBar } from "@/components/ProgressBar";
+import { LaunchWidget } from "@/components/LaunchWidget";
 
 export default function CreatePage() {
   const { isConnected } = useAccount();
+  // Launch mode: the classic instant-V3 flow (this form) or the Uniswap-v4 launch (LaunchWidget),
+  // unified under one screen. `?mode=v4` (used by the old /launch route) opens straight into v4.
+  const [mode, setMode] = useState<"v3" | "v4">("v3");
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("mode") === "v4") {
+      setMode("v4");
+    }
+  }, []);
   const [form, setForm] = useState({
     name: "",
     symbol: "",
@@ -214,7 +223,39 @@ export default function CreatePage() {
         <p className="mt-3 text-white/55">{copy.create.subtitle}</p>
       </div>
 
-      <div className="mt-10 grid gap-6 md:grid-cols-[1fr_360px]">
+      {/* Launch mode toggle — unify the instant-V3 flow and the Uniswap-v4 launch on one screen. */}
+      <div className="mx-auto mt-8 flex max-w-md gap-1 rounded-2xl border border-white/10 bg-obsidian-900/50 p-1">
+        {(
+          [
+            { key: "v3", title: "Instant V3", sub: "Live on Uniswap V3 instantly" },
+            { key: "v4", title: "Uniswap v4", sub: "Native per-swap fee hook" },
+          ] as const
+        ).map((m) => (
+          <button
+            key={m.key}
+            type="button"
+            onClick={() => setMode(m.key)}
+            className={`flex-1 rounded-xl px-3 py-2 text-center transition ${
+              mode === m.key ? "bg-venom-500/15 text-venom-400" : "text-white/50 hover:text-white/80"
+            }`}
+          >
+            <div className="text-sm font-semibold">{m.title}</div>
+            <div className="mt-0.5 text-[10px] leading-tight">{m.sub}</div>
+          </button>
+        ))}
+      </div>
+
+      {mode === "v4" ? (
+        <div className="mx-auto mt-8 max-w-lg">
+          <p className="mb-6 text-center text-sm leading-relaxed text-white/50">
+            One transaction deploys your token into a live Uniswap v4 pool — tradable instantly,
+            liquidity locked forever, and every trade winds the coil with a native per-swap fee (no
+            fee-on-transfer, no harvest).
+          </p>
+          <LaunchWidget />
+        </div>
+      ) : (
+      <div className="mt-8 grid gap-6 md:grid-cols-[1fr_360px]">
         {/* Form */}
         <div className="glass p-6">
           <div className="grid gap-4">
@@ -503,6 +544,7 @@ export default function CreatePage() {
           </p>
         </div>
       </div>
+      )}
     </div>
   );
 }
