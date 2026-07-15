@@ -2,29 +2,9 @@
 
 import Link from "next/link";
 import { copy } from "@/lib/copy";
-import { compact, usdFromEth } from "@/lib/format";
-import { MOCK_TOKENS } from "@/lib/mock/data";
-import { LIVE } from "@/lib/contracts";
-import { useLiveMarkets } from "@/lib/useMarkets";
-import { useEthPrice } from "@/lib/usePrice";
-import { useHolderShare, totalFeesEth } from "@/lib/useFees";
-import type { TokenMarket } from "@/lib/types";
-import { StatTile } from "@/components/StatTile";
 import { LoopDiagram } from "@/components/LoopDiagram";
-import { LivePulse } from "@/components/LivePulse";
 
 export default function AboutPage() {
-  const ethUsd = useEthPrice();
-  const { tokens: liveTokens } = useLiveMarkets();
-  const all: TokenMarket[] = LIVE ? liveTokens : MOCK_TOKENS;
-
-  const holderShare = useHolderShare(all.some((t) => t.mode === "v3"));
-  const stats = {
-    liquidityLocked: all.reduce((s, t) => s + t.liquidityRh, 0),
-    rewardsPaid: all.reduce((s, t) => s + totalFeesEth(t, holderShare), 0),
-    tokens: all.length,
-  };
-
   return (
     <div className="mx-auto max-w-6xl px-4">
       {/* Hero */}
@@ -49,14 +29,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Stats */}
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile label="Liquidity locked" value={usdFromEth(stats.liquidityLocked, ethUsd, 0)} accent />
-        <StatTile label="Rewards streamed" value={usdFromEth(stats.rewardsPaid, ethUsd, 0)} />
-        <StatTile label="Tokens launched" value={compact(stats.tokens, 0)} />
-        <StatTile label="Explore" value="Home →" sub="Browse every token" />
-      </section>
-
       {/* Season points callout */}
       <Link
         href="/points"
@@ -77,9 +49,6 @@ export default function AboutPage() {
           View the board →
         </span>
       </Link>
-
-      {/* Live feed + King of the Hill (renders only once there is activity) */}
-      {LIVE && <LivePulse tokens={all} />}
 
       {/* How the loop works */}
       <section className="py-16 md:py-24">
