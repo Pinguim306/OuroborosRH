@@ -131,7 +131,41 @@ export const coilLaunchpadV4Abi = [
   },
   { type: "function", name: "creationFee", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "tokenSupply", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "marketsCount", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  {
+    type: "function",
+    name: "getMarkets",
+    stateMutability: "view",
+    inputs: [
+      { name: "offset", type: "uint256" },
+      { name: "limit", type: "uint256" },
+    ],
+    outputs: [
+      {
+        type: "tuple[]",
+        components: [
+          { name: "token", type: "address" },
+          { name: "creator", type: "address" },
+          { name: "creatorRewards", type: "bool" },
+          { name: "name", type: "string" },
+          { name: "symbol", type: "string" },
+          { name: "metadataURI", type: "string" },
+          { name: "createdAt", type: "uint256" },
+        ],
+      },
+    ],
+  },
 ] as const;
+
+export type CoilMarket = {
+  token: Address;
+  creator: Address;
+  creatorRewards: boolean;
+  name: string;
+  symbol: string;
+  metadataURI: string;
+  createdAt: bigint;
+};
 
 /** Minimal ABIs — only the entrypoints the frontend calls. The create functions
  *  appear twice: the 4-arg overload matches v1 launchpads, the 5-arg one (with the

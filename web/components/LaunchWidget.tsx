@@ -128,11 +128,32 @@ export function LaunchWidget() {
         />
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-white/70">
-        <input type="checkbox" checked={creatorRewards} onChange={(e) => setCreatorRewards(e.target.checked)} />
-        Creator Rewards — the holder fee share (0.30%) pays <span className="text-venom-400">you</span> instead of all
-        holders.
-      </label>
+      {/* rewards mode — a clean two-option toggle instead of a bare checkbox */}
+      <div>
+        <label className="label">Rewards mode</label>
+        <div className="mt-1 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setCreatorRewards(false)}
+            className={`rounded-xl border p-3 text-left transition ${
+              !creatorRewards ? "border-venom-500/60 bg-venom-500/5" : "border-white/10 hover:border-white/20"
+            }`}
+          >
+            <div className="text-sm font-semibold text-white">Loop Rewards</div>
+            <div className="mt-0.5 text-xs text-white/50">The 0.30% holder fee streams to all holders.</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCreatorRewards(true)}
+            className={`rounded-xl border p-3 text-left transition ${
+              creatorRewards ? "border-venom-500/60 bg-venom-500/5" : "border-white/10 hover:border-white/20"
+            }`}
+          >
+            <div className="text-sm font-semibold text-white">Creator Rewards</div>
+            <div className="mt-0.5 text-xs text-white/50">That 0.30% pays you, the creator, instead.</div>
+          </button>
+        </div>
+      </div>
 
       {/* mining / status */}
       {phase === "mining" && (

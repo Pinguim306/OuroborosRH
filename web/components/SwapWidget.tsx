@@ -12,13 +12,17 @@ import {
 import type { Address } from "@/lib/types";
 import { CHAIN_ID, NATIVE_SYMBOL, ROBINHOOD_CONTRACTS } from "@/lib/chain";
 import {
+  COIL_LAUNCHPAD,
   COIL_SWAP_ROUTER,
+  LAUNCH_LIVE,
   SWAP_LIVE,
+  coilLaunchpadV4Abi,
   coilPoolKey,
   coilSwapRouterAbi,
   isCoilToken,
   swapRouter02Abi,
   tokenAbi,
+  type CoilMarket,
 } from "@/lib/contracts";
 import { WalletButton } from "./WalletButton";
 
@@ -60,6 +64,17 @@ export function SwapWidget() {
   );
   const isV4 = token ? isCoilToken(token) : false;
   const spender = isV4 ? COIL_SWAP_ROUTER : SWAP02;
+
+  // --- Token picker: the Coil tokens launched by the v4 factory (newest first) ---
+  const { data: marketsRaw } = useReadContract({
+    chainId: CHAIN_ID,
+    address: COIL_LAUNCHPAD,
+    abi: coilLaunchpadV4Abi,
+    functionName: "getMarkets",
+    args: [0n, 24n],
+    query: { enabled: LAUNCH_LIVE },
+  });
+  const markets = (marketsRaw as readonly CoilMarket[] | undefined) ?? [];
   const amountWei = safeParseEther(amount);
   const isBuy = mode === "buy";
   const deadline = useMemo(() => BigInt(Math.floor(Date.now() / 1000) + 1200), [amount, mode]);
@@ -274,6 +289,25 @@ export function SwapWidget() {
         )}
       </div>
 
+      {/* Coil token picker */}
+      {markets.length > 0 && (
+        <div>
+          <label className="label">Coil tokens</label>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {markets.map((m) => (
+              <button
+                key={m.token}
+                onClick={() => setTokenInput(m.token)}
+                title={m.name}
+                className={`chip ${token?.toLowerCase() === m.token.toLowerCase() ? "border-venom-500/60 text-white" : ""}`}
+              >
+                {m.symbol}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
         <label className="label">You pay ({inSym})</label>
         <input
@@ -294,17 +328,19 @@ export function SwapWidget() {
       </div>
 
       {/* slippage */}
-      <div className="flex items-center gap-2">
-        <span className="label">Max slippage</span>
-        {SLIPPAGE_OPTIONS.map((o) => (
-          <button
-            key={o.label}
-            onClick={() => setSlippage(o.bps)}
-            className={`chip ${slippage === o.bps ? "border-venom-500/60 text-white" : ""}`}
-          >
-            {o.label}
-          </button>
-        ))}
+      <div>
+        <label className="label">Max slippage</label>
+        <div className="mt-1 flex flex-wrap gap-2">
+          {SLIPPAGE_OPTIONS.map((o) => (
+            <button
+              key={o.label}
+              onClick={() => setSlippage(o.bps)}
+              className={`chip ${slippage === o.bps ? "border-venom-500/60 text-white" : ""}`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* quote */}
