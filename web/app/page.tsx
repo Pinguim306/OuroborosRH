@@ -1,130 +1,263 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { copy } from "@/lib/copy";
-import { compact, usdFromEth } from "@/lib/format";
 import { MOCK_TOKENS } from "@/lib/mock/data";
 import { LIVE } from "@/lib/contracts";
 import { useLiveMarkets } from "@/lib/useMarkets";
+import { useMarketsActivity, useLaunchpadTotals } from "@/lib/useActivity";
 import { useEthPrice } from "@/lib/usePrice";
-import { useHolderShare, totalFeesEth } from "@/lib/useFees";
+import { compact, usdFromEth, timeAgo } from "@/lib/format";
 import type { TokenMarket } from "@/lib/types";
+import { TokenCard } from "@/components/TokenCard";
+import { TokenAvatar } from "@/components/TokenAvatar";
 import { StatTile } from "@/components/StatTile";
-import { LoopDiagram } from "@/components/LoopDiagram";
-import { LivePulse } from "@/components/LivePulse";
+import { useSearch } from "@/components/SearchProvider";
+
+type Mode = "trending" | "newest" | "highmcap" | "volume" | "oldest" | "lasttrade";
+
+const MODES: [Mode, string][] = [
+  ["trending", "🔥 Movers"],
+  ["newest", "✨ New"],
+  ["highmcap", "💰 Market cap"],
+  ["volume", "🔊 Volume"],
+  ["oldest", "🕰️ Oldest"],
+  ["lasttrade", "⚡ Last trade"],
+];
+
+type Enriched = TokenMarket & { _volumeTotal: number; _lastBlock: number };
 
 export default function HomePage() {
+  const [mode, setMode] = useState<Mode>("trending");
+  const [view, setView] = useState<"grid" | "table">("grid");
+  const { query } = useSearch();
   const ethUsd = useEthPrice();
-  const { tokens: liveTokens } = useLiveMarkets();
-  const all: TokenMarket[] = LIVE ? liveTokens : MOCK_TOKENS;
 
-  const holderShare = useHolderShare(all.some((t) => t.mode === "v3"));
-  const stats = {
-    liquidityLocked: all.reduce((s, t) => s + t.liquidityRh, 0),
-    rewardsPaid: all.reduce((s, t) => s + totalFeesEth(t, holderShare), 0),
+  const { tokens: liveTokens, isLoading } = useLiveMarkets();
+  const all: TokenMarket[] = LIVE ? liveTokens : MOCK_TOKENS;
+  const stats = useMarketsActivity(all);
+  const totals = useLaunchpadTotals(all, stats);
+
+  const enriched: Enriched[] = useMemo(
+    () =>
+      all.map((t) => {
+        const s = stats.get(t.address.toLowerCase());
+        return {
+          ...t,
+          volume24hRh: LIVE ? (s?.volume24hEth ?? 0) : t.volume24hRh,
+          _volumeTotal: LIVE ? (s?.volumeEth ?? 0) : t.volume24hRh,
+          _lastBlock: LIVE ? (s?.lastBlock ?? 0) : t.createdAt,
+        };
+      }),
+    [all, stats],
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = q
+      ? enriched.filter(
+          (t) =>
+            t.name.toLowerCase().includes(q) ||
+            t.symbol.toLowerCase().includes(q) ||
+            t.address.toLowerCase().includes(q),
+        )
+      : enriched;
+    const sorted = [...list];
+    switch (mode) {
+      case "trending":
+        sorted.sort((a, b) => b.volume24hRh - a.volume24hRh || b.marketCapRh - a.marketCapRh);
+        break;
+      case "highmcap":
+        sorted.sort((a, b) => b.marketCapRh - a.marketCapRh);
+        break;
+      case "volume":
+        sorted.sort((a, b) => b._volumeTotal - a._volumeTotal);
+        break;
+      case "newest":
+        sorted.sort((a, b) => b.createdAt - a.createdAt);
+        break;
+      case "oldest":
+        sorted.sort((a, b) => a.createdAt - b.createdAt);
+        break;
+      case "lasttrade":
+        sorted.sort((a, b) => b._lastBlock - a._lastBlock);
+        break;
+    }
+    return sorted;
+  }, [enriched, query, mode]);
+
+  // Featured row: top movers by volume then market cap, independent of the active tab/search.
+  const trending = useMemo(
+    () =>
+      [...enriched]
+        .sort((a, b) => b.volume24hRh - a.volume24hRh || b.marketCapRh - a.marketCapRh)
+        .slice(0, 4),
+    [enriched],
+  );
+
+  const demoTotals = {
     tokens: all.length,
+    volume24hEth: all.reduce((s, t) => s + t.volume24hRh, 0),
+    highestAthEth: Math.max(0, ...all.map((t) => t.marketCapRh)),
+    holders: all.reduce((s, t) => s + t.holders, 0),
   };
+  const T = LIVE ? totals : demoTotals;
 
   return (
-    <div className="mx-auto max-w-6xl px-4">
-      {/* Hero */}
-      <section className="grid items-center gap-10 py-14 md:grid-cols-2 md:py-20">
-        <div>
-          <span className="chip border-venom-500/30 text-venom-400">{copy.hero.kicker}</span>
-          <h1 className="mt-5 font-display text-5xl font-extrabold leading-[1.05] tracking-tight md:text-6xl">
-            Every trade <span className="text-gradient">feeds the loop.</span>
-          </h1>
-          <p className="mt-5 max-w-lg text-base leading-relaxed text-white/55">{copy.hero.subtitle}</p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/create" className="btn-primary text-base">
-              {copy.hero.ctaPrimary} →
-            </Link>
-            <Link href="/discover" className="btn-ghost text-base">
-              {copy.hero.ctaSecondary}
-            </Link>
-          </div>
-        </div>
-        <div className="animate-float">
-          <LoopDiagram />
-        </div>
-      </section>
-
-      {/* Stats */}
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile label="Liquidity locked" value={usdFromEth(stats.liquidityLocked, ethUsd, 0)} accent />
-        <StatTile label="Rewards streamed" value={usdFromEth(stats.rewardsPaid, ethUsd, 0)} />
-        <StatTile label="Tokens launched" value={compact(stats.tokens, 0)} />
-        <StatTile label="Explore" value="Discover →" sub="Browse every token" />
-      </section>
-
-      {/* Season points callout */}
-      <Link
-        href="/points"
-        className="group mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-venom-500/25 bg-gradient-to-r from-venom-500/10 to-transparent px-5 py-4 transition hover:border-venom-500/50"
-      >
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">🐍</span>
-          <div>
-            <div className="text-sm font-bold text-white">
-              Season 1 is live — every trade earns <span className="text-venom-400">Coil Points</span>
-            </div>
-            <div className="mt-0.5 text-xs text-white/45">
-              Trade, launch, ape early. Scored 100% from on-chain activity.
-            </div>
-          </div>
-        </div>
-        <span className="text-sm font-semibold text-venom-400 transition group-hover:translate-x-0.5">
-          View the board →
-        </span>
-      </Link>
-
-      {/* Live feed + King of the Hill (renders only once there is activity) */}
-      {LIVE && <LivePulse tokens={all} />}
-
-      {/* How the loop works */}
-      <section className="py-16 md:py-24">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="font-display text-3xl font-bold md:text-4xl">{copy.loop.title}</h2>
-          <p className="mt-3 text-white/50">{copy.loop.subtitle}</p>
-        </div>
-        <div className="mt-10 grid gap-4 md:grid-cols-4">
-          {copy.loop.steps.map((s, i) => (
-            <div key={s.label} className="glass relative overflow-hidden p-5">
-              <div className="absolute -right-3 -top-4 font-display text-7xl font-black text-white/[0.04]">
-                {i + 1}
-              </div>
-              <div className="text-sm font-bold text-venom-400">{s.label}</div>
-              <p className="mt-2 text-sm leading-relaxed text-white/55">{s.text}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Differentiator */}
-      <section className="pb-16 md:pb-24">
-        <div className="glass-strong overflow-hidden p-8 md:p-12">
-          <h2 className="max-w-xl font-display text-3xl font-bold md:text-4xl">
-            {copy.differentiator.title}
-          </h2>
-          <div className="mt-8 grid gap-6 md:grid-cols-3">
-            {copy.differentiator.points.map((p) => (
-              <div key={p.title}>
-                <div className="mb-2 h-1 w-10 rounded-full bg-gradient-to-r from-venom-400 to-acid" />
-                <h3 className="font-semibold text-white">{p.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-white/55">{p.text}</p>
-              </div>
+    <div className="mx-auto max-w-7xl px-4 py-6 lg:py-8">
+      {/* Trending now */}
+      {trending.length > 0 && !query && (
+        <section>
+          <h2 className="font-display text-lg font-bold tracking-tight">Trending now</h2>
+          <div className="mt-3 grid auto-cols-[minmax(230px,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2 md:grid-flow-row md:auto-cols-auto md:grid-cols-4 md:overflow-visible">
+            {trending.map((t) => (
+              <TrendingCard key={t.address} token={t} ethUsd={ethUsd} />
             ))}
           </div>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/discover" className="btn-primary">
-              Explore tokens →
-            </Link>
-            <Link href="/create" className="btn-ghost">
-              Launch your own
-            </Link>
+        </section>
+      )}
+
+      {/* Explore coins */}
+      <section className="mt-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-display text-lg font-bold tracking-tight">Explore coins</h2>
+          <div className="flex rounded-xl bg-obsidian-900 p-1 text-xs font-semibold">
+            {(["grid", "table"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`rounded-lg px-3 py-1.5 capitalize transition ${
+                  view === v ? "bg-venom-500 text-obsidian-950" : "text-white/50 hover:text-white"
+                }`}
+              >
+                {v}
+              </button>
+            ))}
           </div>
         </div>
+
+        {/* Filter tabs */}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {MODES.map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setMode(key)}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                mode === key
+                  ? "bg-venom-500/15 text-venom-400"
+                  : "text-white/50 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Totals */}
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <StatTile label="Tokens launched" value={compact(T.tokens, 0)} accent />
+          <StatTile label="24h volume" value={usdFromEth(T.volume24hEth, ethUsd, 0)} />
+          <StatTile label="Biggest ATH" value={usdFromEth(T.highestAthEth, ethUsd, 0)} />
+          <StatTile label="Total holders" value={compact(T.holders, 0)} />
+        </div>
+
+        {/* Content */}
+        {LIVE && isLoading && filtered.length === 0 ? (
+          <div className="glass mt-6 p-10 text-center text-white/50">Loading markets…</div>
+        ) : filtered.length === 0 ? (
+          <div className="glass mt-6 p-10 text-center text-white/50">
+            {query ? "No coins match your search." : "No coins yet — "}
+            {!query && (
+              <Link href="/create" className="text-venom-400 hover:underline">
+                be the first to launch →
+              </Link>
+            )}
+          </div>
+        ) : view === "grid" ? (
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {filtered.map((t) => (
+              <TokenCard key={t.address} token={t} ethUsd={ethUsd} />
+            ))}
+          </div>
+        ) : (
+          <CoinTable tokens={filtered} ethUsd={ethUsd} />
+        )}
+
+        {LIVE && (
+          <p className="mt-6 text-center text-[11px] text-white/25">
+            Volume, holders &amp; last-trade read live from on-chain events.
+          </p>
+        )}
       </section>
+    </div>
+  );
+}
+
+/** A featured "trending" card: cover image with the market cap and name overlaid. */
+function TrendingCard({ token, ethUsd }: { token: Enriched; ethUsd: number }) {
+  return (
+    <Link
+      href={`/token/${token.address}`}
+      className="group relative block h-36 overflow-hidden rounded-2xl border border-white/10 transition hover:border-venom-500/40"
+    >
+      <TokenAvatar
+        uri={token.image}
+        symbol={token.symbol}
+        className="absolute inset-0 grid place-items-center bg-obsidian-800 text-4xl"
+        imgClassName="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 p-3">
+        <div className="inline-flex rounded-md bg-black/50 px-1.5 py-0.5 text-sm font-bold text-white backdrop-blur-sm">
+          {usdFromEth(token.marketCapRh, ethUsd, 0)}
+        </div>
+        <div className="mt-1 flex items-center gap-1.5">
+          <span className="truncate font-semibold text-white">{token.name}</span>
+          <span className="chip !border-white/20 !px-1.5 !py-0 text-[10px]">{token.symbol}</span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+/** Compact table view of the coin list. */
+function CoinTable({ tokens, ethUsd }: { tokens: Enriched[]; ethUsd: number }) {
+  return (
+    <div className="mt-5 overflow-x-auto">
+      <table className="w-full min-w-[560px] text-left text-sm">
+        <thead>
+          <tr className="border-b border-white/10 text-[11px] uppercase tracking-wide text-white/40">
+            <th className="py-2 pl-2 font-medium">Coin</th>
+            <th className="py-2 font-medium">Market cap</th>
+            <th className="py-2 font-medium">24h vol</th>
+            <th className="py-2 font-medium">Holders</th>
+            <th className="py-2 pr-2 font-medium">Age</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tokens.map((t) => (
+            <tr key={t.address} className="border-b border-white/5 transition hover:bg-white/5">
+              <td className="py-2.5 pl-2">
+                <Link href={`/token/${t.address}`} className="flex items-center gap-3">
+                  <TokenAvatar
+                    uri={t.image}
+                    symbol={t.symbol}
+                    className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg bg-obsidian-800 text-lg"
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold text-white">{t.name}</span>
+                    <span className="block text-xs text-white/40">{t.symbol}</span>
+                  </span>
+                </Link>
+              </td>
+              <td className="py-2.5 font-semibold text-white">{usdFromEth(t.marketCapRh, ethUsd, 0)}</td>
+              <td className="py-2.5 font-semibold text-venom-400">{usdFromEth(t.volume24hRh, ethUsd, 0)}</td>
+              <td className="py-2.5 text-white/70">{compact(t.holders, 0)}</td>
+              <td className="py-2.5 pr-2 text-white/40">{t.createdAt ? timeAgo(t.createdAt) : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
