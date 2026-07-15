@@ -46,6 +46,7 @@ export const coilSwapRouterV3Abi = [
     stateMutability: "payable",
     inputs: [
       { name: "token", type: "address" },
+      { name: "poolFee", type: "uint24" },
       { name: "minAmountOut", type: "uint256" },
       { name: "recipient", type: "address" },
       { name: "deadline", type: "uint256" },
@@ -58,12 +59,46 @@ export const coilSwapRouterV3Abi = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "token", type: "address" },
+      { name: "poolFee", type: "uint24" },
       { name: "amountIn", type: "uint256" },
       { name: "minAmountOut", type: "uint256" },
       { name: "recipient", type: "address" },
       { name: "deadline", type: "uint256" },
     ],
     outputs: [{ name: "amountOut", type: "uint256" }],
+  },
+] as const;
+
+/** The standard Uniswap v3 fee tiers (in hundredths of a bip). The swap UI probes all four
+ *  against the token/WETH pair and routes through whichever pool exists (deepest liquidity wins),
+ *  so a token launched in ANY tier is tradeable — not just the 1% instant-launch tier. */
+export const V3_FEE_TIERS = [100, 500, 3000, 10000] as const;
+
+/** Minimal Uniswap v3 factory ABI — `getPool` returns the pool address for a (tokenA, tokenB, fee)
+ *  triple, or the zero address when no pool was ever created at that tier. */
+export const uniswapV3FactoryAbi = [
+  {
+    type: "function",
+    name: "getPool",
+    stateMutability: "view",
+    inputs: [
+      { name: "tokenA", type: "address" },
+      { name: "tokenB", type: "address" },
+      { name: "fee", type: "uint24" },
+    ],
+    outputs: [{ name: "pool", type: "address" }],
+  },
+] as const;
+
+/** Minimal Uniswap v3 pool ABI — `liquidity` is the in-range liquidity, used to pick the deepest
+ *  pool when a token has pools in more than one fee tier. */
+export const uniswapV3PoolAbi = [
+  {
+    type: "function",
+    name: "liquidity",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint128" }],
   },
 ] as const;
 

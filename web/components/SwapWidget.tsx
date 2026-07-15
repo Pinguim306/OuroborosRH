@@ -5,6 +5,7 @@ import { encodeFunctionData, formatEther, maxUint256, parseEther } from "viem";
 import {
   useAccount,
   useReadContract,
+  useReadContracts,
   useSimulateContract,
   useWaitForTransactionReceipt,
   useWriteContract,
@@ -18,6 +19,7 @@ import {
   LAUNCH_LIVE,
   SWAP_LIVE,
   V3_FEE_LIVE,
+  V3_FEE_TIERS,
   coilLaunchpadV4Abi,
   coilPoolKey,
   coilSwapRouterAbi,
@@ -25,6 +27,8 @@ import {
   isCoilToken,
   swapRouter02Abi,
   tokenAbi,
+  uniswapV3FactoryAbi,
+  uniswapV3PoolAbi,
   type CoilMarket,
 } from "@/lib/contracts";
 import { TokenSelect, type TokenChoice } from "./TokenSelect";
@@ -37,8 +41,9 @@ const SLIPPAGE_OPTIONS = [
 ];
 
 const SWAP02 = ROBINHOOD_CONTRACTS.swapRouter02 as Address;
-const V3_FEE_TIER = 10000;
+const V3_FACTORY = ROBINHOOD_CONTRACTS.uniswapV3Factory as Address;
 const ADDRESS_THIS = "0x0000000000000000000000000000000000000002" as Address;
+const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 
 function safeParseEther(v: string): bigint {
   try {
@@ -133,6 +138,55 @@ export function SwapWidget() {
     query: { enabled: !!token && !isV4 },
   });
 
+  // Auto-detect the v3 fee tier: probe the factory for a pool of this token in every standard
+  // tier, then route through whichever pool has the deepest liquidity. This is what lets any token
+  // launched in any tier (not just the 1% instant-launch tier) trade through the swap.
+  const wethAddr = weth as Address | undefined;
+  const { data: poolProbes } = useReadContracts({
+    contracts:
+      token && wethAddr
+        ? V3_FEE_TIERS.map((fee) => ({
+            chainId: CHAIN_ID,
+            address: V3_FACTORY,
+            abi: uniswapV3FactoryAbi,
+            functionName: "getPool" as const,
+            args: [token, wethAddr, fee] as const,
+          }))
+        : [],
+    query: { enabled: !!token && !!wethAddr && !isV4 },
+  });
+  const foundPools = useMemo(
+    () =>
+      (poolProbes ?? [])
+        .map((r, i) => ({ fee: V3_FEE_TIERS[i], pool: r?.result as Address | undefined }))
+        .filter((p) => p.pool && p.pool.toLowerCase() !== ZERO_ADDR),
+    [poolProbes],
+  );
+  const { data: liqProbes } = useReadContracts({
+    contracts: foundPools.map((p) => ({
+      chainId: CHAIN_ID,
+      address: p.pool as Address,
+      abi: uniswapV3PoolAbi,
+      functionName: "liquidity" as const,
+    })),
+    query: { enabled: foundPools.length > 0 },
+  });
+  const bestFee = useMemo(() => {
+    if (foundPools.length === 0) return V3_FEE_TIERS[V3_FEE_TIERS.length - 1]; // fallback (1%)
+    let fee = foundPools[0].fee;
+    let deepest = -1n;
+    foundPools.forEach((p, i) => {
+      const liq = (liqProbes?.[i]?.result as bigint | undefined) ?? 0n;
+      if (liq > deepest) {
+        deepest = liq;
+        fee = p.fee;
+      }
+    });
+    return fee;
+  }, [foundPools, liqProbes]);
+  const noPool = !!token && !isV4 && !!wethAddr && poolProbes !== undefined && foundPools.length === 0;
+  const feeTierLabel = `${bestFee / 10000}%`;
+
   const { data: tokenBal } = useReadContract({
     chainId: CHAIN_ID,
     address: token ?? undefined,
@@ -174,7 +228,7 @@ export function SwapWidget() {
             {
               tokenIn: (isBuy ? weth : token) as Address,
               tokenOut: (isBuy ? token : weth) as Address,
-              fee: V3_FEE_TIER,
+              fee: bestFee,
               recipient: address ?? SWAP02,
               amountIn: amountWei,
               amountOutMinimum: 0n,
@@ -192,8 +246,8 @@ export function SwapWidget() {
     functionName: isBuy ? "buy" : "sell",
     args: (token
       ? isBuy
-        ? [token, 0n, address ?? COIL_SWAP_ROUTER_V3, deadline]
-        : [token, amountWei, 0n, address ?? COIL_SWAP_ROUTER_V3, deadline]
+        ? [token, bestFee, 0n, address ?? COIL_SWAP_ROUTER_V3, deadline]
+        : [token, bestFee, amountWei, 0n, address ?? COIL_SWAP_ROUTER_V3, deadline]
       : undefined) as never,
     value: isBuy ? amountWei : 0n,
     query: { enabled: quoteReady && useV3Fee },
@@ -262,7 +316,7 @@ export function SwapWidget() {
           address: COIL_SWAP_ROUTER_V3,
           abi: coilSwapRouterV3Abi,
           functionName: "buy",
-          args: [token, minOut, address, deadline],
+          args: [token, bestFee, minOut, address, deadline],
           value: amountWei,
         });
       } else {
@@ -271,7 +325,7 @@ export function SwapWidget() {
           address: COIL_SWAP_ROUTER_V3,
           abi: coilSwapRouterV3Abi,
           functionName: "sell",
-          args: [token, amountWei, minOut, address, deadline],
+          args: [token, bestFee, amountWei, minOut, address, deadline],
         });
       }
       return;
@@ -287,7 +341,7 @@ export function SwapWidget() {
           {
             tokenIn: weth as Address,
             tokenOut: token,
-            fee: V3_FEE_TIER,
+            fee: bestFee,
             recipient: address,
             amountIn: amountWei,
             amountOutMinimum: minOut,
@@ -304,7 +358,7 @@ export function SwapWidget() {
           {
             tokenIn: token,
             tokenOut: weth as Address,
-            fee: V3_FEE_TIER,
+            fee: bestFee,
             recipient: ADDRESS_THIS,
             amountIn: amountWei,
             amountOutMinimum: minOut,
@@ -397,9 +451,9 @@ export function SwapWidget() {
               {isV4 ? (
                 <span className="text-venom-400">Coil v4 · interface fee</span>
               ) : useV3Fee ? (
-                <span className="text-venom-400">Uniswap v3 · interface fee</span>
+                <span className="text-venom-400">Uniswap v3 · {feeTierLabel} · interface fee</span>
               ) : (
-                <span className="text-white/40">Uniswap v3</span>
+                <span className="text-white/40">Uniswap v3 · {feeTierLabel}</span>
               )}
             </span>
             {minOut > 0n && <span className="text-white/40">min {fmt(minOut)}</span>}
@@ -426,8 +480,16 @@ export function SwapWidget() {
           v4 router not configured — set <code>NEXT_PUBLIC_COIL_SWAP_ROUTER</code>.
         </p>
       )}
-      {simError && amountWei > 0n && !needsApproval && (
-        <p className="px-1 text-xs text-amber-400">No route / pool for this token, or amount exceeds its liquidity.</p>
+      {noPool ? (
+        <p className="px-1 text-xs text-amber-400">
+          No Uniswap v3 pool found for this token in any fee tier on Robinhood Chain.
+        </p>
+      ) : (
+        simError &&
+        amountWei > 0n &&
+        !needsApproval && (
+          <p className="px-1 text-xs text-amber-400">No route for this token, or amount exceeds its liquidity.</p>
+        )
       )}
 
       {/* action */}
