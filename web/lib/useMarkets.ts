@@ -41,7 +41,30 @@ const HIDDEN_TOKENS = new Set(
     .filter(Boolean),
 );
 
-const isHidden = (t: TokenMarket): boolean => HIDDEN_TOKENS.has(t.address.toLowerCase());
+/**
+ * Hidden time cutoff: any token launched BEFORE this instant is dropped from the listings, so old
+ * contracts can be swept off the site without touching code. Set NEXT_PUBLIC_HIDE_TOKENS_BEFORE in
+ * the Vercel env to either a unix timestamp (seconds; 13-digit millis are accepted too) or a date
+ * string like `2026-07-15` / `2026-07-15T00:00:00Z`. Empty/unset = no cutoff. Like
+ * NEXT_PUBLIC_HIDDEN_TOKENS this only filters the lists — each token's /token/<address> page still
+ * works.
+ */
+function parseCutoff(raw?: string): number {
+  const v = (raw ?? "").trim();
+  if (!v) return 0;
+  if (/^\d+$/.test(v)) {
+    const n = Number(v);
+    return n > 1e12 ? Math.floor(n / 1000) : n; // treat 13-digit values as milliseconds
+  }
+  const ms = Date.parse(v);
+  return Number.isNaN(ms) ? 0 : Math.floor(ms / 1000);
+}
+
+const HIDE_BEFORE = parseCutoff(process.env.NEXT_PUBLIC_HIDE_TOKENS_BEFORE);
+
+const isHidden = (t: TokenMarket): boolean =>
+  HIDDEN_TOKENS.has(t.address.toLowerCase()) ||
+  (HIDE_BEFORE > 0 && t.createdAt > 0 && t.createdAt < HIDE_BEFORE);
 
 function imageFrom(metadataURI: string): string {
   // Image URLs (uploaded to IPFS or a remote host) render as an <img>; short
