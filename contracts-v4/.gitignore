@@ -1,0 +1,15 @@
+# Foundry build output
+out/
+out-e2e/
+cache/
+broadcast/
+
+# Dependencies are pinned + reinstalled via bootstrap.sh (see README)
+lib/
+
+# Node (only used by solc-wrapper.js in the sandboxed CI)
+node_modules/
+
+# never commit the dependency/tooling symlinks used for local testing
+/lib
+/node_modules

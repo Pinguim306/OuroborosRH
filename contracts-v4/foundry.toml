@@ -1,0 +1,71 @@
+# Default profile — via-IR everywhere: QuiverHook's inlined on-chain art library blows the
+# legacy pipeline's stack ("value0 too deep"), so via-IR is mandatory for our code. Moderate
+# optimizer runs keep QuiverHook inside EIP-170 (22,336 bytes runtime at 800 runs).
+# The e2e suite is excluded here because it pulls in v4-core's Pool.sol, which solc 0.8.26
+# only compiles under via-IR at upstream's extreme optimizer-runs value — see [profile.e2e].
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.26"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 800
+via_ir = true
+ffi = false
+skip = ["test/e2e/**"]
+fs_permissions = [{ access = "read", path = "./" }]
+
+[profile.default.fuzz]
+runs = 256
+
+# E2E/fork profile — mirrors upstream v4-core's own settings (via-IR + 44444444 runs is the
+# combination Uniswap ships and tests Pool.sol with; legacy codegen is not an option for us
+# because QuiverHook requires via-IR). Contract size is irrelevant here — tests place code
+# with vm.etch. Separate out dir so artifacts never mix with deploy artifacts.
+# Run with:  FOUNDRY_PROFILE=e2e forge test --match-path "test/e2e/**" -vv
+[profile.e2e]
+src = "src"
+out = "out-e2e"
+libs = ["lib"]
+solc = "0.8.26"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 44444444
+via_ir = true
+ffi = false
+gas_limit = "3000000000"
+# Clear the skip inherited from [profile.default] so test/e2e IS compiled here.
+skip = []
+fs_permissions = [{ access = "read", path = "./" }]
+
+[profile.e2e.fuzz]
+runs = 256
+
+# Sandbox profile — used where only the solc-js WASM compiler is reachable (no native solc).
+# solc-js cannot compile the very large e2e compilation unit, so it is skipped here; the
+# lightweight mock-based unit suite gives full logic coverage. Run with:
+#   FOUNDRY_PROFILE=sandbox forge test --use ./solc-wrapper.js
+[profile.sandbox]
+src = "src"
+out = "out"
+libs = ["lib"]
+evm_version = "cancun"
+optimizer = false
+via_ir = false
+ffi = false
+# CoilLaunchpad embeds `new CoilHook{salt}(...)` in a large function; the legacy pipeline goes
+# stack-too-deep on it (it needs via-IR), so it is skipped in this no-via-IR profile. Its logic is
+# covered by CoilLaunchpadUnit under the default (via-IR) profile: `forge test --use ./solc-wrapper.js`.
+skip = ["test/e2e/**", "src/CoilLaunchpad.sol", "test/CoilLaunchpadUnit.t.sol"]
+fs_permissions = [{ access = "read", path = "./" }]
+
+[profile.sandbox.fuzz]
+runs = 64
+
+[fmt]
+line_length = 110
+tab_width = 4
+int_types = "long"
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
