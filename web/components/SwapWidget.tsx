@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { encodeFunctionData, formatEther, isAddress, maxUint256, parseEther } from "viem";
+import { encodeFunctionData, formatEther, maxUint256, parseEther } from "viem";
 import {
   useAccount,
   useReadContract,
@@ -27,6 +27,7 @@ import {
   tokenAbi,
   type CoilMarket,
 } from "@/lib/contracts";
+import { TokenSelect, type TokenChoice } from "./TokenSelect";
 import { WalletButton } from "./WalletButton";
 
 const SLIPPAGE_OPTIONS = [
@@ -36,8 +37,8 @@ const SLIPPAGE_OPTIONS = [
 ];
 
 const SWAP02 = ROBINHOOD_CONTRACTS.swapRouter02 as Address;
-const V3_FEE_TIER = 10000; // 1% tier — the tier instant-V3 pools are created with
-const ADDRESS_THIS = "0x0000000000000000000000000000000000000002" as Address; // SwapRouter02 sentinel
+const V3_FEE_TIER = 10000;
+const ADDRESS_THIS = "0x0000000000000000000000000000000000000002" as Address;
 
 function safeParseEther(v: string): bigint {
   try {
@@ -46,31 +47,64 @@ function safeParseEther(v: string): bigint {
     return 0n;
   }
 }
+function fmt(x: bigint) {
+  return Number(formatEther(x)).toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
+/** A fixed ETH pill, or the selectable token pill. */
+function Pill({ symbol, onClick }: { symbol: string | null; onClick?: () => void }) {
+  const base = "flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold";
+  if (!onClick) {
+    return (
+      <div className={`${base} bg-white/5 text-white`}>
+        <span className="grid h-5 w-5 place-items-center rounded-full bg-venom-500/20 text-[10px] text-venom-400">
+          {(symbol ?? "?").slice(0, 1)}
+        </span>
+        {symbol}
+      </div>
+    );
+  }
+  return (
+    <button
+      onClick={onClick}
+      className={`${base} ${symbol ? "bg-white/5 text-white hover:bg-white/10" : "bg-venom-500 text-obsidian-950"}`}
+    >
+      {symbol ? (
+        <span className="grid h-5 w-5 place-items-center rounded-full bg-venom-500/20 text-[10px] text-venom-400">
+          {symbol.slice(0, 1)}
+        </span>
+      ) : null}
+      {symbol ?? "Select token"}
+      <span className="text-xs opacity-70">▾</span>
+    </button>
+  );
+}
 
 /**
- * Trade any token on Robinhood Chain. A Coil (v4) token — its address carries the hook flags — is
- * routed through the CoilSwapRouter, which skims the interface fee AND triggers the hook's own
- * per-swap fee. Any other token is routed through Uniswap's SwapRouter02 (v3). The quote comes from
- * an eth_call simulation of the actual swap, so it reflects real on-chain output.
+ * Uniswap-style swap: two panels (Vender / Comprar) with a token-select modal and a flip arrow.
+ * Every trade is ETH ↔ token (the routers pair against ETH). A Coil (v4) token routes through the
+ * CoilSwapRouter; any other token routes through the v3 fee wrapper (or SwapRouter02). The quote
+ * comes from an eth_call simulation of the real swap.
  */
 export function SwapWidget() {
   const { address, isConnected } = useAccount();
-  const [tokenInput, setTokenInput] = useState("");
-  const [mode, setMode] = useState<"buy" | "sell">("buy");
+  const [token, setToken] = useState<Address | null>(null); // the non-ETH asset
+  const [tokenSym, setTokenSym] = useState<string>("");
+  const [dir, setDir] = useState<"buy" | "sell">("buy"); // buy = pay ETH; sell = pay token
   const [amount, setAmount] = useState("");
   const [slippage, setSlippage] = useState(300n);
   const [flash, setFlash] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
-  const token = useMemo<Address | null>(
-    () => (isAddress(tokenInput) ? (tokenInput as Address) : null),
-    [tokenInput],
-  );
+  const isBuy = dir === "buy";
   const isV4 = token ? isCoilToken(token) : false;
-  const useV3Fee = !isV4 && V3_FEE_LIVE; // non-Coil token routed through the fee wrapper
+  const useV3Fee = !isV4 && V3_FEE_LIVE;
   const spender = isV4 ? COIL_SWAP_ROUTER : useV3Fee ? COIL_SWAP_ROUTER_V3 : SWAP02;
-  const feeCharged = isV4 || useV3Fee; // an interface fee applies on this route
+  const feeCharged = isV4 || useV3Fee;
+  const amountWei = safeParseEther(amount);
+  const deadline = useMemo(() => BigInt(Math.floor(Date.now() / 1000) + 1200), [amount, dir]);
 
-  // --- Token picker: the Coil tokens launched by the v4 factory (newest first) ---
+  // token picker list
   const { data: marketsRaw } = useReadContract({
     chainId: CHAIN_ID,
     address: COIL_LAUNCHPAD,
@@ -80,14 +114,17 @@ export function SwapWidget() {
     query: { enabled: LAUNCH_LIVE },
   });
   const markets = (marketsRaw as readonly CoilMarket[] | undefined) ?? [];
-  const amountWei = safeParseEther(amount);
-  const isBuy = mode === "buy";
-  const deadline = useMemo(() => BigInt(Math.floor(Date.now() / 1000) + 1200), [amount, mode]);
 
-  // A v4 token can only route once the CoilSwapRouter is configured; v3 always can.
-  const routable = !!token && (!isV4 || SWAP_LIVE);
+  // on-chain symbol for a nicer label (esp. imported tokens)
+  const { data: onchainSym } = useReadContract({
+    chainId: CHAIN_ID,
+    address: token ?? undefined,
+    abi: tokenAbi,
+    functionName: "symbol",
+    query: { enabled: !!token },
+  });
+  const displaySym = (onchainSym as string) || tokenSym || "token";
 
-  // --- WETH (for the v3 path) ---
   const { data: weth } = useReadContract({
     chainId: CHAIN_ID,
     address: SWAP02,
@@ -96,7 +133,6 @@ export function SwapWidget() {
     query: { enabled: !!token && !isV4 },
   });
 
-  // --- Sell-side reads: balance + allowance to the active spender ---
   const { data: tokenBal } = useReadContract({
     chainId: CHAIN_ID,
     address: token ?? undefined,
@@ -115,22 +151,18 @@ export function SwapWidget() {
   });
 
   const needsApproval = !isBuy && amountWei > 0n && (allowance ?? 0n) < amountWei;
+  const routable = !!token && (!isV4 || SWAP_LIVE);
   const quoteReady = routable && !!address && amountWei > 0n && (isBuy || !needsApproval);
 
-  // --- v4 quote: simulate CoilSwapRouter.swapExactInSingle ---
   const { data: simV4, error: errV4 } = useSimulateContract({
     chainId: CHAIN_ID,
     address: COIL_SWAP_ROUTER,
     abi: coilSwapRouterAbi,
     functionName: "swapExactInSingle",
-    args: token
-      ? [coilPoolKey(token), isBuy, amountWei, 0n, address ?? COIL_SWAP_ROUTER, deadline]
-      : undefined,
+    args: token ? [coilPoolKey(token), isBuy, amountWei, 0n, address ?? COIL_SWAP_ROUTER, deadline] : undefined,
     value: isBuy ? amountWei : 0n,
     query: { enabled: quoteReady && isV4 },
   });
-
-  // --- v3 quote: simulate SwapRouter02.exactInputSingle ---
   const { data: simV3, error: errV3 } = useSimulateContract({
     chainId: CHAIN_ID,
     address: SWAP02,
@@ -153,8 +185,6 @@ export function SwapWidget() {
     value: isBuy ? amountWei : 0n,
     query: { enabled: quoteReady && !isV4 && !useV3Fee && !!weth },
   });
-
-  // --- v3 fee-wrapper quote: simulate CoilSwapRouterV3.buy/sell ---
   const { data: simV3Fee, error: errV3Fee } = useSimulateContract({
     chainId: CHAIN_ID,
     address: COIL_SWAP_ROUTER_V3,
@@ -175,13 +205,12 @@ export function SwapWidget() {
   const simError = isV4 ? errV4 : useV3Fee ? errV3Fee : errV3;
   const minOut = (quotedOut * (10000n - slippage)) / 10000n;
 
-  // --- Writes ---
   const { writeContract, data: hash, isPending, error: writeError, reset } = useWriteContract();
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
   useEffect(() => {
     if (isSuccess) {
-      setFlash(isBuy ? "Bought ✓" : "Sold ✓");
+      setFlash("Done ✓");
       setAmount("");
       refetchAllowance();
       const t = setTimeout(() => {
@@ -191,6 +220,16 @@ export function SwapWidget() {
       return () => clearTimeout(t);
     }
   }, [isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function onPick(t: TokenChoice) {
+    if (t.address === null) {
+      setToken(null); // picked ETH → clear the token side
+      setTokenSym("");
+    } else {
+      setToken(t.address);
+      setTokenSym(t.symbol);
+    }
+  }
 
   function approve() {
     if (!token) return;
@@ -217,7 +256,6 @@ export function SwapWidget() {
       return;
     }
     if (useV3Fee) {
-      // Non-Coil token, but routed through the fee wrapper so the interface fee is charged.
       if (isBuy) {
         writeContract({
           chainId: CHAIN_ID,
@@ -238,7 +276,6 @@ export function SwapWidget() {
       }
       return;
     }
-    // v3 via SwapRouter02 (no interface fee)
     if (!weth) return;
     if (isBuy) {
       writeContract({
@@ -260,7 +297,6 @@ export function SwapWidget() {
         value: amountWei,
       });
     } else {
-      // Sell: swap token→WETH into the router, then unwrap to ETH for the seller — one multicall.
       const swapData = encodeFunctionData({
         abi: swapRouter02Abi,
         functionName: "exactInputSingle",
@@ -291,155 +327,141 @@ export function SwapWidget() {
     }
   }
 
-  const inSym = isBuy ? NATIVE_SYMBOL : "token";
-  const outSym = isBuy ? "token" : NATIVE_SYMBOL;
   const busy = isPending || confirming;
+  // The token pill lives on the pay side when selling, the receive side when buying.
+  const payPill = isBuy ? <Pill symbol={NATIVE_SYMBOL} /> : <Pill symbol={token ? displaySym : null} onClick={() => setPickerOpen(true)} />;
+  const receivePill = isBuy ? <Pill symbol={token ? displaySym : null} onClick={() => setPickerOpen(true)} /> : <Pill symbol={NATIVE_SYMBOL} />;
+
+  const cta = !isConnected
+    ? null
+    : !token
+      ? "Select a token"
+      : amountWei === 0n
+        ? "Enter an amount"
+        : needsApproval
+          ? busy
+            ? "Approving…"
+            : `Approve ${displaySym}`
+          : busy
+            ? "Swapping…"
+            : (flash ?? "Swap");
 
   return (
-    <div className="glass-strong space-y-4 p-6">
-      {/* direction toggle */}
-      <div className="grid grid-cols-2 gap-2">
-        <button onClick={() => setMode("buy")} className={`btn ${isBuy ? "btn-primary" : "btn-ghost"}`}>
-          Buy
-        </button>
-        <button onClick={() => setMode("sell")} className={`btn ${!isBuy ? "btn-primary" : "btn-ghost"}`}>
-          Sell
-        </button>
-      </div>
-
-      <div>
-        <label className="label">Token address</label>
-        <input
-          className="field mt-1 font-mono"
-          placeholder="0x… any token on Robinhood Chain"
-          value={tokenInput}
-          onChange={(e) => setTokenInput(e.target.value.trim())}
-          spellCheck={false}
-        />
-        {tokenInput && !token && <p className="mt-1 text-xs text-red-400">Not a valid address.</p>}
-        {token && (
-          <div className="mt-1.5">
-            {isV4 ? (
-              <span className="chip border-venom-500/60 text-white">Coil v4 · interface fee</span>
-            ) : useV3Fee ? (
-              <span className="chip border-venom-500/60 text-white">Uniswap v3 · interface fee</span>
-            ) : (
-              <span className="chip">Uniswap v3</span>
-            )}
-          </div>
-        )}
-        {token && isV4 && !SWAP_LIVE && (
-          <p className="mt-1 text-xs text-amber-400">
-            v4 router not configured — set <code>NEXT_PUBLIC_COIL_SWAP_ROUTER</code>.
-          </p>
-        )}
-      </div>
-
-      {/* Coil token picker */}
-      {markets.length > 0 && (
-        <div>
-          <label className="label">Coil tokens</label>
-          <div className="mt-1 flex flex-wrap gap-2">
-            {markets.map((m) => (
-              <button
-                key={m.token}
-                onClick={() => setTokenInput(m.token)}
-                title={m.name}
-                className={`chip ${token?.toLowerCase() === m.token.toLowerCase() ? "border-venom-500/60 text-white" : ""}`}
-              >
-                {m.symbol}
-              </button>
-            ))}
-          </div>
+    <div className="glass-strong space-y-1.5 p-4">
+      {/* PAY panel */}
+      <div className="rounded-2xl border border-white/10 bg-obsidian-900/60 p-4">
+        <div className="label">Vender</div>
+        <div className="mt-2 flex items-center gap-3">
+          <input
+            className="min-w-0 flex-1 bg-transparent text-3xl font-semibold text-white outline-none placeholder:text-white/20"
+            placeholder="0"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+          {payPill}
         </div>
-      )}
-
-      <div>
-        <label className="label">You pay ({inSym})</label>
-        <input
-          className="field mt-1"
-          placeholder="0.0"
-          inputMode="decimal"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
         {!isBuy && tokenBal !== undefined && (
           <button
             className="mt-1 text-xs text-white/40 hover:text-venom-400"
             onClick={() => setAmount(formatEther(tokenBal as bigint))}
           >
-            Balance: {Number(formatEther(tokenBal as bigint)).toLocaleString()} — max
+            Balance: {fmt(tokenBal as bigint)} — max
           </button>
         )}
       </div>
 
-      {/* slippage */}
-      <div>
-        <label className="label">Max slippage</label>
-        <div className="mt-1 flex flex-wrap gap-2">
-          {SLIPPAGE_OPTIONS.map((o) => (
-            <button
-              key={o.label}
-              onClick={() => setSlippage(o.bps)}
-              className={`chip ${slippage === o.bps ? "border-venom-500/60 text-white" : ""}`}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
+      {/* flip */}
+      <div className="relative z-10 -my-3.5 flex justify-center">
+        <button
+          onClick={() => setDir(isBuy ? "sell" : "buy")}
+          className="grid h-8 w-8 place-items-center rounded-xl border border-white/10 bg-obsidian-850 text-white/70 transition hover:text-venom-400"
+          aria-label="Flip"
+        >
+          ↓
+        </button>
       </div>
 
-      {/* quote */}
-      <div className="rounded-xl border border-white/5 bg-obsidian-900/60 p-3 text-sm">
-        <div className="flex justify-between">
-          <span className="text-white/40">Est. received ({outSym})</span>
-          <span className="font-medium text-white">
-            {quotedOut > 0n
-              ? Number(formatEther(quotedOut)).toLocaleString(undefined, { maximumFractionDigits: 6 })
-              : "—"}
-          </span>
+      {/* RECEIVE panel */}
+      <div className="rounded-2xl border border-white/10 bg-obsidian-900/60 p-4">
+        <div className="label">Comprar</div>
+        <div className="mt-2 flex items-center gap-3">
+          <div className="min-w-0 flex-1 truncate text-3xl font-semibold text-white/90">
+            {quotedOut > 0n ? fmt(quotedOut) : "0"}
+          </div>
+          {receivePill}
         </div>
-        <div className="mt-1 flex justify-between">
-          <span className="text-white/40">Min. received</span>
-          <span className="text-white/70">
-            {minOut > 0n ? Number(formatEther(minOut)).toLocaleString(undefined, { maximumFractionDigits: 6 }) : "—"}
-          </span>
-        </div>
-        {simError && amountWei > 0n && !needsApproval && (
-          <p className="mt-2 text-xs text-amber-400">
-            No route / pool for this token, or the amount is too large for its liquidity.
-          </p>
+        {token && (
+          <div className="mt-1 flex items-center justify-between text-xs">
+            <span>
+              {isV4 ? (
+                <span className="text-venom-400">Coil v4 · interface fee</span>
+              ) : useV3Fee ? (
+                <span className="text-venom-400">Uniswap v3 · interface fee</span>
+              ) : (
+                <span className="text-white/40">Uniswap v3</span>
+              )}
+            </span>
+            {minOut > 0n && <span className="text-white/40">min {fmt(minOut)}</span>}
+          </div>
         )}
       </div>
 
-      {/* action */}
-      {!isConnected ? (
-        <WalletButton />
-      ) : needsApproval ? (
-        <button className="btn-primary w-full" disabled={busy || !routable} onClick={approve}>
-          {busy ? "Approving…" : "Approve token"}
-        </button>
-      ) : (
-        <button
-          className="btn-primary w-full"
-          disabled={busy || !routable || amountWei === 0n || quotedOut === 0n}
-          onClick={swap}
-        >
-          {busy ? "Swapping…" : (flash ?? `Swap ${inSym} → ${outSym}`)}
-        </button>
+      {/* slippage */}
+      <div className="flex flex-wrap items-center gap-2 px-1 pt-1">
+        <span className="label">Max slippage</span>
+        {SLIPPAGE_OPTIONS.map((o) => (
+          <button
+            key={o.label}
+            onClick={() => setSlippage(o.bps)}
+            className={`chip ${slippage === o.bps ? "border-venom-500/60 text-white" : ""}`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+
+      {token && isV4 && !SWAP_LIVE && (
+        <p className="px-1 text-xs text-amber-400">
+          v4 router not configured — set <code>NEXT_PUBLIC_COIL_SWAP_ROUTER</code>.
+        </p>
+      )}
+      {simError && amountWei > 0n && !needsApproval && (
+        <p className="px-1 text-xs text-amber-400">No route / pool for this token, or amount exceeds its liquidity.</p>
       )}
 
+      {/* action */}
+      <div className="pt-1">
+        {!isConnected ? (
+          <WalletButton />
+        ) : needsApproval ? (
+          <button className="btn-primary w-full" disabled={busy || !routable} onClick={approve}>
+            {cta}
+          </button>
+        ) : (
+          <button
+            className="btn-primary w-full"
+            disabled={busy || !routable || amountWei === 0n || quotedOut === 0n}
+            onClick={swap}
+          >
+            {cta}
+          </button>
+        )}
+      </div>
+
       {writeError && (
-        <p className="text-xs text-red-400">
+        <p className="px-1 text-xs text-red-400">
           {(writeError as { shortMessage?: string }).shortMessage ?? "Transaction failed."}
         </p>
       )}
 
-      <p className="text-center text-[11px] text-white/30">
+      <p className="pt-1 text-center text-[11px] text-white/30">
         {feeCharged
           ? "Routed through Coil · a small interface fee supports the protocol."
-          : "Routed through Uniswap v3 on Robinhood Chain."}
+          : "Routed on Robinhood Chain."}
       </p>
+
+      {pickerOpen && <TokenSelect markets={markets} onSelect={onPick} onClose={() => setPickerOpen(false)} />}
     </div>
   );
 }
