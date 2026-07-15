@@ -6,7 +6,7 @@ import { formatEther, parseEther, parseEventLogs } from "viem";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { copy } from "@/lib/copy";
 import { CHAIN_ID, NATIVE_SYMBOL } from "@/lib/chain";
-import { LIVE, CONTRACTS, launchpadAbi } from "@/lib/contracts";
+import { LIVE, CONTRACTS, launchpadAbi, COIL_LAUNCHPAD, LAUNCH_LIVE, coilLaunchpadV4Abi } from "@/lib/contracts";
 import { ProgressBar } from "@/components/ProgressBar";
 import { LaunchWidget } from "@/components/LaunchWidget";
 
@@ -57,14 +57,27 @@ export default function CreatePage() {
     functionName: "LAUNCHPAD_VERSION",
     query: { enabled: LIVE },
   });
-  const supportsRewardsMode = !LIVE || (typeof lpVersion === "bigint" && lpVersion >= 2n);
+  // v4 has its own rewards flag on every launch; V3 needs a v2+ launchpad.
+  const supportsRewardsMode = mode === "v4" || !LIVE || (typeof lpVersion === "bigint" && lpVersion >= 2n);
 
+  // v4 launchpad creation fee (separate contract from the V3 launchpad).
+  const { data: creationFeeV4 } = useReadContract({
+    address: COIL_LAUNCHPAD,
+    abi: coilLaunchpadV4Abi,
+    functionName: "creationFee",
+    query: { enabled: LAUNCH_LIVE },
+  });
+
+  const liveForMode = mode === "v4" ? LAUNCH_LIVE : LIVE;
+  const activeFeeRaw = mode === "v4" ? creationFeeV4 : creationFee;
   // Live creation fee (owner-configurable on-chain; 0 = free, gas only).
-  const feeEth = LIVE
-    ? creationFee !== undefined
-      ? Number(formatEther(creationFee as bigint))
+  const feeEth = liveForMode
+    ? activeFeeRaw !== undefined
+      ? Number(formatEther(activeFeeRaw as bigint))
       : undefined
-    : 0.01;
+    : mode === "v4"
+      ? 0
+      : 0.01;
 
   const devBuyNum = parseFloat(devBuy) || 0;
   const { writeContract, data: hash, isPending, error } = useWriteContract();
@@ -134,6 +147,52 @@ export default function CreatePage() {
     setImagePreview(url);
   }
 
+  // Upload the image (if any) to IPFS and pin the metadata JSON (image + socials), returning the
+  // on-chain metadataURI. Shared by both launch modes so v4 gets the same rich metadata as V3.
+  // Returns "" when there's nothing to pin; throws with a message on failure.
+  async function buildMetadataURI(): Promise<string> {
+    const hasSocials = !!(form.website || form.x || form.telegram);
+    if (!(imageFile || hasSocials || form.description)) return "";
+    setUploading(true);
+    setUploadError(null);
+    try {
+      // 1. Upload the image (if any) to IPFS.
+      let imageURI = "";
+      if (imageFile) {
+        const fd = new FormData();
+        fd.append("file", imageFile);
+        const r = await fetch("/api/upload", { method: "POST", body: fd });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error ?? "Image upload failed.");
+        imageURI = j.url;
+      }
+      // 2. Pin the metadata JSON (image + socials) — this is the on-chain metadataURI, so the
+      //    website/socials persist and render on the token page + externally.
+      const mr = await fetch("/api/upload-json", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          symbol: form.symbol,
+          description: form.description,
+          image: imageURI,
+          website: form.website,
+          twitter: form.x,
+          telegram: form.telegram,
+        }),
+      });
+      const mj = await mr.json();
+      if (!mr.ok) {
+        // Fall back to the bare image URI so a metadata hiccup doesn't block launch.
+        if (imageURI) return imageURI;
+        throw new Error(mj.error ?? "Metadata upload failed.");
+      }
+      return mj.url;
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function deploy() {
     if (!form.name || !form.symbol) return;
     if (!LIVE) {
@@ -143,58 +202,11 @@ export default function CreatePage() {
     }
 
     let metadataURI = "";
-    const hasSocials = !!(form.website || form.x || form.telegram);
-    if (imageFile || hasSocials || form.description) {
-      setUploading(true);
-      setUploadError(null);
-      try {
-        // 1. Upload the image (if any) to IPFS.
-        let imageURI = "";
-        if (imageFile) {
-          const fd = new FormData();
-          fd.append("file", imageFile);
-          const r = await fetch("/api/upload", { method: "POST", body: fd });
-          const j = await r.json();
-          if (!r.ok) {
-            setUploadError(j.error ?? "Image upload failed.");
-            setUploading(false);
-            return;
-          }
-          imageURI = j.url;
-        }
-        // 2. Pin the metadata JSON (image + socials) — this is the on-chain metadataURI,
-        //    so the website/socials persist and render on the token page + externally.
-        const mr = await fetch("/api/upload-json", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: form.name,
-            symbol: form.symbol,
-            description: form.description,
-            image: imageURI,
-            website: form.website,
-            twitter: form.x,
-            telegram: form.telegram,
-          }),
-        });
-        const mj = await mr.json();
-        if (!mr.ok) {
-          // Fall back to the bare image URI so a metadata hiccup doesn't block launch.
-          if (imageURI) metadataURI = imageURI;
-          else {
-            setUploadError(mj.error ?? "Metadata upload failed.");
-            setUploading(false);
-            return;
-          }
-        } else {
-          metadataURI = mj.url;
-        }
-      } catch {
-        setUploadError("Upload failed.");
-        setUploading(false);
-        return;
-      }
-      setUploading(false);
+    try {
+      metadataURI = await buildMetadataURI();
+    } catch (e) {
+      setUploadError((e as Error).message ?? "Upload failed.");
+      return;
     }
 
     const devBuyWei = devBuyNum > 0 ? parseEther(devBuyNum.toFixed(18)) : 0n;
@@ -245,16 +257,14 @@ export default function CreatePage() {
         ))}
       </div>
 
-      {mode === "v4" ? (
-        <div className="mx-auto mt-8 max-w-lg">
-          <p className="mb-6 text-center text-sm leading-relaxed text-white/50">
-            One transaction deploys your token into a live Uniswap v4 pool — tradable instantly,
-            liquidity locked forever, and every trade winds the coil with a native per-swap fee (no
-            fee-on-transfer, no harvest).
-          </p>
-          <LaunchWidget />
-        </div>
-      ) : (
+      {mode === "v4" && (
+        <p className="mx-auto mt-6 max-w-lg text-center text-sm leading-relaxed text-white/50">
+          One transaction deploys your token into a live Uniswap v4 pool — tradable instantly,
+          liquidity locked forever, and every trade winds the coil with a native per-swap fee (no
+          fee-on-transfer, no harvest).
+        </p>
+      )}
+
       <div className="mt-8 grid gap-6 md:grid-cols-[1fr_360px]">
         {/* Form */}
         <div className="glass p-6">
@@ -371,35 +381,47 @@ export default function CreatePage() {
               </div>
             )}
 
-            {/* Dev buy — executed as the pool's first swap, in the launch tx. */}
-            <div>
-              <div className="mb-1.5 flex items-center justify-between">
-                <span className="label">Dev buy ({NATIVE_SYMBOL}) · optional</span>
+            {/* Dev buy — executed as the pool's first swap, in the launch tx (V3 only). */}
+            {mode === "v3" && (
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="label">Dev buy ({NATIVE_SYMBOL}) · optional</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    className="field font-mono"
+                    value={devBuy}
+                    onChange={(e) => setDevBuy(e.target.value.replace(/[^0-9.]/g, ""))}
+                    inputMode="decimal"
+                    placeholder="0.0"
+                  />
+                  <span className="chip shrink-0">{NATIVE_SYMBOL}</span>
+                </div>
+                <p className="mt-1.5 text-[11px] text-white/40">
+                  Executed as the pool&apos;s very first swap, inside the launch transaction —
+                  impossible to front-run.
+                </p>
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  className="field font-mono"
-                  value={devBuy}
-                  onChange={(e) => setDevBuy(e.target.value.replace(/[^0-9.]/g, ""))}
-                  inputMode="decimal"
-                  placeholder="0.0"
-                />
-                <span className="chip shrink-0">{NATIVE_SYMBOL}</span>
-              </div>
-              <p className="mt-1.5 text-[11px] text-white/40">
-                Executed as the pool&apos;s very first swap, inside the launch transaction —
-                impossible to front-run.
-              </p>
-            </div>
+            )}
           </div>
 
           <div className="mt-6 rounded-xl border border-white/5 bg-obsidian-900/50 p-4 text-xs text-white/50">
             <div className="mb-2 font-semibold text-white/70">Launch parameters</div>
             <ul className="grid grid-cols-2 gap-y-1">
               <li>Supply: <span className="text-white/70">1,000,000,000</span></li>
-              <li>Pool fee: <span className="text-white/70">1% (Uniswap V3)</span></li>
+              <li>
+                Pool fee:{" "}
+                <span className="text-white/70">
+                  {mode === "v4" ? "0% LP + native per-swap fee" : "1% (Uniswap V3)"}
+                </span>
+              </li>
               <li>Liquidity: <span className="text-white/70">locked forever</span></li>
-              <li>Tradable: <span className="text-white/70">instantly, DexScreener from trade one</span></li>
+              <li>
+                Tradable:{" "}
+                <span className="text-white/70">
+                  {mode === "v4" ? "instantly on Coil Swap" : "instantly, DexScreener from trade one"}
+                </span>
+              </li>
               <li>
                 Rewards:{" "}
                 <span className="text-venom-400">
@@ -418,7 +440,7 @@ export default function CreatePage() {
                       : `${feeEth} ${NATIVE_SYMBOL}`}
                 </span>
               </div>
-              {devBuyNum > 0 && (
+              {mode === "v3" && devBuyNum > 0 && (
                 <>
                   <div className="flex items-center justify-between">
                     <span className="text-white/60">Dev buy</span>
@@ -437,77 +459,88 @@ export default function CreatePage() {
             </div>
           </div>
 
-          {done ? (
-            <div className="mt-6 rounded-xl border border-venom-500/30 bg-venom-500/10 p-4 text-center">
-              <div className="text-2xl">🎉</div>
-              <p className="mt-1 font-semibold text-venom-400">
-                {form.name} (${form.symbol}) is live in the loop!
-              </p>
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                {LIVE && newTokenAddress ? (
-                  <Link href={`/token/${newTokenAddress}`} className="btn-primary inline-flex">
-                    Open your token
-                  </Link>
-                ) : null}
-                <Link href="/discover" className="btn-ghost inline-flex">
-                  View on Discover
-                </Link>
-              </div>
-              {LIVE && newTokenAddress && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard?.writeText(newTokenAddress)}
-                    title="Copy contract address"
-                    className="mt-2 break-all font-mono text-[11px] text-white/50 underline decoration-dotted hover:text-white"
-                  >
-                    {newTokenAddress} ⧉
-                  </button>
-                  <div className="mt-2 flex flex-wrap items-center justify-center gap-3 text-[11px]">
-                    <a
-                      href={`https://dexscreener.com/robinhood/${newTokenAddress}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-venom-400 hover:underline"
-                    >
-                      DexScreener ↗
-                    </a>
-                    <a
-                      href={`https://robinhoodchain.blockscout.com/token/${newTokenAddress}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-venom-400 hover:underline"
-                    >
-                      Explorer ↗
-                    </a>
-                  </div>
-                </>
-              )}
-            </div>
+          {mode === "v4" ? (
+            <LaunchWidget
+              name={form.name}
+              symbol={form.symbol}
+              creatorRewards={rewards === "creator"}
+              buildMetadataURI={buildMetadataURI}
+            />
           ) : (
-            <button
-              onClick={deploy}
-              disabled={!form.name || !form.symbol || busy || (LIVE && !isConnected)}
-              className="btn-primary mt-6 w-full text-base"
-            >
-              {uploading ? "Uploading image…" : busy ? copy.create.submitting : copy.create.submit}
-            </button>
-          )}
+            <>
+              {done ? (
+                <div className="mt-6 rounded-xl border border-venom-500/30 bg-venom-500/10 p-4 text-center">
+                  <div className="text-2xl">🎉</div>
+                  <p className="mt-1 font-semibold text-venom-400">
+                    {form.name} (${form.symbol}) is live in the loop!
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                    {LIVE && newTokenAddress ? (
+                      <Link href={`/token/${newTokenAddress}`} className="btn-primary inline-flex">
+                        Open your token
+                      </Link>
+                    ) : null}
+                    <Link href="/discover" className="btn-ghost inline-flex">
+                      View on Discover
+                    </Link>
+                  </div>
+                  {LIVE && newTokenAddress && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard?.writeText(newTokenAddress)}
+                        title="Copy contract address"
+                        className="mt-2 break-all font-mono text-[11px] text-white/50 underline decoration-dotted hover:text-white"
+                      >
+                        {newTokenAddress} ⧉
+                      </button>
+                      <div className="mt-2 flex flex-wrap items-center justify-center gap-3 text-[11px]">
+                        <a
+                          href={`https://dexscreener.com/robinhood/${newTokenAddress}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-venom-400 hover:underline"
+                        >
+                          DexScreener ↗
+                        </a>
+                        <a
+                          href={`https://robinhoodchain.blockscout.com/token/${newTokenAddress}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-venom-400 hover:underline"
+                        >
+                          Explorer ↗
+                        </a>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={deploy}
+                  disabled={!form.name || !form.symbol || busy || (LIVE && !isConnected)}
+                  className="btn-primary mt-6 w-full text-base"
+                >
+                  {uploading ? "Uploading image…" : busy ? copy.create.submitting : copy.create.submit}
+                </button>
+              )}
 
-          {busy && (
-            <div className="mt-3">
-              <ProgressBar value={uploading ? 0.3 : confirming ? 0.85 : 0.5} />
-            </div>
-          )}
-          {LIVE && (uploadError || error) && (
-            <p className="mt-3 text-center text-[11px] text-red-400">
-              {uploadError ?? (error as { shortMessage?: string })?.shortMessage ?? "Transaction failed."}
-            </p>
-          )}
-          {!isConnected && (
-            <p className="mt-3 text-center text-[11px] text-white/30">
-              {LIVE ? "Connect a wallet to deploy." : "Demo mode — this simulates the deploy transaction."}
-            </p>
+              {busy && (
+                <div className="mt-3">
+                  <ProgressBar value={uploading ? 0.3 : confirming ? 0.85 : 0.5} />
+                </div>
+              )}
+              {LIVE && (uploadError || error) && (
+                <p className="mt-3 text-center text-[11px] text-red-400">
+                  {uploadError ?? (error as { shortMessage?: string })?.shortMessage ?? "Transaction failed."}
+                </p>
+              )}
+              {!isConnected && (
+                <p className="mt-3 text-center text-[11px] text-white/30">
+                  {LIVE ? "Connect a wallet to deploy." : "Demo mode — this simulates the deploy transaction."}
+                </p>
+              )}
+            </>
           )}
         </div>
 
@@ -535,7 +568,7 @@ export default function CreatePage() {
               </div>
             </div>
             <div className="mt-4 flex items-center justify-center rounded-lg border border-venom-500/20 bg-venom-500/5 py-2 text-xs font-semibold text-venom-400">
-              ⚡ Live on Uniswap V3 from second one
+              ⚡ Live on Uniswap {mode === "v4" ? "v4" : "V3"} from second one
             </div>
           </div>
           <p className="mt-3 text-xs leading-relaxed text-white/35">
@@ -544,7 +577,6 @@ export default function CreatePage() {
           </p>
         </div>
       </div>
-      )}
     </div>
   );
 }
