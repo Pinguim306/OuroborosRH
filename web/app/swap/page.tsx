@@ -14,17 +14,15 @@ export default function SwapPage() {
           <span className="text-gradient">Swap</span>
         </h1>
         <p className="mx-auto mt-3 max-w-md text-sm text-white/50">
-          Trade any Coil token straight through its Uniswap v4 pool — clean fees taken inside the
-          swap, no fee-on-transfer, works with any wallet.
+          Trade any token on Robinhood Chain against ETH. Coil (v4) tokens route through their
+          native-fee pool; everything else routes through Uniswap v3 — the tab picks automatically.
         </p>
       </div>
 
       <SwapWidget />
 
       <div className="mt-6 space-y-2 text-center text-xs text-white/30">
-        <p>Paste a Coil token address to trade it against {""}
-          <span className="text-white/50">ETH</span>.
-        </p>
+        <p>Paste any token address to trade it against <span className="text-white/50">ETH</span>.</p>
       </div>
     </div>
   );
