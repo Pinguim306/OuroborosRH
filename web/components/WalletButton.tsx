@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { useAccount, useConnect, useDisconnect, useSwitchChain, type Connector } from "wagmi";
 import { shortAddr } from "@/lib/format";
 import { CHAIN_ID, robinhoodChain } from "@/lib/chain";
@@ -216,6 +217,13 @@ export function WalletButton() {
           >
             {copied ? "✓ Copied" : "Copy address"}
           </button>
+          <Link
+            href="/profile"
+            onClick={() => setOpen(false)}
+            className="block w-full px-4 py-2.5 text-left text-sm text-white/70 transition hover:bg-white/5"
+          >
+            My profile
+          </Link>
           <button
             onClick={() => {
               disconnect();
