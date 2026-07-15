@@ -33,6 +33,11 @@ Dois modos fixados no launch: **Loop Rewards** (`creator = 0`, dividendo pra tod
 - `src/CoilLaunchpad.sol` — a fábrica: `createTokenV4()` deploya o hook num endereço CREATE2
   minerado, chama `seed()` (pool + liquidez de um lado + renúncia) e registra o market.
   `LAUNCHPAD_VERSION = 3`.
+- `src/CoilSwapRouter.sol` — a metade on-chain da **aba de Swap**: executa swaps v4 exact-input e
+  **desvia uma interface fee** (bps do input, default 0,20%, teto 1%) pra carteira do protocolo.
+  Em token do Coil, empilha com a taxa do hook (interface fee + fee de protocolo, as duas pra
+  você); em qualquer outro token v4, a interface fee é receita pura. É o topo de funil que
+  empurra gente pros lançamentos do Coil. Não custodia fundos entre transações.
 - `src/base/BaseHook.sol` — base mínima de hook v4 (valida as flags do endereço).
 
 ## Como o front-end lança um token
