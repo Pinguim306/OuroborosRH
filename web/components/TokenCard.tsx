@@ -41,9 +41,8 @@ function SocialIcon({ href, label, children }: { href: string; label: string; ch
 }
 
 export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: number }) {
-  // Live tokens keep their description + socials in the IPFS metadata JSON, not on-chain.
+  // Live tokens keep their socials in the IPFS metadata JSON, not on-chain.
   const meta = useTokenMeta(token.image);
-  const description = meta?.description || token.description;
   // Prefer the resolved IPFS metadata (live tokens); fall back to any on-chain/demo socials.
   const twitter = meta?.twitter ?? normalizeSocial("twitter", token.socials?.x);
   const website = meta?.website ?? normalizeSocial("website", token.socials?.website);
@@ -72,18 +71,15 @@ export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: 
       />
 
       <div className="pointer-events-none relative z-10">
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           <TokenAvatar
             uri={token.image}
             symbol={token.symbol}
-            className="grid h-[68px] w-[68px] shrink-0 place-items-center overflow-hidden rounded-xl bg-obsidian-800 text-3xl"
+            className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-xl bg-obsidian-800 text-4xl"
           />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="truncate font-semibold text-white">{token.name}</span>
-              <span className="chip !px-2 !py-0.5">{token.symbol}</span>
-            </div>
-            <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-white/45">{description}</p>
+            <div className="truncate text-base font-semibold text-white">{token.name}</div>
+            <span className="chip mt-1 inline-flex !px-2 !py-0.5">{token.symbol}</span>
           </div>
         </div>
 
