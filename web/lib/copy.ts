@@ -4,8 +4,8 @@
  * any reference launchpad.
  */
 export const copy = {
-  brand: "Ouroboros",
-  tagline: "The launchpad where fees eat their own tail.",
+  brand: "Coil",
+  tagline: "The launchpad where every trade winds the coil.",
   nav: {
     explore: "Explore",
     create: "Launch",
@@ -21,7 +21,7 @@ export const copy = {
     ctaSecondary: "Explore the market",
   },
   loop: {
-    title: "The Ouroboros loop",
+    title: "The Coil loop",
     subtitle: "A self-feeding flywheel. Four steps, no leaks.",
     steps: [
       {
@@ -87,12 +87,12 @@ export const copy = {
     subtitle:
       "Fees you've earned across every token you hold — accrued automatically, no staking. Connect and claim.",
     claimAll: "Claim all",
-    empty: "You're not holding any Ouroboros tokens yet. Buy one and fees start accruing to your wallet automatically.",
+    empty: "You're not holding any Coil tokens yet. Buy one and fees start accruing to your wallet automatically.",
   },
   footer: {
     docs: "Docs",
     terms: "Terms",
     disclaimer:
-      "Ouroboros is an unaudited reference protocol. Nothing here is financial advice. Trade responsibly.",
+      "Coil is an unaudited reference protocol. Nothing here is financial advice. Trade responsibly.",
   },
 } as const;

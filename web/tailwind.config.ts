@@ -9,29 +9,31 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Ouroboros palette: deep obsidian + venom green + acid highlight.
+        // Coil palette: deep obsidian + electric-violet (the "coil" energy) + cyan spark.
+        // NOTE: the color KEYS (`venom`, `acid`) are kept for stability — hundreds of class
+        // references depend on them — but their VALUES are Coil's electric violet / cyan.
         obsidian: {
-          950: "#05070a",
-          900: "#0a0e14",
-          850: "#0f141d",
-          800: "#141b26",
-          700: "#1c2634",
+          950: "#05060d",
+          900: "#0a0d18",
+          850: "#0f1320",
+          800: "#141a29",
+          700: "#1c2436",
         },
         venom: {
-          400: "#7dffb2",
-          500: "#22e584",
-          600: "#12c26a",
-          700: "#0a8f4d",
+          400: "#b7a6ff",
+          500: "#8b5cff",
+          600: "#6f3df5",
+          700: "#5626cc",
         },
-        acid: "#c8ff4d",
+        acid: "#37e8ff",
       },
       fontFamily: {
         display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       boxShadow: {
-        venom: "0 0 0 1px rgba(34,229,132,0.25), 0 8px 40px -12px rgba(34,229,132,0.35)",
-        glow: "0 0 24px -4px rgba(34,229,132,0.5)",
+        venom: "0 0 0 1px rgba(139,92,255,0.25), 0 8px 40px -12px rgba(139,92,255,0.35)",
+        glow: "0 0 24px -4px rgba(139,92,255,0.5)",
       },
       backgroundImage: {
         "grid-faint":

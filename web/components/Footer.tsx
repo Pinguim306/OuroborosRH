@@ -58,7 +58,7 @@ export function Footer() {
 
         <div className="mt-8 flex flex-col gap-4 border-t border-white/5 pt-6 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-white/25">
-            © {new Date().getFullYear()} Ouroboros · Built on Robinhood Chain · Not affiliated with
+            © {new Date().getFullYear()} Coil · Built on Robinhood Chain · Not affiliated with
             Robinhood Markets, Inc.
           </p>
           <p className="max-w-md text-xs leading-relaxed text-white/40">{copy.footer.disclaimer}</p>

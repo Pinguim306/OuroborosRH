@@ -8,7 +8,7 @@ import { parseV3Swap, supplyOf, wethOf, v3TradersByTx, INFRA_ADDRESSES } from ".
 import type { Address, TokenMarket } from "./types";
 
 /**
- * Ouroboros Points — Season 1.
+ * Coil Points — Season 1.
  *
  * A reputation score computed ENTIRELY from public on-chain events, so anyone
  * can verify their own number. Nothing is stored off-chain; this hook replays

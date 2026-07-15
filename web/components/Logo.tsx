@@ -1,5 +1,6 @@
 export function Logo({ size = 28, className = "" }: { size?: number; className?: string }) {
-  // An ouroboros: a ring with a proper snake head about to bite its tail.
+  // Coil: an outward spiral — a wound spring storing energy (the locked-liquidity flywheel),
+  // ending in a bright spark.
   return (
     <svg
       width={size}
@@ -10,37 +11,29 @@ export function Logo({ size = 28, className = "" }: { size?: number; className?:
       aria-hidden
     >
       <defs>
-        <linearGradient id="ouro" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#7dffb2" />
-          <stop offset="0.5" stopColor="#22e584" />
-          <stop offset="1" stopColor="#c8ff4d" />
+        <linearGradient id="coil" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#b7a6ff" />
+          <stop offset="0.5" stopColor="#8b5cff" />
+          <stop offset="1" stopColor="#37e8ff" />
         </linearGradient>
       </defs>
-      {/* body: open ring, tail tip at the top, head chasing it */}
+      {/* outward spiral, ~2.25 turns */}
       <path
-        d="M24 6a18 18 0 1 1-12.7 5.3"
-        stroke="url(#ouro)"
+        d="M24 24
+           C 25.6 24, 26.4 22.2, 25.4 20.9
+           C 23.9 18.8, 20.5 19.6, 19.9 22.3
+           C 19.0 26.2, 22.4 29.6, 26.4 29.3
+           C 31.8 28.9, 35 23.7, 33.8 18.4
+           C 32.3 11.6, 24.9 8.0, 18.4 10.5
+           C 10.5 13.5, 7 22.4, 10.4 30"
+        stroke="url(#coil)"
         strokeWidth="4"
         strokeLinecap="round"
       />
-      {/* snake head: rounded skull, tapered snout pointing at the tail */}
-      <path
-        d="M18.2 7.4
-           C 16.9 5.5, 13.4 5.0, 10.9 6.5
-           C 8.4 8.0, 7.4 11.0, 8.5 13.3
-           C 9.6 15.6, 12.6 16.4, 14.9 15.1
-           C 16.7 14.0, 17.9 11.3, 18.2 7.4 Z"
-        fill="url(#ouro)"
-      />
-      {/* eye */}
-      <circle cx="12.1" cy="9.6" r="1.25" fill="#05070a" />
-      {/* forked tongue flicking toward the tail */}
-      <path
-        d="M18 7.3 L20.2 6.4 M20.2 6.4 L21.6 5.5 M20.2 6.4 L21.8 6.8"
-        stroke="url(#ouro)"
-        strokeWidth="1.1"
-        strokeLinecap="round"
-      />
+      {/* spark at the outer tip */}
+      <circle cx="10.4" cy="30" r="2.6" fill="#37e8ff" />
+      {/* core */}
+      <circle cx="24" cy="24" r="1.7" fill="#b7a6ff" />
     </svg>
   );
 }
