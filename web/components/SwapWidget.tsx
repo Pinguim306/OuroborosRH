@@ -88,7 +88,7 @@ function Pill({ symbol, onClick }: { symbol: string | null; onClick?: () => void
 }
 
 /**
- * Uniswap-style swap: two panels (Vender / Comprar) with a token-select modal and a flip arrow.
+ * Uniswap-style swap: two panels (Sell / Buy) with a token-select modal and a flip arrow.
  * Every trade is ETH ↔ token (the routers pair against ETH). A Coil (v4) token routes through the
  * CoilSwapRouter; any other token routes through the v3 fee wrapper (or SwapRouter02). The quote
  * comes from an eth_call simulation of the real swap.
@@ -430,7 +430,7 @@ export function SwapWidget() {
     <div className="glass-strong space-y-1.5 p-4">
       {/* PAY panel */}
       <div className="rounded-2xl border border-white/10 bg-obsidian-900/60 p-4">
-        <div className="label">Vender</div>
+        <div className="label">Sell</div>
         <div className="mt-2 flex items-center gap-3">
           <input
             className="min-w-0 flex-1 bg-transparent text-3xl font-semibold text-white outline-none placeholder:text-white/20"
@@ -464,7 +464,7 @@ export function SwapWidget() {
 
       {/* RECEIVE panel */}
       <div className="rounded-2xl border border-white/10 bg-obsidian-900/60 p-4">
-        <div className="label">Comprar</div>
+        <div className="label">Buy</div>
         <div className="mt-2 flex items-center gap-3">
           <div className="min-w-0 flex-1 truncate text-3xl font-semibold text-white/90">
             {quotedOut > 0n ? fmt(quotedOut) : "0"}
