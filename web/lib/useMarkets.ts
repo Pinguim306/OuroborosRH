@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { encodeAbiParameters, formatEther, keccak256 } from "viem";
+import { formatEther } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
 import {
   CONTRACTS,
@@ -15,9 +15,10 @@ import {
   COIL_LAUNCHPAD,
   coilLaunchpadV4Abi,
   LAUNCH_LIVE,
-  coilPoolId,
+  coilSlot0Slot,
   isCoilToken,
   v4PoolManagerAbi,
+  v4PriceFromPackedSlot0,
   type CoilMarket,
 } from "./contracts";
 import { ROBINHOOD_CONTRACTS } from "./chain";
@@ -89,42 +90,9 @@ function v3PriceFromSlot0(slot0: unknown, tokenIs0: boolean): number {
   return tokenIs0 ? price1per0 : price1per0 > 0 ? 1 / price1per0 : 0;
 }
 
-/*
- * ---- Uniswap v4 (CoilHook) pool pricing -------------------------------------------------------
- * v4 pools live inside the singleton PoolManager, which has no per-pool getters — state is read
- * with `extsload(slot)`. `mapping(PoolId => Pool.State) _pools` sits at storage slot 6 (v4-core's
- * StateLibrary.POOLS_SLOT) and `slot0` (packed sqrtPriceX96 | tick | fees) is the first word of
- * Pool.State, so its slot is keccak256(abi.encode(poolId, 6)).
- */
+/* v4 pools live inside the singleton PoolManager — pricing comes from an extsload read of the
+ * pool's slot0 word; the slot math + decoding live in lib/contracts (shared with the server API). */
 const V4_POOL_MANAGER = ROBINHOOD_CONTRACTS.v4PoolManager as Address;
-const V4_POOLS_SLOT = 6n;
-
-/** Storage slot of a Coil token's pool `slot0` inside the v4 PoolManager. */
-function v4Slot0Slot(token: Address): `0x${string}` {
-  return keccak256(
-    encodeAbiParameters(
-      [{ type: "bytes32" }, { type: "uint256" }],
-      [coilPoolId(token), V4_POOLS_SLOT],
-    ),
-  );
-}
-
-/** Token price in ETH from the packed slot0 word (sqrtPriceX96 = low 160 bits). The Coil pool is
- *  (currency0 = native ETH, currency1 = token), so (sqrtP/2^96)^2 = tokens-per-ETH and the token's
- *  ETH price is its inverse. Both sides are 18 decimals — no scaling needed. */
-function v4PriceFromPackedSlot0(word: unknown): number {
-  if (typeof word !== "string" || !word.startsWith("0x")) return 0;
-  let sqrtP: bigint;
-  try {
-    sqrtP = BigInt(word) & ((1n << 160n) - 1n);
-  } catch {
-    return 0;
-  }
-  if (sqrtP === 0n) return 0;
-  const ratio = Number(sqrtP) / 2 ** 96;
-  const tokensPerEth = ratio * ratio;
-  return tokensPerEth > 0 ? 1 / tokensPerEth : 0;
-}
 
 /** Map a CoilLaunchpad market + its live reads onto the shared TokenMarket shape. */
 function fromV4Market(m: CoilMarket, supply: bigint, priceEth: number): TokenMarket {
@@ -310,7 +278,7 @@ export function useLiveMarkets(): { tokens: TokenMarket[]; isLoading: boolean } 
             address: V4_POOL_MANAGER,
             abi: v4PoolManagerAbi,
             functionName: "extsload",
-            args: [v4Slot0Slot(m.token)],
+            args: [coilSlot0Slot(m.token)],
           },
         ] as const,
     ),
@@ -471,7 +439,7 @@ export function useLiveTokenV4(tokenAddress?: Address): {
     address: V4_POOL_MANAGER,
     abi: v4PoolManagerAbi,
     functionName: "extsload",
-    args: [tokenAddress ? v4Slot0Slot(tokenAddress) : (`0x${"0".repeat(64)}` as `0x${string}`)],
+    args: [tokenAddress ? coilSlot0Slot(tokenAddress) : (`0x${"0".repeat(64)}` as `0x${string}`)],
     query: { enabled: enabled && found },
   });
 

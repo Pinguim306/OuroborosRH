@@ -23,6 +23,9 @@ production.**
 
 ## Conventions
 
+- **Uniswap-v4 tokens** (`market.mode === "v4"`): they trade through the CoilSwapRouter, not a
+  bonding curve. Quotes are simulated from your own funded address (`from` is required on
+  `/quote`, `/tx/buy` and `/tx/sell`); sells approve the **router** (returned as `spender`).
 - All on-chain amounts (in and out) are **integer wei strings** (e.g. `"1000000000000000000"` = 1 ETH).
 - Responses are JSON with an `ok` boolean. Errors: `{ "ok": false, "error": "..." }`.
 - Before contracts are deployed the read endpoints return demo data flagged with
