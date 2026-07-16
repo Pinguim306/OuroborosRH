@@ -18,7 +18,7 @@ export async function GET(_req: Request, { params }: { params: { address: string
   await ensureSchema();
   const address = params.address.toLowerCase();
   const { rows } = await sql`
-    select address, username, bio, avatar_url, created_at
+    select address, username, bio, avatar_url, x, telegram, created_at
     from profiles where address = ${address} limit 1
   `;
   return NextResponse.json({ profile: rows[0] ?? null }, { headers: NO_STORE });

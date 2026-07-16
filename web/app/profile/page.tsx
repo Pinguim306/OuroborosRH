@@ -15,6 +15,8 @@ export default function ProfilePage() {
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [x, setX] = useState("");
+  const [telegram, setTelegram] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -34,6 +36,8 @@ export default function ProfilePage() {
           setUsername(j.profile.username ?? "");
           setBio(j.profile.bio ?? "");
           setAvatarUrl(j.profile.avatar_url ?? "");
+          setX(j.profile.x ?? "");
+          setTelegram(j.profile.telegram ?? "");
         }
       })
       .catch(() => {})
@@ -74,7 +78,7 @@ export default function ProfilePage() {
       const r = await fetch("/api/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, bio, avatarUrl }),
+        body: JSON.stringify({ username, bio, avatarUrl, x, telegram }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Couldn't save.");
@@ -85,6 +89,8 @@ export default function ProfilePage() {
         setUsername(j.profile.username ?? username);
         setBio(j.profile.bio ?? bio);
         setAvatarUrl(j.profile.avatar_url ?? avatarUrl);
+        setX(j.profile.x ?? x);
+        setTelegram(j.profile.telegram ?? telegram);
       }
       setMsg({ ok: true, text: "Profile saved." });
     } catch (err) {
@@ -165,6 +171,35 @@ export default function ProfilePage() {
                 placeholder="gm. degen since block zero."
               />
               <p className="mt-1 text-right text-[11px] text-white/35">{bio.length}/280</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label mb-1.5 block">X (Twitter)</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-white/40">@</span>
+                  <input
+                    className="field"
+                    value={x}
+                    onChange={(e) => setX(e.target.value.replace(/^@/, "").slice(0, 32))}
+                    placeholder="handle"
+                    spellCheck={false}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="label mb-1.5 block">Telegram</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-white/40">@</span>
+                  <input
+                    className="field"
+                    value={telegram}
+                    onChange={(e) => setTelegram(e.target.value.replace(/^@/, "").slice(0, 32))}
+                    placeholder="handle"
+                    spellCheck={false}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center gap-3">

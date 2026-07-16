@@ -6,6 +6,17 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
+const HANDLE_RE = /^[a-zA-Z0-9_]{1,32}$/;
+
+/** Strip @, URL prefixes and trailing slashes from a social handle, keeping just the username. */
+function handle(v?: string): string {
+  return (v ?? "")
+    .trim()
+    .replace(/^@/, "")
+    .replace(/^https?:\/\/(www\.)?(x\.com|twitter\.com|t\.me|telegram\.me)\//i, "")
+    .replace(/\/+$/, "")
+    .slice(0, 32);
+}
 
 /** Create or update the signed-in wallet's profile. */
 export async function POST(req: Request) {
@@ -15,7 +26,7 @@ export async function POST(req: Request) {
   const address = currentAddress();
   if (!address) return NextResponse.json({ error: "sign in first" }, { status: 401 });
 
-  let payload: { username?: string; bio?: string; avatarUrl?: string };
+  let payload: { username?: string; bio?: string; avatarUrl?: string; x?: string; telegram?: string };
   try {
     payload = await req.json();
   } catch {
@@ -31,6 +42,14 @@ export async function POST(req: Request) {
   if (avatarUrl && !/^https?:\/\//.test(avatarUrl) && !avatarUrl.startsWith("ipfs://")) {
     return NextResponse.json({ error: "Invalid avatar URL." }, { status: 400 });
   }
+  const x = handle(payload.x);
+  const telegram = handle(payload.telegram);
+  if (x && !HANDLE_RE.test(x)) {
+    return NextResponse.json({ error: "Invalid X handle." }, { status: 400 });
+  }
+  if (telegram && !HANDLE_RE.test(telegram)) {
+    return NextResponse.json({ error: "Invalid Telegram handle." }, { status: 400 });
+  }
 
   const lower = username.toLowerCase();
   try {
@@ -43,11 +62,11 @@ export async function POST(req: Request) {
     }
 
     await sql`
-      insert into profiles (address, username, username_lower, bio, avatar_url)
-      values (${address}, ${username}, ${lower}, ${bio}, ${avatarUrl})
+      insert into profiles (address, username, username_lower, bio, avatar_url, x, telegram)
+      values (${address}, ${username}, ${lower}, ${bio}, ${avatarUrl}, ${x}, ${telegram})
       on conflict (address) do update
         set username = ${username}, username_lower = ${lower}, bio = ${bio},
-            avatar_url = ${avatarUrl}, updated_at = now()
+            avatar_url = ${avatarUrl}, x = ${x}, telegram = ${telegram}, updated_at = now()
     `;
   } catch (e) {
     // Surface the real DB error instead of a silent 500 — makes a misconfig debuggable.
@@ -56,5 +75,8 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
-  return NextResponse.json({ ok: true, profile: { address, username, bio, avatar_url: avatarUrl } });
+  return NextResponse.json({
+    ok: true,
+    profile: { address, username, bio, avatar_url: avatarUrl, x, telegram },
+  });
 }

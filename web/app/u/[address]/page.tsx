@@ -5,12 +5,20 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useAccount } from "wagmi";
 import { shortAddr } from "@/lib/format";
-import { ipfsToHttp } from "@/lib/metadata";
+import { ipfsToHttp, normalizeSocial } from "@/lib/metadata";
 import { useAuth } from "@/components/AuthProvider";
+import { SocialLinks } from "@/components/SocialLinks";
 
 const EXPLORER = "https://robinhoodchain.blockscout.com";
 
-type Profile = { address: string; username: string | null; bio: string | null; avatar_url: string | null };
+type Profile = {
+  address: string;
+  username: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  x: string | null;
+  telegram: string | null;
+};
 
 export default function PublicProfilePage() {
   const params = useParams();
@@ -64,6 +72,14 @@ export default function PublicProfilePage() {
         </div>
 
         {profile?.bio && <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-white/60">{profile.bio}</p>}
+
+        {profile && (profile.x || profile.telegram) && (
+          <SocialLinks
+            twitter={normalizeSocial("twitter", profile.x ?? undefined)}
+            telegram={normalizeSocial("telegram", profile.telegram ?? undefined)}
+            className="mt-4"
+          />
+        )}
 
         {loaded && !profile && (
           <p className="mt-4 text-sm text-white/40">
