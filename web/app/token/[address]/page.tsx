@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getToken, mockTrades, mockHolders } from "@/lib/mock/data";
@@ -26,6 +27,7 @@ import { TokenChat } from "@/components/TokenChat";
 import { useTokenMeta } from "@/lib/useMeta";
 import { useTotalFeesEth } from "@/lib/useFees";
 import { useDexPair } from "@/lib/useDexPair";
+import { ShareModal } from "@/components/ShareModal";
 
 const EXPLORER = "https://robinhoodchain.blockscout.com";
 
@@ -50,6 +52,7 @@ export default function TokenPage() {
         ? getToken(address)
         : undefined;
   const isV4 = token?.mode === "v4";
+  const [shareOpen, setShareOpen] = useState(false);
 
   const ethUsd = useEthPrice();
   const activity = useTokenActivity(token);
@@ -125,11 +128,19 @@ export default function TokenPage() {
           <p className="mt-1 max-w-xl text-sm text-white/50">
             {meta?.description || token.description}
           </p>
-          {token.createdAt ? (
-            <p className="mt-1 text-xs text-white/35">
-              Created {fullDateTime(token.createdAt)} · {timeAgo(token.createdAt)}
-            </p>
-          ) : null}
+          <p className="mt-1 text-xs text-white/35">
+            {token.createdAt ? (
+              <>Created {fullDateTime(token.createdAt)} · {timeAgo(token.createdAt)} · </>
+            ) : null}
+            by{" "}
+            <Link
+              href={`/u/${token.creator.toLowerCase()}`}
+              className="font-mono text-venom-400/80 hover:text-venom-400 hover:underline"
+              title="View the creator's profile"
+            >
+              {shortAddr(token.creator)}
+            </Link>
+          </p>
           <SocialLinks
             website={meta?.website}
             twitter={meta?.twitter}
@@ -140,8 +151,17 @@ export default function TokenPage() {
         <div className="text-right">
           <div className="label">Marketcap</div>
           <div className="stat-value text-gradient">{usdFromEth(token.marketCapRh, ethUsd)}</div>
+          <button
+            onClick={() => setShareOpen(true)}
+            className="btn-ghost mt-2 !px-3 !py-1.5 text-xs"
+            title="Share this coin"
+          >
+            ↗ Share
+          </button>
         </div>
       </div>
+
+      <ShareModal token={token} open={shareOpen} onClose={() => setShareOpen(false)} />
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_380px]">
         {/* Left: market data */}
@@ -258,14 +278,12 @@ export default function TokenPage() {
                           <td className="px-5 py-2 font-mono text-white/70">{compact(t.rhAmount, 3)}</td>
                           <td className="px-5 py-2 font-mono text-white/70">{compact(t.tokenAmount, 0)}</td>
                           <td className="px-5 py-2 font-mono text-white/40">
-                            <a
-                              href={`${EXPLORER}/address/${t.trader}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <Link
+                              href={`/u/${t.trader.toLowerCase()}`}
                               className="hover:text-venom-400 hover:underline"
                             >
                               {shortAddr(t.trader)}
-                            </a>
+                            </Link>
                           </td>
                           <td className="px-5 py-2 text-right text-xs text-white/40">
                             {t.time ? timeAgo(t.time) : "—"}
@@ -294,14 +312,12 @@ export default function TokenPage() {
                 {holders.map((h, i) => (
                   <div key={h.address} className="flex items-center gap-3 px-5 py-3 text-sm">
                     <span className="w-5 text-white/30">{i + 1}</span>
-                    <a
-                      href={`${EXPLORER}/address/${h.address}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <Link
+                      href={`/u/${h.address.toLowerCase()}`}
                       className="flex-1 font-mono text-white/60 hover:text-venom-400 hover:underline"
                     >
                       {shortAddr(h.address)}
-                    </a>
+                    </Link>
                     <span className="w-24 text-right font-mono text-white/50">
                       {compact(h.balance, 0)} {token.symbol}
                     </span>
