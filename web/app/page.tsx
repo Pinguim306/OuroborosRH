@@ -98,6 +98,7 @@ export default function HomePage() {
   const demoTotals = {
     tokens: all.length,
     volume24hEth: all.reduce((s, t) => s + t.volume24hRh, 0),
+    volumeEth: enriched.reduce((s, t) => s + t._volumeTotal, 0),
     highestAthEth: Math.max(0, ...all.map((t) => t.marketCapRh)),
     holders: all.reduce((s, t) => s + t.holders, 0),
   };
@@ -157,7 +158,7 @@ export default function HomePage() {
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
           <StatTile label="Tokens launched" value={compact(T.tokens, 0)} accent />
           <StatTile label="24h volume" value={usdFromEth(T.volume24hEth, ethUsd, 0)} />
-          <StatTile label="Biggest ATH" value={usdFromEth(T.highestAthEth, ethUsd, 0)} />
+          <StatTile label="Total volume" value={usdFromEth(T.volumeEth, ethUsd, 0)} />
           <StatTile label="Total holders" value={compact(T.holders, 0)} />
         </div>
 
