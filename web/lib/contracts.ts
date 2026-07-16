@@ -163,6 +163,17 @@ export const coilHookAbi = [
   { type: "function", name: "creatorAccruedETH", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "creatorAccruedTOKEN", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "sweepCreator", stateMutability: "nonpayable", inputs: [], outputs: [] },
+  // Emitted on every swap with the fee split — summing `holders` gives the lifetime rewards pool.
+  {
+    type: "event",
+    name: "FeeTaken",
+    inputs: [
+      { name: "isEth", type: "bool", indexed: true },
+      { name: "protocol", type: "uint256", indexed: false },
+      { name: "holders", type: "uint256", indexed: false },
+      { name: "burn", type: "uint256", indexed: false },
+    ],
+  },
 ] as const;
 
 /** Minimal v4 PoolManager ABI: the Swap event (for activity/volume) and extsload (state reads). */

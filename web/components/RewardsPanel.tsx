@@ -127,9 +127,9 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
           </div>
         </div>
         <div className="rounded-xl bg-obsidian-900/60 p-4">
-          <div className="label">{isV4 ? "Paid out in" : "Pool paid out"}</div>
+          <div className="label">Pool paid out</div>
           <div className="mt-0.5 font-mono text-sm font-semibold text-white">
-            {isV4 ? `${NATIVE_SYMBOL} + ${token.symbol}` : usdFromEth(totalFeesEth, ethUsd, 0)}
+            {usdFromEth(totalFeesEth, ethUsd, 0)}
           </div>
         </div>
       </div>
