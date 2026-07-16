@@ -321,7 +321,10 @@ export default function TokenPage() {
         {/* Right: actions */}
         <div className="space-y-6 lg:sticky lg:top-20 lg:self-start">
           {isV4 ? (
-            <V4TradeWidget token={token} ethUsd={ethUsd} />
+            <>
+              <V4TradeWidget token={token} ethUsd={ethUsd} />
+              <RewardsPanel token={token} />
+            </>
           ) : (
             <>
               <TradeWidget token={token} />

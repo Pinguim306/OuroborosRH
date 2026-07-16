@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
-import { curveAbi, tokenAbi, v3PoolAbi, LIVE } from "./contracts";
+import { coilPoolId, curveAbi, tokenAbi, v3PoolAbi, v4PoolManagerAbi, LIVE } from "./contracts";
+import { V4_POOL_MANAGER } from "./useActivity";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -49,7 +50,43 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
           try {
             const pnl: TokenPnl = { investedEth: 0, receivedEth: 0 };
 
-            if (t.mode === "v3") {
+            if (t.mode === "v4") {
+              // v4 swaps live in the PoolManager singleton, keyed by PoolId; the token leg moves
+              // PoolManager ↔ user, and amount0 is always the ETH leg (currency0 = native ETH).
+              const [swaps, buys, sells] = await Promise.all([
+                client.getContractEvents({
+                  address: V4_POOL_MANAGER,
+                  abi: v4PoolManagerAbi,
+                  eventName: "Swap",
+                  args: { id: coilPoolId(t.address) },
+                  fromBlock: 0n,
+                  toBlock: "latest",
+                }),
+                client.getContractEvents({
+                  address: t.address,
+                  abi: tokenAbi,
+                  eventName: "Transfer",
+                  args: { from: V4_POOL_MANAGER, to: user },
+                  fromBlock: 0n,
+                  toBlock: "latest",
+                }),
+                client.getContractEvents({
+                  address: t.address,
+                  abi: tokenAbi,
+                  eventName: "Transfer",
+                  args: { from: user, to: V4_POOL_MANAGER },
+                  fromBlock: 0n,
+                  toBlock: "latest",
+                }),
+              ]);
+              const ethByTx = new Map<string, number>();
+              for (const l of swaps) {
+                const a0 = (l.args as { amount0?: bigint }).amount0 ?? 0n;
+                ethByTx.set(l.transactionHash, Number(formatEther(a0 < 0n ? -a0 : a0)));
+              }
+              for (const l of buys) pnl.investedEth += ethByTx.get(l.transactionHash) ?? 0;
+              for (const l of sells) pnl.receivedEth += ethByTx.get(l.transactionHash) ?? 0;
+            } else if (t.mode === "v3") {
               const pool = t.curve;
               const [swaps, buys, sells] = await Promise.all([
                 client.getContractEvents({

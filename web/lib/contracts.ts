@@ -142,6 +142,22 @@ export function coilPoolId(token: Address): `0x${string}` {
   );
 }
 
+/** CoilHook (v4 token) holder-dividend getter. Claiming uses the shared `claim()` from tokenAbi —
+ *  same signature on both v3 dividend tokens and the v4 hook — but the pending-rewards read
+ *  differs: v3 exposes `claimableRewardOf` (ETH only), the hook exposes `pendingOf` (ETH + token). */
+export const coilHookAbi = [
+  {
+    type: "function",
+    name: "pendingOf",
+    stateMutability: "view",
+    inputs: [{ name: "holder", type: "address" }],
+    outputs: [
+      { name: "owedETH", type: "uint256" },
+      { name: "owedTOKEN", type: "uint256" },
+    ],
+  },
+] as const;
+
 /** Minimal v4 PoolManager ABI: the Swap event (for activity/volume) and extsload (state reads). */
 export const v4PoolManagerAbi = [
   {

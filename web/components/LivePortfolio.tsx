@@ -8,7 +8,7 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { tokenAbi } from "@/lib/contracts";
+import { coilHookAbi, tokenAbi } from "@/lib/contracts";
 import { CHAIN_ID } from "@/lib/chain";
 import { useLiveMarkets } from "@/lib/useMarkets";
 import { usePnL, type TokenPnl } from "@/lib/usePnL";
@@ -33,13 +33,22 @@ export function LivePortfolio() {
   const { tokens, isLoading } = useLiveMarkets();
   const ethUsd = useEthPrice();
 
+  // Pending-rewards getter differs by mode: v3/curve dividend tokens expose `claimableRewardOf`
+  // (ETH only); v4 hooks expose `pendingOf` (ETH + token side). `claim()` is the same on both.
   const contracts = tokens.flatMap((t) => [
-    {
-      address: t.address,
-      abi: tokenAbi,
-      functionName: "claimableRewardOf",
-      args: [address ?? "0x0000000000000000000000000000000000000000"],
-    } as const,
+    t.mode === "v4"
+      ? ({
+          address: t.address,
+          abi: coilHookAbi,
+          functionName: "pendingOf",
+          args: [address ?? "0x0000000000000000000000000000000000000000"],
+        } as const)
+      : ({
+          address: t.address,
+          abi: tokenAbi,
+          functionName: "claimableRewardOf",
+          args: [address ?? "0x0000000000000000000000000000000000000000"],
+        } as const),
     {
       address: t.address,
       abi: tokenAbi,
@@ -51,11 +60,22 @@ export function LivePortfolio() {
   const q = useReadContracts({ contracts, query: { enabled: !!address && tokens.length > 0 } });
 
   const positions: Position[] = tokens
-    .map((token, i) => ({
-      token,
-      claimableRh: num(q.data?.[i * 2]?.result),
-      balance: num(q.data?.[i * 2 + 1]?.result),
-    }))
+    .map((token, i) => {
+      const raw = q.data?.[i * 2]?.result;
+      // v4 pendingOf → [owedETH, owedTOKEN]; value the token side at spot so one number covers both.
+      const claimableRh =
+        token.mode === "v4"
+          ? (() => {
+              const pair = raw as readonly [bigint, bigint] | undefined;
+              return num(pair?.[0]) + num(pair?.[1]) * token.priceRh;
+            })()
+          : num(raw);
+      return {
+        token,
+        claimableRh,
+        balance: num(q.data?.[i * 2 + 1]?.result),
+      };
+    })
     .filter((p) => p.balance > 0 || p.claimableRh > 0);
 
   // Trading PnL (cost basis from on-chain events) for the held tokens only.
