@@ -37,6 +37,9 @@ export function ensureSchema(): Promise<void> {
           updated_at     timestamptz not null default now()
         )
       `;
+      // Social handles — added after the table shipped, so backfill on existing installs.
+      await sql`alter table profiles add column if not exists x text`;
+      await sql`alter table profiles add column if not exists telegram text`;
       await sql`
         create table if not exists messages (
           id         bigserial primary key,
