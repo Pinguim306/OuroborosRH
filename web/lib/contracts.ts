@@ -210,6 +210,36 @@ export const COIL_LAUNCHPAD = ((process.env.NEXT_PUBLIC_COIL_LAUNCHPAD ?? "").tr
 
 export const LAUNCH_LIVE = isDeployed(COIL_LAUNCHPAD);
 
+/**
+ * The $COIL buyback & burn. `NEXT_PUBLIC_COIL_BURNER` is the deployed CoilBuybackBurner (it
+ * receives every token's BURN fee slice as ETH and swaps it for $COIL to the dead address);
+ * `NEXT_PUBLIC_COIL_TOKEN` is the official $COIL token, used to link the burn stats to its page.
+ * While the burner is unset the burn ticker simply doesn't render.
+ */
+export const COIL_BURNER = ((process.env.NEXT_PUBLIC_COIL_BURNER ?? "").trim() ||
+  "0x0000000000000000000000000000000000000000") as Address;
+export const BURNER_LIVE = isDeployed(COIL_BURNER);
+
+export const COIL_TOKEN = ((process.env.NEXT_PUBLIC_COIL_TOKEN ?? "").trim() ||
+  "0x0000000000000000000000000000000000000000") as Address;
+
+export const coilBurnerAbi = [
+  { type: "function", name: "coil", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { type: "function", name: "totalEthSpent", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "totalCoilBurned", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  {
+    type: "function",
+    name: "buybackAndBurn",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "amountIn", type: "uint256" },
+      { name: "minCoilOut", type: "uint256" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "burned", type: "uint256" }],
+  },
+] as const;
+
 /** The BEFORE_SWAP | BEFORE_SWAP_RETURNS_DELTA flag bits every CoilHook address encodes in its
  *  low 14 bits (0x88). A token launched by the CoilLaunchpad IS its hook, so this alone tells a
  *  Coil (v4) token from any other token — no RPC call needed. */
