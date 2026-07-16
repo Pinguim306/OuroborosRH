@@ -5,7 +5,7 @@ import { NATIVE_SYMBOL } from "@/lib/chain";
 export const metadata: Metadata = {
   title: "Docs — Coil",
   description:
-    "How the Coil launchpad works: instant Uniswap V3 launches, locked liquidity, the fee loop, holder rewards, and safety.",
+    "How the Coil launchpad works: instant Uniswap v4 launches, locked liquidity, the native per-swap fee, holder rewards, the $COIL buy&burn, and safety.",
 };
 
 /** Sidebar / on-page navigation. Each entry maps to a section id below. */
@@ -14,7 +14,7 @@ const sections = [
   { id: "loop", label: "The loop" },
   { id: "launch", label: "Launching a token" },
   { id: "dev-buy", label: "Dev buy" },
-  { id: "fees", label: "Fees & harvest" },
+  { id: "fees", label: "Fees & the split" },
   { id: "rewards", label: "Holder rewards" },
   { id: "points", label: "Coil Points" },
   { id: "legacy", label: "Legacy curve tokens" },
@@ -52,19 +52,19 @@ export default function DocsPage() {
               How Coil works
             </h1>
             <p className="mt-3 text-white/55">
-              A fair-launch protocol where every token is born on a live Uniswap V3 pool with its
-              liquidity locked forever, and pool fees flow back to holders. Everything below is
-              enforced on-chain.
+              A fair-launch protocol where every token is born on a live Uniswap v4 pool with its
+              liquidity locked forever. A native per-swap fee flows back to holders and buys &amp;
+              burns $COIL. Everything below is enforced on-chain.
             </p>
           </header>
 
           <Section id="intro" title="Introduction">
             <p>
               Coil is a launchpad on Robinhood Chain. Every launch goes{" "}
-              <strong>straight into a Uniswap V3 pool</strong>: the token is tradable the second the
-              launch transaction confirms, with full DexScreener history from the very first trade.
-              The difference is <strong>the loop</strong>: the pool&apos;s swap fees don&apos;t leak
-              to a treasury — they are harvested on-chain and streamed to holders.
+              <strong>straight into a Uniswap v4 pool</strong>: the token is tradable the second the
+              launch transaction confirms. The difference is <strong>the loop</strong>: a small fee
+              is taken on every swap by the pool&apos;s hook and split on-chain the instant it&apos;s
+              taken — a share streams to holders, and a slice buys and burns $COIL.
             </p>
             <p>
               There are no presales, no team allocations, and no privileged mint. The entire supply
@@ -77,19 +77,22 @@ export default function DocsPage() {
             <p>Four steps, no leaks:</p>
             <ol className="my-4 space-y-3">
               <Step n={1} title="Trade">
-                Buy and sell on a live Uniswap V3 pool from second one. The pool&apos;s 1% fee tier
-                is the only fee.
+                Buy and sell on a live Uniswap v4 pool from second one. Every swap pays a small
+                native fee, taken by the hook inside the trade — not a fee-on-transfer, so
+                aggregators and bots route it fine.
               </Step>
               <Step n={2} title="Locked liquidity">
-                The whole supply is minted as pool liquidity and the position is locked in the
-                FeeLocker — an ownerless vault with no withdraw function.
+                The whole supply is minted as the pool&apos;s liquidity, owned by the hook itself,
+                which renounces ownership at launch. There is no withdraw function — the position is
+                locked by construction.
               </Step>
-              <Step n={3} title="Fees → Harvest">
-                Swap fees accrue inside the locked position. Anyone can harvest them from the token
-                page — the split is enforced on-chain.
+              <Step n={3} title="Fees → Split">
+                The per-swap fee is split on-chain the instant it&apos;s taken: holders, the
+                protocol, and a burn slice that buys and burns $COIL. No harvest button — it happens
+                on every trade.
               </Step>
               <Step n={4} title="Rewards → Holders">
-                Just hold. Your share of harvested fees accrues automatically, proportional to your
+                Just hold. Your share of the fees accrues automatically, proportional to your
                 balance. Connect your wallet and claim anytime — no staking.
               </Step>
             </ol>
@@ -98,16 +101,16 @@ export default function DocsPage() {
           <Section id="launch" title="Launching a token">
             <p>
               A single transaction on the <Link href="/create" className="lnk">Launch</Link> page
-              does everything: deploys the dividend token, creates and initializes the Uniswap V3
-              pool, mints the entire supply as liquidity, and locks the position in the FeeLocker.
-              You provide a name, ticker, description, image, and optional socials.
+              does everything: deploys the token and its hook, creates and initializes the Uniswap
+              v4 pool, mints the entire supply as liquidity, and renounces ownership so the position
+              is locked forever. You provide a name, ticker, description, image, and optional socials.
             </p>
             <KeyVals
               rows={[
                 ["Total supply", "1,000,000,000 tokens"],
                 ["Creation fee", "none — you only pay network gas"],
                 ["Liquidity", "entire supply, locked forever (un-ruggable)"],
-                ["Tradable", "instantly — DexScreener from trade one"],
+                ["Tradable", "instantly on Coil Swap"],
               ]}
             />
             <p>
@@ -119,29 +122,32 @@ export default function DocsPage() {
 
           <Section id="dev-buy" title="Dev buy">
             <p>
-              Creators can optionally buy their own token in the very same launch transaction — a{" "}
-              <strong>dev buy</strong> — executed as the pool&apos;s first-ever swap, so it is
-              impossible to front-run. It pays the same 1% pool fee as any other swap.
+              Creators can optionally buy their own token right after launch — a{" "}
+              <strong>dev buy</strong> — fired as a follow-up swap through Coil Swap in a second
+              transaction, moments after the pool goes live. It pays the same per-swap fee as any
+              other trade.
             </p>
           </Section>
 
-          <Section id="fees" title="Fees & harvest">
+          <Section id="fees" title="Fees & the split">
             <p>
-              The only trading fee is the pool&apos;s <strong>1% Uniswap V3 fee tier</strong>,
-              charged by the pool itself on every swap. It accrues inside the locked position and is
-              released by a permissionless <strong>Harvest</strong> — anyone can trigger it from the
-              token page; the split is enforced on-chain, so the caller receives nothing:
+              The only trading fee is a <strong>native per-swap fee</strong> — 1% by default — taken
+              by the pool&apos;s hook inside every swap (the pool&apos;s own Uniswap LP fee is 0%, so
+              the trader is never charged twice). It is split on-chain the instant it is taken, with
+              no harvest step and nothing left for a caller to skim. The default split (the protocol
+              can retune it on-chain, capped at 5% total):
             </p>
             <KeyVals
               rows={[
-                ["Holders", `40% of the harvested ${NATIVE_SYMBOL} side — streamed as rewards`],
-                ["Protocol", `60% of the ${NATIVE_SYMBOL} side + the token side`],
+                ["Holders", "30% of the fee — streamed as rewards, no staking"],
+                ["Protocol", "50% of the fee — the wallet that operates Coil"],
+                ["Buy & burn $COIL", "20% of the fee — buys $COIL on-market and burns it"],
               ]}
             />
             <p>
-              Buys pay the fee in {NATIVE_SYMBOL}; sells pay it in the token, and that token side
-              goes to the protocol. Tokens carry <strong>no transfer tax</strong> —
-              wallet-to-wallet transfers are always free.
+              Buys pay the fee in {NATIVE_SYMBOL}; sells pay it in the token — each side is split the
+              same three ways. Tokens carry <strong>no transfer tax</strong> — wallet-to-wallet
+              transfers are always free.
             </p>
           </Section>
 
@@ -194,21 +200,22 @@ export default function DocsPage() {
             </p>
           </Section>
 
-          <Section id="legacy" title="Legacy curve tokens">
+          <Section id="legacy" title="Legacy tokens">
             <p>
-              Earlier versions of Coil launched tokens on a bonding curve that migrated to a
-              DEX pair once filled. New launches no longer use that path, but every legacy token
-              keeps working exactly as before: its page, trading, rewards, and (where applicable)
-              its DEX pair remain fully functional.
+              Earlier versions of Coil launched tokens two other ways: on a bonding curve that
+              migrated to a DEX pair once filled, and, more recently, straight into a Uniswap V3 pool
+              (whose 1% fee tier was harvested and split to holders). New launches use neither path —
+              every token now launches on Uniswap v4 — but every legacy token keeps working exactly
+              as before: its page, trading, rewards, and fee harvest remain fully functional.
             </p>
           </Section>
 
           <Section id="safety" title="Safety">
             <ul className="my-3 space-y-2">
               <Bullet>
-                <strong>Liquidity locked forever.</strong> The position NFT lives in the FeeLocker —
-                an ownerless contract whose only value-moving function is the fee harvest. There is
-                no withdraw, no admin, no rug lever.
+                <strong>Liquidity locked forever.</strong> The pool position is owned by the token&apos;s
+                own hook, which renounces ownership at launch. There is no withdraw function, no
+                admin, no rug lever — the principal can never leave.
               </Bullet>
               <Bullet>
                 <strong>No privileged supply.</strong> The entire supply is minted into the pool. The
@@ -232,16 +239,17 @@ export default function DocsPage() {
             </Faq>
             <Faq q="When does my token become tradable?">
               The second the launch transaction confirms — the pool is created, priced, and funded in
-              that same transaction, and DexScreener picks it up from the first trade.
+              that same transaction, and it&apos;s live on Coil Swap from the first trade.
             </Faq>
             <Faq q="Can the creator pull the liquidity?">
-              No. The pool position is locked in an ownerless vault with no withdraw function. Not
-              even the protocol can touch the principal — only the accrued fees are harvestable.
+              No. The pool position is owned by the token&apos;s own hook, which renounces ownership at
+              launch, and there is no withdraw function. Not even the protocol can touch the
+              principal — only the per-swap fees are ever distributed.
             </Faq>
             <Faq q="Who receives the fees?">
-              The pool&apos;s 1% swap fee is harvested on-chain: 40% of the {NATIVE_SYMBOL} side goes
-              to holders (or to the creator, on Creator Rewards tokens), the rest goes to the
-              protocol — the wallet that operates Coil.
+              The 1% native per-swap fee is split on-chain the instant it&apos;s taken: by default 30%
+              to holders (or to the creator, on Creator Rewards tokens), 50% to the protocol — the
+              wallet that operates Coil — and 20% to buy and burn $COIL.
             </Faq>
           </Section>
 

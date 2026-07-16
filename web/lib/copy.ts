@@ -20,7 +20,7 @@ export const copy = {
     kicker: "Robinhood Chain · Fair-launch protocol",
     title: "Every trade feeds the loop.",
     subtitle:
-      "Launch a token straight into a Uniswap V3 pool — tradable the second the tx confirms, with the entire supply locked as liquidity forever. Pool fees don't leak away: they're harvested for the community, and holders earn a share just by holding.",
+      "Launch a token straight into a Uniswap v4 pool — tradable the second the tx confirms, with the entire supply locked as liquidity forever. A native per-swap fee is split on-chain every trade: holders earn a share just by holding, and a slice buys and burns $COIL.",
     ctaPrimary: "Launch a token",
     ctaSecondary: "Explore the market",
   },
@@ -30,19 +30,19 @@ export const copy = {
     steps: [
       {
         label: "Trade",
-        text: "Buy and sell on a live Uniswap V3 pool from second one. The pool's 1% fee tier is the only fee.",
+        text: "Buy and sell on a live Uniswap v4 pool from second one. Every swap pays a small native fee, taken by the hook inside the trade — not a fee-on-transfer, so aggregators and bots route it fine.",
       },
       {
         label: "Locked liquidity",
-        text: "The entire supply is minted as pool liquidity and locked forever in the FeeLocker — un-ruggable by construction.",
+        text: "The entire supply is minted as the pool's liquidity, owned by the hook itself, which renounces ownership at launch — locked forever and un-ruggable by construction.",
       },
       {
-        label: "Fees → Harvest",
-        text: "Swap fees accrue inside the locked position. Anyone can harvest them — the split is enforced on-chain.",
+        label: "Fees → Split",
+        text: "The per-swap fee is split on-chain the instant it's taken: holders, the protocol, and a burn slice that buys and burns $COIL. No harvest button — it happens on every trade.",
       },
       {
         label: "Rewards → Holders",
-        text: "Just hold the token. Your share of the harvested fees accrues automatically — connect your wallet and claim anytime. No staking.",
+        text: "Just hold the token. Your share of the fees accrues automatically — connect your wallet and claim anytime. No staking.",
       },
     ],
   },
@@ -55,18 +55,18 @@ export const copy = {
       },
       {
         title: "Liquidity locked forever",
-        text: "The entire supply is minted into the Uniswap V3 pool and the position is locked in an ownerless vault. There is no withdraw function — the market can never be rug-pulled out.",
+        text: "The entire supply is minted into the Uniswap v4 pool and the position is owned by the hook, which renounces ownership at launch. There is no withdraw function — the market can never be rug-pulled out.",
       },
       {
         title: "Paid on-chain, in ETH",
-        text: "A dividend accumulator credits your fee share on every inflow and keeps it correct as balances move. No snapshots to game, no team switch to flip.",
+        text: "A dividend accumulator credits your fee share on every swap and keeps it correct as balances move. No snapshots to game, no team switch to flip.",
       },
     ],
   },
   create: {
     title: "Launch your token",
     subtitle:
-      "One transaction deploys your token straight into a live Uniswap V3 pool — tradable instantly, liquidity locked forever, all wired into the loop.",
+      "One transaction deploys your token straight into a live Uniswap v4 pool — tradable instantly, liquidity locked forever, all wired into the loop.",
     fields: {
       name: "Token name",
       symbol: "Ticker",

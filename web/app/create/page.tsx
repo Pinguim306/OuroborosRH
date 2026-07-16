@@ -322,12 +322,12 @@ export default function CreatePage() {
                       {
                         key: "loop",
                         title: "🐍 Loop Rewards",
-                        desc: "Harvested pool fees stream to every holder automatically — the classic Coil loop.",
+                        desc: "The per-swap fee's holder slice streams to every holder automatically — the classic Coil loop.",
                       },
                       {
                         key: "creator",
                         title: "👑 Creator Rewards",
-                        desc: "The holder share of harvested pool fees is paid straight to your wallet instead.",
+                        desc: "The per-swap fee's holder slice is paid straight to your wallet instead.",
                       },
                     ] as const
                   ).map((opt) => (
