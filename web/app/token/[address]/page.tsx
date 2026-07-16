@@ -5,7 +5,7 @@ import Link from "next/link";
 import { getToken, mockTrades, mockHolders } from "@/lib/mock/data";
 import { compact, pct, usdFromEth, shortAddr, timeAgo, fullDateTime } from "@/lib/format";
 import { NATIVE_SYMBOL } from "@/lib/chain";
-import { LIVE, isHiddenToken } from "@/lib/contracts";
+import { LIVE, coilPoolId, isHiddenToken } from "@/lib/contracts";
 import { useLiveToken, useLiveTokenV4 } from "@/lib/useMarkets";
 import { useTokenActivity, useTokenHolders } from "@/lib/useActivity";
 import { useEthPrice } from "@/lib/usePrice";
@@ -25,6 +25,7 @@ import { SocialLinks } from "@/components/SocialLinks";
 import { TokenChat } from "@/components/TokenChat";
 import { useTokenMeta } from "@/lib/useMeta";
 import { useTotalFeesEth } from "@/lib/useFees";
+import { useDexPair } from "@/lib/useDexPair";
 
 const EXPLORER = "https://robinhoodchain.blockscout.com";
 
@@ -55,6 +56,9 @@ export default function TokenPage() {
   const holdersData = useTokenHolders(token);
   const meta = useTokenMeta(token?.image);
   const totalFeesEth = useTotalFeesEth(token);
+  // v4 pools chart on DexScreener when it indexes them (by PoolId); on-chain candles otherwise.
+  const v4PoolId = isV4 && token ? coilPoolId(token.address) : undefined;
+  const dexHasV4 = useDexPair(v4PoolId);
 
   if (!hidden && LIVE && (live.isLoading || liveV4.isLoading) && !token) {
     return <div className="mx-auto max-w-md px-4 py-32 text-center text-white/50">Loading token…</div>;
@@ -149,9 +153,13 @@ export default function TokenPage() {
             <StatTile label="24h Volume" value={usdFromEth(vol24, ethUsd)} />
           </div>
 
-          {/* Chart: DexScreener once graduated (has a live DEX pair), else our
-              on-chain marketcap chart for the bonding-curve phase. */}
-          {(token.mode === "v3" || token.graduated) && dexscreenerEmbedUrl(token.pair) ? (
+          {/* Chart: DexScreener when it indexes the market (V3/graduated pairs by address, v4
+              pools by PoolId), else our on-chain candle/marketcap charts. */}
+          {isV4 && dexHasV4 && v4PoolId ? (
+            // v4 pools have no standalone contract — DexScreener indexes them by PoolId, so we
+            // probe its API first and only embed when the pool is actually indexed.
+            <DexScreenerChart pair={v4PoolId} />
+          ) : (token.mode === "v3" || token.graduated) && dexscreenerEmbedUrl(token.pair) ? (
             // V3 launches chart on DexScreener from their very first trade; curve
             // tokens switch to it after graduating.
             <DexScreenerChart pair={token.pair} />
