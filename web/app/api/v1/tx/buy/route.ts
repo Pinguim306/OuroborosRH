@@ -2,11 +2,13 @@ import { checkAuth, fail, ok, parseBig } from "@/lib/server/api";
 import {
   applySlippage,
   buildBuyTx,
+  buildV4BuyTx,
   fetchMarket,
   normalizeAddress,
   quoteBuy,
+  quoteV4,
 } from "@/lib/server/launchpad";
-import { LIVE } from "@/lib/contracts";
+import { COIL_SWAP_ROUTER, LIVE } from "@/lib/contracts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +48,32 @@ export async function POST(req: Request) {
   if (!market) return fail(404, "market not found");
   if (market.graduated) {
     return fail(409, "token has graduated — trade on the DEX pair", { pair: market.pair });
+  }
+
+  // v4 hook tokens route through the CoilSwapRouter; `from` is required (it is both the
+  // simulated quote account and the swap recipient).
+  if (market.mode === "v4") {
+    const from = normalizeAddress(body.from as string);
+    if (!from) return fail(400, "v4 buys require from=<your address> (quote account + recipient)");
+    try {
+      let minTokensOut: bigint;
+      let quoted: bigint | null = null;
+      if (body.minTokensOut != null) {
+        minTokensOut = parseBig(body.minTokensOut, "minTokensOut");
+      } else {
+        quoted = await quoteV4(token, true, amount, from);
+        minTokensOut = applySlippage(quoted, slippageBps);
+      }
+      return ok({
+        mode: "v4",
+        router: COIL_SWAP_ROUTER,
+        quote: quoted != null ? { tokensOut: quoted.toString() } : null,
+        minTokensOut: minTokensOut.toString(),
+        transaction: buildV4BuyTx(token, amount, minTokensOut, from),
+      });
+    } catch (e) {
+      return fail(502, "failed to build v4 buy tx", { detail: (e as Error).message });
+    }
   }
 
   try {

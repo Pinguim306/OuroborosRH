@@ -69,6 +69,19 @@ export function LaunchWidget({
     hash: buyHash,
   });
 
+  // Ping the Telegram announcement endpoint once the launch confirms. Fire-and-forget — the
+  // endpoint re-verifies everything on-chain and no-ops when the bot isn't configured.
+  const announcedRef = useRef(false);
+  useEffect(() => {
+    if (!isSuccess || !tokenAddr || announcedRef.current) return;
+    announcedRef.current = true;
+    fetch("/api/announce", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: tokenAddr }),
+    }).catch(() => {});
+  }, [isSuccess, tokenAddr]);
+
   // Once the launch is mined, fire the optional dev buy as a second tx (v4 can't do it atomically).
   // The launch already succeeded, so a failed/declined dev buy is a soft note, never a hard error.
   useEffect(() => {

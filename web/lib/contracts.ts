@@ -176,6 +176,37 @@ export const coilHookAbi = [
   },
 ] as const;
 
+/** Uniswap v4 PoolManager storage: `mapping(PoolId => Pool.State) _pools` lives at slot 6
+ *  (v4-core StateLibrary.POOLS_SLOT); `slot0` is the first word of Pool.State. */
+const V4_POOLS_SLOT = 6n;
+
+/** Storage slot of a Coil token's pool `slot0` inside the v4 PoolManager (for extsload reads). */
+export function coilSlot0Slot(token: Address): `0x${string}` {
+  return keccak256(
+    encodeAbiParameters(
+      [{ type: "bytes32" }, { type: "uint256" }],
+      [coilPoolId(token), V4_POOLS_SLOT],
+    ),
+  );
+}
+
+/** Token price in ETH from the packed slot0 word (sqrtPriceX96 = low 160 bits). The Coil pool is
+ *  (currency0 = native ETH, currency1 = token), so (sqrtP/2^96)^2 = tokens-per-ETH and the token's
+ *  ETH price is its inverse. Both sides are 18 decimals — no scaling needed. */
+export function v4PriceFromPackedSlot0(word: unknown): number {
+  if (typeof word !== "string" || !word.startsWith("0x")) return 0;
+  let sqrtP: bigint;
+  try {
+    sqrtP = BigInt(word) & ((1n << 160n) - 1n);
+  } catch {
+    return 0;
+  }
+  if (sqrtP === 0n) return 0;
+  const ratio = Number(sqrtP) / 2 ** 96;
+  const tokensPerEth = ratio * ratio;
+  return tokensPerEth > 0 ? 1 / tokensPerEth : 0;
+}
+
 /** Minimal v4 PoolManager ABI: the Swap event (for activity/volume) and extsload (state reads). */
 export const v4PoolManagerAbi = [
   {

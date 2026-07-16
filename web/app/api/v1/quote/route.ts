@@ -1,6 +1,6 @@
 import { checkAuth, fail, ok, parseBig } from "@/lib/server/api";
-import { fetchMarket, normalizeAddress, quoteBuy, quoteSell } from "@/lib/server/launchpad";
-import { LIVE } from "@/lib/contracts";
+import { fetchMarket, normalizeAddress, quoteBuy, quoteSell, quoteV4 } from "@/lib/server/launchpad";
+import { COIL_SWAP_ROUTER, LIVE } from "@/lib/contracts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +51,29 @@ export async function GET(req: Request) {
     }
     const gross = Number(amount) * price;
     return ok({ demo: true, estimate: true, side, nativeOut: intStr(gross * (1 - fee)) });
+  }
+
+  // v4 hook tokens: the router has no view quoter, so the quote is a simulation of the real
+  // swap from the caller's own (funded) address — pass it as ?from=0x…
+  if (market.mode === "v4") {
+    const from = normalizeAddress(searchParams.get("from"));
+    if (!from) {
+      return fail(400, "v4 quotes are simulated — pass from=<your funded address>", {
+        router: COIL_SWAP_ROUTER,
+      });
+    }
+    try {
+      const out = await quoteV4(token, side === "buy", amount, from);
+      return ok(
+        side === "buy"
+          ? { side, mode: "v4", router: COIL_SWAP_ROUTER, tokensOut: out.toString() }
+          : { side, mode: "v4", router: COIL_SWAP_ROUTER, nativeOut: out.toString() },
+      );
+    } catch (e) {
+      return fail(502, "failed to quote v4 swap (does `from` hold the input amount?)", {
+        detail: (e as Error).message,
+      });
+    }
   }
 
   try {
