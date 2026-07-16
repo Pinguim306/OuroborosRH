@@ -13,17 +13,19 @@ import { copy } from "@/lib/copy";
 import { compact, rh, usdFromEth } from "@/lib/format";
 import { useEthPrice } from "@/lib/usePrice";
 import { CHAIN_ID, NATIVE_SYMBOL } from "@/lib/chain";
-import { LIVE, tokenAbi } from "@/lib/contracts";
+import { LIVE, coilHookAbi, tokenAbi } from "@/lib/contracts";
 import { useTotalFeesEth } from "@/lib/useFees";
 
 /**
  * Holder rewards for a single token — NO STAKING. Fees accrue to every holder
  * automatically, proportional to balance; you connect your wallet and claim.
- * Live: reads `claimableRewardOf`/`balanceOf` and calls `claim()`. Demo: simulated.
+ * Live: v3/curve tokens read `claimableRewardOf` (ETH only); v4 hooks read
+ * `pendingOf` (ETH + token side, valued at spot). Both claim via `claim()`.
  */
 export function RewardsPanel({ token }: { token: TokenMarket }) {
   const { address, isConnected } = useAccount();
   const creatorMode = Boolean(token.creatorFees);
+  const isV4 = token.mode === "v4";
 
   // --- Demo state (only used when !LIVE) ---
   const [holding] = useState(() => (token.priceRh > 0 ? (token.marketCapRh / token.priceRh) * 0.004 : 0));
@@ -38,7 +40,14 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
     abi: tokenAbi,
     functionName: "claimableRewardOf",
     args: [address ?? "0x0000000000000000000000000000000000000000"],
-    query: { enabled: LIVE && !!address },
+    query: { enabled: LIVE && !!address && !isV4 },
+  });
+  const pendingV4Q = useReadContract({
+    address: token.address,
+    abi: coilHookAbi,
+    functionName: "pendingOf",
+    args: [address ?? "0x0000000000000000000000000000000000000000"],
+    query: { enabled: LIVE && !!address && isV4 },
   });
   const balanceQ = useReadContract({
     address: token.address,
@@ -51,7 +60,13 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
   const { writeContract, data: hash, isPending, error, reset } = useWriteContract();
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
-  const claimable = LIVE ? Number(formatEther((claimableQ.data as bigint) ?? 0n)) : simClaimable;
+  const pendingPair = pendingV4Q.data as readonly [bigint, bigint] | undefined;
+  const claimable = LIVE
+    ? isV4
+      ? Number(formatEther(pendingPair?.[0] ?? 0n)) +
+        Number(formatEther(pendingPair?.[1] ?? 0n)) * token.priceRh
+      : Number(formatEther((claimableQ.data as bigint) ?? 0n))
+    : simClaimable;
   const holdings = LIVE ? Number(formatEther((balanceQ.data as bigint) ?? 0n)) : holding;
   const busy = LIVE && (isPending || confirming);
 
@@ -68,6 +83,7 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
     if (!isSuccess) return;
     setFlash("Rewards claimed");
     claimableQ.refetch?.();
+    pendingV4Q.refetch?.();
     const t = setTimeout(() => {
       setFlash(null);
       reset();
@@ -112,8 +128,9 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
         {token.aprPct > 0 && <span className="chip">APR ~{token.aprPct}%</span>}
       </div>
       <p className="mt-1 text-xs text-white/45">
-        Just hold {token.symbol} — fees accrue to your wallet in {NATIVE_SYMBOL} automatically. No
-        staking, no lock-ups. Connect and claim anytime.
+        Just hold {token.symbol} — fees accrue to your wallet in{" "}
+        {isV4 ? `${NATIVE_SYMBOL} and ${token.symbol}` : NATIVE_SYMBOL} automatically. No staking,
+        no lock-ups. Connect and claim anytime.
       </p>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
@@ -124,9 +141,9 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
           </div>
         </div>
         <div className="rounded-xl bg-obsidian-900/60 p-4">
-          <div className="label">Pool paid out</div>
+          <div className="label">{isV4 ? "Paid out in" : "Pool paid out"}</div>
           <div className="mt-0.5 font-mono text-sm font-semibold text-white">
-            {usdFromEth(totalFeesEth, ethUsd, 0)}
+            {isV4 ? `${NATIVE_SYMBOL} + ${token.symbol}` : usdFromEth(totalFeesEth, ethUsd, 0)}
           </div>
         </div>
       </div>
