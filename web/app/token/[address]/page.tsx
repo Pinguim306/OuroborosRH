@@ -6,7 +6,7 @@ import { getToken, mockTrades, mockHolders } from "@/lib/mock/data";
 import { compact, pct, usdFromEth, shortAddr, timeAgo, fullDateTime } from "@/lib/format";
 import { NATIVE_SYMBOL } from "@/lib/chain";
 import { LIVE, isHiddenToken } from "@/lib/contracts";
-import { useLiveToken } from "@/lib/useMarkets";
+import { useLiveToken, useLiveTokenV4 } from "@/lib/useMarkets";
 import { useTokenActivity, useTokenHolders } from "@/lib/useActivity";
 import { useEthPrice } from "@/lib/usePrice";
 import type { Address } from "@/lib/types";
@@ -38,7 +38,16 @@ export default function TokenPage() {
   const address = Array.isArray(params.address) ? params.address[0] : params.address;
   const hidden = isHiddenToken(address); // internal/test tokens resolve to "not found" everywhere
   const live = useLiveToken(hidden ? undefined : (address as Address | undefined));
-  const token = hidden ? undefined : LIVE ? live.token : address ? getToken(address) : undefined;
+  // v4 (CoilHook) tokens live in a different launchpad the v3 reader can't see — fall back to it.
+  const liveV4 = useLiveTokenV4(hidden ? undefined : (address as Address | undefined));
+  const token = hidden
+    ? undefined
+    : LIVE
+      ? live.token ?? liveV4.token
+      : address
+        ? getToken(address)
+        : undefined;
+  const isV4 = token?.mode === "v4";
 
   const ethUsd = useEthPrice();
   const activity = useTokenActivity(token);
@@ -46,7 +55,7 @@ export default function TokenPage() {
   const meta = useTokenMeta(token?.image);
   const totalFeesEth = useTotalFeesEth(token);
 
-  if (!hidden && LIVE && live.isLoading && !token) {
+  if (!hidden && LIVE && (live.isLoading || liveV4.isLoading) && !token) {
     return <div className="mx-auto max-w-md px-4 py-32 text-center text-white/50">Loading token…</div>;
   }
 
@@ -87,7 +96,9 @@ export default function TokenPage() {
           <div className="flex items-center gap-2">
             <h1 className="font-display text-2xl font-bold">{token.name}</h1>
             <span className="chip">{token.symbol}</span>
-            {token.mode === "v3" ? (
+            {isV4 ? (
+              <span className="chip border-venom-500/40 text-venom-400">⚡ v4</span>
+            ) : token.mode === "v3" ? (
               <span className="chip border-venom-500/40 text-venom-400">⚡ V3</span>
             ) : token.graduated ? (
               <span className="chip border-venom-500/40 text-venom-400">✦ Graduated</span>
@@ -141,8 +152,20 @@ export default function TokenPage() {
             <MarketcapChart series={series} ethUsd={ethUsd} />
           )}
 
-          {/* Market status: V3 pool, graduated, or bonding-curve progress */}
-          {token.mode === "v3" ? (
+          {/* Market status: v4 hook pool, V3 pool, graduated, or bonding-curve progress */}
+          {isV4 ? (
+            <div className="glass p-6">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="font-semibold">Uniswap v4 pool</h3>
+                <span className="text-xs text-white/40">native per-swap fee · liquidity locked</span>
+              </div>
+              <div className="rounded-xl bg-venom-500/10 p-4 text-center text-sm text-venom-400">
+                This token launched straight into a Uniswap v4 pool. Its liquidity is locked forever
+                (the hook owns it and renounced ownership), and every swap pays a native fee split
+                on-chain between holders, the protocol, and the $COIL buy&amp;burn — no harvest step.
+              </div>
+            </div>
+          ) : token.mode === "v3" ? (
             <div className="glass p-6">
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="font-semibold">Uniswap V3 pool</h3>
@@ -280,8 +303,34 @@ export default function TokenPage() {
 
         {/* Right: actions */}
         <div className="space-y-6 lg:sticky lg:top-20 lg:self-start">
-          <TradeWidget token={token} />
-          <RewardsPanel token={token} />
+          {isV4 ? (
+            <div className="glass p-6 text-center">
+              <div className="text-3xl">🔁</div>
+              <h3 className="mt-2 font-semibold">Trade on Coil Swap</h3>
+              <p className="mt-1 text-sm text-white/50">
+                ${token.symbol} trades through the Uniswap v4 pool. Buy and sell it on Coil Swap.
+              </p>
+              <Link
+                href={`/swap?token=${token.address}`}
+                className="btn-primary mt-4 w-full justify-center"
+              >
+                Open in Coil Swap →
+              </Link>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard?.writeText(token.address)}
+                title="Copy contract address"
+                className="mt-3 block w-full break-all font-mono text-[11px] text-white/40 underline decoration-dotted hover:text-white"
+              >
+                {token.address} ⧉
+              </button>
+            </div>
+          ) : (
+            <>
+              <TradeWidget token={token} />
+              <RewardsPanel token={token} />
+            </>
+          )}
         </div>
       </div>
     </div>

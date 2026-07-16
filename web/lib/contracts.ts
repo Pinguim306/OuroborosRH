@@ -247,6 +247,30 @@ export const coilLaunchpadV4Abi = [
       },
     ],
   },
+  // Single-market lookups (auto-getters on `Market[] public markets` + `mapping public
+  // marketIndexByToken`). Used to resolve a v4 token's /token/<address> page.
+  {
+    type: "function",
+    name: "markets",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "uint256" }],
+    outputs: [
+      { name: "token", type: "address" },
+      { name: "creator", type: "address" },
+      { name: "creatorRewards", type: "bool" },
+      { name: "name", type: "string" },
+      { name: "symbol", type: "string" },
+      { name: "metadataURI", type: "string" },
+      { name: "createdAt", type: "uint256" },
+    ],
+  },
+  {
+    type: "function",
+    name: "marketIndexByToken",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "address" }],
+    outputs: [{ type: "uint256" }], // index + 1 (0 = unknown)
+  },
 ] as const;
 
 export type CoilMarket = {

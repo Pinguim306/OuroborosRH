@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { formatEther } from "viem";
-import { useReadContract, useReadContracts } from "wagmi";
+import { formatEther, parseEther } from "viem";
+import { useReadContract, useReadContracts, useSimulateContract } from "wagmi";
 import {
   CONTRACTS,
   LAUNCHPADS,
@@ -12,6 +12,14 @@ import {
   tokenAbi,
   v3PoolAbi,
   isHiddenToken,
+  COIL_LAUNCHPAD,
+  coilLaunchpadV4Abi,
+  LAUNCH_LIVE,
+  SWAP_LIVE,
+  COIL_SWAP_ROUTER,
+  coilSwapRouterAbi,
+  coilPoolKey,
+  isCoilToken,
 } from "./contracts";
 import type { Address, TokenMarket } from "./types";
 
@@ -302,5 +310,99 @@ export function useLiveToken(tokenAddress?: Address): {
     token: mapped,
     isLoading: idxQ.isLoading || marketQ.isLoading || statsQ.isLoading,
     notFound: LIVE && !idxQ.isLoading && !found,
+  };
+}
+
+/** ETH probe used to derive a v4 token's spot price by simulating a tiny buy. */
+const V4_PRICE_PROBE = parseEther("0.001");
+
+/**
+ * Read a single v4 (CoilHook) token by address. v4 tokens live in the CoilLaunchpad, not the v3
+ * launchpads, so `useLiveToken` can't see them — the /token page falls back to this when a token
+ * is a Coil hook (detected purely from its flag-encoded address, no RPC). Price/market cap are
+ * derived by simulating a small buy through the Coil Swap router (the same route the swap uses),
+ * so they show as soon as the pool has liquidity; if the simulation can't run, they read 0.
+ */
+export function useLiveTokenV4(tokenAddress?: Address): {
+  token: TokenMarket | undefined;
+  isLoading: boolean;
+  notFound: boolean;
+} {
+  const zero = "0x0000000000000000000000000000000000000000" as Address;
+  const isV4 = !!tokenAddress && isCoilToken(tokenAddress);
+  const enabled = LIVE && LAUNCH_LIVE && isV4;
+
+  const idxQ = useReadContract({
+    address: COIL_LAUNCHPAD,
+    abi: coilLaunchpadV4Abi,
+    functionName: "marketIndexByToken",
+    args: [tokenAddress ?? zero],
+    query: { enabled },
+  });
+  const idx = bn(idxQ.data);
+  const found = idx > 0n;
+
+  const marketQ = useReadContract({
+    address: COIL_LAUNCHPAD,
+    abi: coilLaunchpadV4Abi,
+    functionName: "markets",
+    args: [found ? idx - 1n : 0n],
+    query: { enabled: enabled && found },
+  });
+  // markets(i) => (token, creator, creatorRewards, name, symbol, metadataURI, createdAt)
+  const m = marketQ.data as
+    | readonly [Address, Address, boolean, string, string, string, bigint]
+    | undefined;
+
+  const supplyQ = useReadContract({
+    address: tokenAddress,
+    abi: tokenAbi,
+    functionName: "totalSupply",
+    query: { enabled: enabled && found },
+  });
+
+  // Spot price = probe ETH in / tokens out for a tiny buy. Deadline is fixed per token so the
+  // simulation isn't re-issued every render.
+  const deadline = useMemo(() => BigInt(Math.floor(Date.now() / 1000) + 3600), [tokenAddress]);
+  const simQ = useSimulateContract({
+    address: COIL_SWAP_ROUTER,
+    abi: coilSwapRouterAbi,
+    functionName: "swapExactInSingle",
+    args: tokenAddress
+      ? [coilPoolKey(tokenAddress), true, V4_PRICE_PROBE, 0n, COIL_SWAP_ROUTER, deadline]
+      : undefined,
+    value: V4_PRICE_PROBE,
+    account: COIL_SWAP_ROUTER,
+    query: { enabled: enabled && found && SWAP_LIVE },
+  });
+  const tokensOut = bn(simQ.data?.result);
+
+  const token = useMemo(() => {
+    if (!m) return undefined;
+    const supply = bn(supplyQ.data);
+    const tuple: MarketTuple = {
+      token: m[0],
+      curve: m[0], // v4 has no separate curve; the token IS the pool/hook
+      creator: m[1],
+      name: m[3],
+      symbol: m[4],
+      metadataURI: m[5],
+      createdAt: m[6],
+    };
+    const t = mapToken(tuple, 0n, 0n, false, 0n, 0n, supply, undefined);
+    t.mode = "v4";
+    t.creatorFees = m[2];
+    t.launchpad = COIL_LAUNCHPAD;
+    if (tokensOut > 0n) {
+      t.priceRh = Number(formatEther(V4_PRICE_PROBE)) / Number(formatEther(tokensOut));
+      t.marketCapRh = t.priceRh * num(supply);
+    }
+    return t;
+  }, [m, supplyQ.data, tokensOut]);
+
+  return {
+    token,
+    isLoading: idxQ.isLoading || marketQ.isLoading,
+    notFound: enabled && !idxQ.isLoading && !found,
   };
 }
