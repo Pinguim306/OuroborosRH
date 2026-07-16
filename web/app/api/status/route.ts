@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { dbConfigured, ensureSchema, sql } from "@/lib/db";
-import { authConfigured, currentAddress } from "@/lib/authServer";
+import { authConfigured } from "@/lib/authServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,48 +35,7 @@ export async function GET(req: Request) {
     ready: authConfigured && dbReachable,
   };
 
-  const params = new URL(req.url).searchParams;
-
-  // ?me=1 — with the session cookie, show what's actually stored vs. the session address, to catch
-  // a write-key / read-key mismatch. Reveals the exact stored address (casing) and recent keys.
-  if (params.get("me") === "1") {
-    const me = currentAddress();
-    const info: {
-      sessionAddress: string | null;
-      totalProfiles: number | null;
-      exactMatch: boolean | null;
-      caseInsensitiveMatch: boolean | null;
-      storedAddress: string | null;
-      recentAddresses: string[];
-    } = {
-      sessionAddress: me,
-      totalProfiles: null,
-      exactMatch: null,
-      caseInsensitiveMatch: null,
-      storedAddress: null,
-      recentAddresses: [],
-    };
-    if (dbReachable) {
-      try {
-        const cnt = await sql`select count(*)::int as c from profiles`;
-        info.totalProfiles = (cnt.rows[0] as { c: number }).c;
-        if (me) {
-          const ex = await sql`select address from profiles where address = ${me} limit 1`;
-          info.exactMatch = ex.rows.length > 0;
-          const ci = await sql`select address from profiles where lower(address) = ${me} limit 1`;
-          info.caseInsensitiveMatch = ci.rows.length > 0;
-          info.storedAddress = (ci.rows[0] as { address?: string } | undefined)?.address ?? null;
-          const recent = await sql`select address from profiles order by updated_at desc limit 5`;
-          info.recentAddresses = recent.rows.map((r) => (r as { address: string }).address);
-        }
-      } catch (e) {
-        return NextResponse.json({ ...base, me: { ...info, error: (e as Error).message } });
-      }
-    }
-    return NextResponse.json({ ...base, me: info });
-  }
-
-  if (params.get("selftest") !== "1" || !dbReachable) {
+  if (new URL(req.url).searchParams.get("selftest") !== "1" || !dbReachable) {
     return NextResponse.json(base);
   }
 
