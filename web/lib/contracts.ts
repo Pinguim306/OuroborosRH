@@ -1,3 +1,4 @@
+import { encodeAbiParameters, keccak256 } from "viem";
 import type { Address } from "./types";
 
 /**
@@ -118,6 +119,53 @@ export function coilPoolKey(token: Address) {
     hooks: token, // the CoilHook is the token
   } as const;
 }
+
+/** The v4 PoolId of a Coil token's pool: keccak256(abi.encode(poolKey)). Used both to filter the
+ *  PoolManager's Swap events and to derive the pool's storage slots for extsload reads. */
+export function coilPoolId(token: Address): `0x${string}` {
+  return keccak256(
+    encodeAbiParameters(
+      [
+        {
+          type: "tuple",
+          components: [
+            { name: "currency0", type: "address" },
+            { name: "currency1", type: "address" },
+            { name: "fee", type: "uint24" },
+            { name: "tickSpacing", type: "int24" },
+            { name: "hooks", type: "address" },
+          ],
+        },
+      ],
+      [coilPoolKey(token)],
+    ),
+  );
+}
+
+/** Minimal v4 PoolManager ABI: the Swap event (for activity/volume) and extsload (state reads). */
+export const v4PoolManagerAbi = [
+  {
+    type: "event",
+    name: "Swap",
+    inputs: [
+      { name: "id", type: "bytes32", indexed: true },
+      { name: "sender", type: "address", indexed: true },
+      { name: "amount0", type: "int128", indexed: false },
+      { name: "amount1", type: "int128", indexed: false },
+      { name: "sqrtPriceX96", type: "uint160", indexed: false },
+      { name: "liquidity", type: "uint128", indexed: false },
+      { name: "tick", type: "int24", indexed: false },
+      { name: "fee", type: "uint24", indexed: false },
+    ],
+  },
+  {
+    type: "function",
+    name: "extsload",
+    stateMutability: "view",
+    inputs: [{ name: "slot", type: "bytes32" }],
+    outputs: [{ type: "bytes32" }],
+  },
+] as const;
 
 export const coilSwapRouterAbi = [
   {
