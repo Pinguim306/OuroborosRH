@@ -4,14 +4,18 @@ import { authConfigured, currentAddress } from "@/lib/authServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 const TOKEN_RE = /^0x[0-9a-fA-F]{40}$/;
 const MAX_BODY = 500;
 const RATE_MS = 3000; // one message per 3s per wallet
+const NO_STORE = { "Cache-Control": "no-store, max-age=0" };
 
 /** Recent messages for a token's chat room. `?after=<id>` returns only newer ones (for polling). */
 export async function GET(req: Request, { params }: { params: { token: string } }) {
-  if (!dbConfigured || !TOKEN_RE.test(params.token)) return NextResponse.json({ messages: [] });
+  if (!dbConfigured || !TOKEN_RE.test(params.token)) {
+    return NextResponse.json({ messages: [] }, { headers: NO_STORE });
+  }
   await ensureSchema();
   const token = params.token.toLowerCase();
   const after = Number(new URL(req.url).searchParams.get("after") ?? "0") || 0;
@@ -23,7 +27,7 @@ export async function GET(req: Request, { params }: { params: { token: string } 
     order by m.id desc
     limit 50
   `;
-  return NextResponse.json({ messages: rows.reverse() }); // oldest → newest
+  return NextResponse.json({ messages: rows.reverse() }, { headers: NO_STORE }); // oldest → newest
 }
 
 /** Post a message to a token's chat room (signed-in wallets only, rate-limited). */

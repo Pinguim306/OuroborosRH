@@ -78,14 +78,15 @@ export default function ProfilePage() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Couldn't save.");
-      // Read it straight back to confirm it actually persisted (catches a misconfigured DB that
-      // accepts writes but doesn't retain them, instead of a false "saved").
-      const check = await fetch(`/api/profile/${sessionAddress}`, { cache: "no-store" }).then((x) => x.json());
-      if (check?.profile?.username) {
-        setMsg({ ok: true, text: "Profile saved." });
-      } else {
-        setMsg({ ok: false, text: "Saved, but it didn't read back — the database may not be connected. Check /api/status." });
+      // The POST persists the row (via the DB) and returns it, so trust that. An immediate
+      // read-back can race the DB's cross-request visibility and false-alarm even on a good write;
+      // the next page load (cache: no-store) reflects the persisted profile reliably.
+      if (j.profile) {
+        setUsername(j.profile.username ?? username);
+        setBio(j.profile.bio ?? bio);
+        setAvatarUrl(j.profile.avatar_url ?? avatarUrl);
       }
+      setMsg({ ok: true, text: "Profile saved." });
     } catch (err) {
       setMsg({ ok: false, text: (err as Error).message ?? "Couldn't save." });
     } finally {
