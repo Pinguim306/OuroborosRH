@@ -227,6 +227,7 @@ export function isCoilToken(token: Address): boolean {
 const ALWAYS_HIDDEN: string[] = [
   "0x14557a71a1851317949e99e1ba0e6cd51b9d0088", // MPC — internal test token
   "0x4a5ceb9d6b094c4bfb08c93cadebdf19d944c088", // COIL v1 — launched with the wrong price range; superseded by the relaunch
+  "0xa1ef5c2d858d15f8e1bc30058ef9bac0f6924088", // COIL v2 — launched with a 1M supply (launchpad misconfig); superseded by the relaunch
 ];
 
 const HIDDEN_TOKENS = new Set(
