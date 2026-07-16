@@ -6,12 +6,19 @@ import { defineChain } from "viem";
  * For the testnet, swap in its chain id + RPC (faucet at
  * faucet.testnet.chain.robinhood.com) — recommended for first deploys.
  */
+/** Custom RPC override: set NEXT_PUBLIC_RPC_URL in the Vercel env to route every browser read
+ *  and transaction through your own endpoint (private node, paid provider, etc.); unset falls
+ *  back to the public Robinhood RPC. NEXT_PUBLIC_ vars are baked into the client bundle at build
+ *  time — visible to anyone, so use an endpoint you're OK exposing (or key-gate it by referer). */
+const RPC_URL =
+  (process.env.NEXT_PUBLIC_RPC_URL ?? "").trim() || "https://rpc.mainnet.chain.robinhood.com";
+
 export const robinhoodChain = defineChain({
   id: 4663,
   name: "Robinhood Chain",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: {
-    default: { http: ["https://rpc.mainnet.chain.robinhood.com"] },
+    default: { http: [RPC_URL] },
   },
   blockExplorers: {
     default: { name: "Blockscout", url: "https://robinhoodchain.blockscout.com" },
