@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { formatEther } from "viem";
 import {
@@ -84,6 +85,32 @@ export function LivePortfolio() {
     address,
   );
 
+  // Creator Rewards earnings: v4 tokens this wallet launched in creator mode accrue the holder
+  // fee slice to a creator bucket inside the hook — swept to the creator by a permissionless
+  // sweepCreator() ("Collect"; whoever cranks it, the money always goes to the creator).
+  const myCreatorTokens = tokens.filter(
+    (t) =>
+      t.mode === "v4" &&
+      t.creatorFees &&
+      !!address &&
+      t.creator.toLowerCase() === address.toLowerCase(),
+  );
+  const creatorQ = useReadContracts({
+    contracts: myCreatorTokens.flatMap(
+      (t) =>
+        [
+          { address: t.address, abi: coilHookAbi, functionName: "creatorAccruedETH" },
+          { address: t.address, abi: coilHookAbi, functionName: "creatorAccruedTOKEN" },
+        ] as const,
+    ),
+    query: { enabled: !!address && myCreatorTokens.length > 0, refetchInterval: 30_000 },
+  });
+  const creatorRows = myCreatorTokens.map((t, i) => ({
+    token: t,
+    accruedEth: num(creatorQ.data?.[i * 2]?.result),
+    accruedTok: num(creatorQ.data?.[i * 2 + 1]?.result),
+  }));
+
   const totalClaimable = positions.reduce((s, p) => s + p.claimableRh, 0);
   const totalValue = positions.reduce((s, p) => s + p.balance * p.token.priceRh, 0);
   const totalNetPnl = positions.reduce((s, p) => {
@@ -129,7 +156,81 @@ export function LivePortfolio() {
           ))}
         </div>
       )}
+
+      {creatorRows.length > 0 && (
+        <div className="mt-10">
+          <h2 className="font-display text-lg font-bold">👑 Creator earnings</h2>
+          <p className="mt-1 text-xs text-white/45">
+            Your Creator Rewards tokens pay the holder fee slice straight to your wallet.
+            &ldquo;Collect&rdquo; pushes anything accrued — it always pays the creator, whoever
+            clicks it.
+          </p>
+          <div className="mt-4 space-y-3">
+            {creatorRows.map((r) => (
+              <CreatorRow key={r.token.address} row={r} ethUsd={ethUsd} onCollected={() => creatorQ.refetch()} />
+            ))}
+          </div>
+        </div>
+      )}
     </>
+  );
+}
+
+function CreatorRow({
+  row,
+  ethUsd,
+  onCollected,
+}: {
+  row: { token: TokenMarket; accruedEth: number; accruedTok: number };
+  ethUsd: number;
+  onCollected: () => void;
+}) {
+  const { writeContract, data: hash, isPending } = useWriteContract();
+  const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+  const busy = isPending || confirming;
+
+  useEffect(() => {
+    if (isSuccess) onCollected();
+  }, [isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const totalEth = row.accruedEth + row.accruedTok * row.token.priceRh;
+
+  return (
+    <div className="glass flex flex-wrap items-center gap-4 p-4 md:flex-nowrap">
+      <Link href={`/token/${row.token.address}`} className="flex min-w-0 flex-1 items-center gap-3">
+        <TokenAvatar
+          uri={row.token.image}
+          symbol={row.token.symbol}
+          className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-obsidian-800 text-2xl"
+        />
+        <div className="min-w-0">
+          <div className="truncate font-semibold text-white">{row.token.name}</div>
+          <div className="text-xs text-acid">👑 Creator Rewards</div>
+        </div>
+      </Link>
+
+      <div className="text-center">
+        <div className="label">Accrued</div>
+        <div className="font-mono text-sm font-semibold text-venom-400">
+          {usdFromEth(totalEth, ethUsd, 2)}
+        </div>
+      </div>
+
+      <button
+        onClick={() =>
+          writeContract({
+            chainId: CHAIN_ID,
+            address: row.token.address,
+            abi: coilHookAbi,
+            functionName: "sweepCreator",
+          })
+        }
+        disabled={totalEth <= 0 || busy}
+        className="btn-ghost"
+      >
+        {busy ? "…" : isSuccess ? "✓ Collected" : "Collect"}
+      </button>
+    </div>
   );
 }
 

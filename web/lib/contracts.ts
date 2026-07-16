@@ -156,6 +156,13 @@ export const coilHookAbi = [
       { name: "owedTOKEN", type: "uint256" },
     ],
   },
+  // Accrued buy&burn slice waiting inside the hook + the permissionless push to the treasury.
+  { type: "function", name: "treasuryAccruedETH", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "sweepTreasury", stateMutability: "nonpayable", inputs: [], outputs: [] },
+  // Accrued creator slice (Creator Rewards mode) + the permissionless push to the creator.
+  { type: "function", name: "creatorAccruedETH", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "creatorAccruedTOKEN", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "sweepCreator", stateMutability: "nonpayable", inputs: [], outputs: [] },
 ] as const;
 
 /** Minimal v4 PoolManager ABI: the Swap event (for activity/volume) and extsload (state reads). */

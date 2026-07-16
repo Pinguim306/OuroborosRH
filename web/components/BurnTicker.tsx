@@ -11,9 +11,17 @@ import {
   useWriteContract,
 } from "wagmi";
 import { CHAIN_ID, NATIVE_SYMBOL } from "@/lib/chain";
-import { BURNER_LIVE, COIL_BURNER, COIL_TOKEN, coilBurnerAbi, isDeployed } from "@/lib/contracts";
+import {
+  BURNER_LIVE,
+  COIL_BURNER,
+  COIL_TOKEN,
+  coilBurnerAbi,
+  coilHookAbi,
+  isDeployed,
+} from "@/lib/contracts";
 import { compact, usdFromEth } from "@/lib/format";
 import { useEthPrice } from "@/lib/usePrice";
+import { useLiveMarkets } from "@/lib/useMarkets";
 
 const bn = (x: unknown): bigint => (typeof x === "bigint" ? x : 0n);
 
@@ -27,6 +35,7 @@ export function BurnTicker() {
   const { isConnected } = useAccount();
   const ethUsd = useEthPrice();
   const [flash, setFlash] = useState<string | null>(null);
+  const [action, setAction] = useState<"burn" | "collect" | null>(null);
 
   const statsQ = useReadContracts({
     contracts: [
@@ -42,14 +51,38 @@ export function BurnTicker() {
     query: { enabled: BURNER_LIVE, refetchInterval: 30_000 },
   });
 
+  // Burn-slice fees still sitting INSIDE each v4 hook, waiting for a (permissionless)
+  // sweepTreasury push into the burner. Read across every listed v4 token.
+  const { tokens } = useLiveMarkets();
+  const v4Tokens = tokens.filter((t) => t.mode === "v4");
+  const accruedQ = useReadContracts({
+    contracts: v4Tokens.map(
+      (t) =>
+        ({
+          chainId: CHAIN_ID,
+          address: t.address,
+          abi: coilHookAbi,
+          functionName: "treasuryAccruedETH",
+        }) as const,
+    ),
+    query: { enabled: BURNER_LIVE && v4Tokens.length > 0, refetchInterval: 30_000 },
+  });
+  const accruedPer = v4Tokens.map((t, i) => ({ token: t, eth: bn(accruedQ.data?.[i]?.result) }));
+  const accruedTotal = accruedPer.reduce((s, x) => s + x.eth, 0n);
+  const topAccrued = accruedPer.reduce(
+    (best, x) => (x.eth > best.eth ? x : best),
+    { token: undefined as (typeof v4Tokens)[number] | undefined, eth: 0n },
+  );
+
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
   useEffect(() => {
     if (isSuccess) {
-      setFlash("Burned 🔥");
+      setFlash(action === "collect" ? "Collected ✓" : "Burned 🔥");
       statsQ.refetch();
       pendingQ.refetch();
+      accruedQ.refetch();
       const t = setTimeout(() => setFlash(null), 4000);
       return () => clearTimeout(t);
     }
@@ -67,7 +100,19 @@ export function BurnTicker() {
   const busy = isPending || confirming;
   const canBurn = coilSet && pending > 0n && isConnected;
 
+  function collect() {
+    if (!topAccrued.token) return;
+    setAction("collect");
+    writeContract({
+      chainId: CHAIN_ID,
+      address: topAccrued.token.address,
+      abi: coilHookAbi,
+      functionName: "sweepTreasury",
+    });
+  }
+
   function burn() {
+    setAction("burn");
     writeContract({
       chainId: CHAIN_ID,
       address: COIL_BURNER,
@@ -103,8 +148,28 @@ export function BurnTicker() {
             {NATIVE_SYMBOL} ready to burn
           </span>
         )}
+        {accruedTotal > 0n && (
+          <span className="text-xs text-white/40">
+            +{Number(formatEther(accruedTotal)).toLocaleString(undefined, { maximumFractionDigits: 5 })}{" "}
+            {NATIVE_SYMBOL} accruing in token fees
+          </span>
+        )}
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
+        {accruedTotal > 0n && !flash && (
+          <button
+            onClick={collect}
+            disabled={!isConnected || busy}
+            title={
+              isConnected
+                ? "Push the accrued burn-slice fees from the token into the burner. Permissionless."
+                : "Connect a wallet to trigger the sweep (anyone can)."
+            }
+            className="rounded-xl border border-white/15 px-3 py-1.5 text-xs font-bold text-white/60 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {busy && action === "collect" ? "Collecting…" : "Collect"}
+          </button>
+        )}
         {error && (
           <span className="text-[11px] text-red-400">
             {(error as { shortMessage?: string }).shortMessage ?? "Burn failed."}
