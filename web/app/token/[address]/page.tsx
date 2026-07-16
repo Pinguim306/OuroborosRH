@@ -91,7 +91,7 @@ export default function TokenPage() {
         <TokenAvatar
           uri={token.image}
           symbol={token.symbol}
-          className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl bg-obsidian-800 text-4xl"
+          className="grid h-32 w-32 shrink-0 place-items-center overflow-hidden rounded-2xl bg-obsidian-800 text-6xl"
         />
         <div className="flex-1">
           <div className="flex items-center gap-2">
@@ -110,6 +110,14 @@ export default function TokenPage() {
               </span>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => navigator.clipboard?.writeText(token.address)}
+            title={`Copy contract address\n${token.address}`}
+            className="mt-1 font-mono text-[11px] text-white/40 underline decoration-dotted hover:text-white"
+          >
+            {shortAddr(token.address)} ⧉
+          </button>
           <p className="mt-1 max-w-xl text-sm text-white/50">
             {meta?.description || token.description}
           </p>
@@ -305,17 +313,7 @@ export default function TokenPage() {
         {/* Right: actions */}
         <div className="space-y-6 lg:sticky lg:top-20 lg:self-start">
           {isV4 ? (
-            <>
-              <V4TradeWidget token={token} ethUsd={ethUsd} />
-              <button
-                type="button"
-                onClick={() => navigator.clipboard?.writeText(token.address)}
-                title="Copy contract address"
-                className="block w-full break-all text-center font-mono text-[11px] text-white/40 underline decoration-dotted hover:text-white"
-              >
-                {token.address} ⧉
-              </button>
-            </>
+            <V4TradeWidget token={token} ethUsd={ethUsd} />
           ) : (
             <>
               <TradeWidget token={token} />
