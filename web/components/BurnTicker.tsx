@@ -18,12 +18,16 @@ import {
   coilBurnerAbi,
   coilHookAbi,
   isDeployed,
+  tokenAbi,
 } from "@/lib/contracts";
 import { compact, usdFromEth } from "@/lib/format";
 import { useEthPrice } from "@/lib/usePrice";
 import { useLiveMarkets } from "@/lib/useMarkets";
 
 const bn = (x: unknown): bigint => (typeof x === "bigint" ? x : 0n);
+
+/** The canonical dead address every burn ends up at (the burner sends here too). */
+const DEAD = "0x000000000000000000000000000000000000dEaD" as const;
 
 /**
  * Live $COIL buyback & burn stats, read straight from the CoilBuybackBurner: total $COIL burned,
@@ -42,6 +46,9 @@ export function BurnTicker() {
       { chainId: CHAIN_ID, address: COIL_BURNER, abi: coilBurnerAbi, functionName: "totalCoilBurned" },
       { chainId: CHAIN_ID, address: COIL_BURNER, abi: coilBurnerAbi, functionName: "totalEthSpent" },
       { chainId: CHAIN_ID, address: COIL_BURNER, abi: coilBurnerAbi, functionName: "coil" },
+      // Total burned from ANY source — the burner sends here too, but so do manual burns
+      // (dev wallet, community). This is the headline number when COIL_TOKEN is configured.
+      { chainId: CHAIN_ID, address: COIL_TOKEN, abi: tokenAbi, functionName: "balanceOf", args: [DEAD] },
     ],
     query: { enabled: BURNER_LIVE, refetchInterval: 30_000 },
   });
@@ -90,7 +97,11 @@ export function BurnTicker() {
 
   if (!BURNER_LIVE) return null;
 
-  const burned = bn(statsQ.data?.[0]?.result);
+  // Prefer the dead address's balance (covers buyback burns AND manual burns); fall back to the
+  // burner's own counter while COIL_TOKEN isn't configured.
+  const burnerBurned = bn(statsQ.data?.[0]?.result);
+  const deadBalance = bn(statsQ.data?.[3]?.result);
+  const burned = isDeployed(COIL_TOKEN) ? deadBalance : burnerBurned;
   const ethSpent = bn(statsQ.data?.[1]?.result);
   const coilAddr = (statsQ.data?.[2]?.result as string | undefined) ?? "";
   const coilSet = isDeployed((coilAddr || "0x0000000000000000000000000000000000000000") as `0x${string}`);
