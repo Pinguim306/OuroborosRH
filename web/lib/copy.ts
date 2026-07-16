@@ -8,7 +8,7 @@ export const copy = {
   tagline: "The launchpad where every trade winds the coil.",
   // Official Coil social handles (no @). Used for the sidebar/site links.
   social: {
-    x: "coilbond",
+    x: "coiltrading",
   },
   nav: {
     explore: "Explore",
