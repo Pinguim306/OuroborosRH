@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { MOCK_TOKENS } from "@/lib/mock/data";
 import { LIVE } from "@/lib/contracts";
 import { useLiveMarkets } from "@/lib/useMarkets";
@@ -7,8 +8,6 @@ import { useGlobalActivity } from "@/lib/useGlobalActivity";
 import { useEthPrice } from "@/lib/usePrice";
 import { usdFromEth, shortAddr, compact } from "@/lib/format";
 import type { TokenMarket } from "@/lib/types";
-
-const EXPLORER = "https://robinhoodchain.blockscout.com";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 const rank = (i: number) => MEDALS[i] ?? `${i + 1}`;
@@ -48,11 +47,9 @@ export default function LeaderboardPage() {
             </div>
             <div className="divide-y divide-white/[0.04]">
               {traders.map((t, i) => (
-                <a
+                <Link
                   key={t.address}
-                  href={`${EXPLORER}/address/${t.address}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={`/u/${t.address.toLowerCase()}`}
                   className="flex items-center gap-3 px-5 py-3 text-sm transition hover:bg-white/[0.03]"
                 >
                   <span className="w-8 shrink-0 text-base">{rank(i)}</span>
@@ -63,7 +60,7 @@ export default function LeaderboardPage() {
                   <span className="w-24 shrink-0 text-right font-mono font-semibold text-venom-400">
                     {usdFromEth(t.volumeEth, ethUsd, 0)}
                   </span>
-                </a>
+                </Link>
               ))}
             </div>
           </div>
@@ -78,11 +75,9 @@ export default function LeaderboardPage() {
             </div>
             <div className="divide-y divide-white/[0.04]">
               {creators.map((c, i) => (
-                <a
+                <Link
                   key={c.address}
-                  href={`${EXPLORER}/address/${c.address}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={`/u/${c.address.toLowerCase()}`}
                   className="flex items-center gap-3 px-5 py-3 text-sm transition hover:bg-white/[0.03]"
                 >
                   <span className="w-8 shrink-0 text-base">{rank(i)}</span>
@@ -95,7 +90,7 @@ export default function LeaderboardPage() {
                   <span className="w-24 shrink-0 text-right font-mono font-semibold text-venom-400">
                     {usdFromEth(c.volumeEth, ethUsd, 0)}
                   </span>
-                </a>
+                </Link>
               ))}
             </div>
           </div>

@@ -3,8 +3,17 @@
 import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
-import { curveAbi, v3PoolAbi, LIVE } from "./contracts";
-import { blockClock, parseV3Swap, supplyOf, wethOf, v3TradersByTx, INFRA_ADDRESSES } from "./useActivity";
+import { coilPoolId, curveAbi, v3PoolAbi, v4PoolManagerAbi, LIVE } from "./contracts";
+import {
+  blockClock,
+  parseV3Swap,
+  parseV4Swap,
+  supplyOf,
+  wethOf,
+  v3TradersByTx,
+  INFRA_ADDRESSES,
+  V4_POOL_MANAGER,
+} from "./useActivity";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -79,33 +88,54 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
               const supply = supplyOf(t);
               const tokenIs0 = weth ? t.address.toLowerCase() < weth.toLowerCase() : true;
               const isV3 = t.mode === "v3";
+              const isV4 = t.mode === "v4";
               const [logs, traders] = await Promise.all([
-                isV3
+                isV4
                   ? client!.getContractEvents({
-                      address: t.curve, // the pool
-                      abi: v3PoolAbi,
+                      address: V4_POOL_MANAGER,
+                      abi: v4PoolManagerAbi,
                       eventName: "Swap",
+                      args: { id: coilPoolId(t.address) },
                       fromBlock: 0n,
                       toBlock: "latest",
                     })
-                  : client!.getContractEvents({
-                      address: t.curve,
-                      abi: curveAbi,
-                      eventName: "Trade",
-                      fromBlock: 0n,
-                      toBlock: "latest",
-                    }),
-                // V3 Swap events name the relaying router, not the wallet — the
-                // token Transfer in the same tx names the real trader.
-                isV3
-                  ? v3TradersByTx(client!, t.address, t.curve)
-                  : Promise.resolve(undefined),
+                  : isV3
+                    ? client!.getContractEvents({
+                        address: t.curve, // the pool
+                        abi: v3PoolAbi,
+                        eventName: "Swap",
+                        fromBlock: 0n,
+                        toBlock: "latest",
+                      })
+                    : client!.getContractEvents({
+                        address: t.curve,
+                        abi: curveAbi,
+                        eventName: "Trade",
+                        fromBlock: 0n,
+                        toBlock: "latest",
+                      }),
+                // Pool Swap events name the relaying router, not the wallet — the
+                // token Transfer in the same tx names the real trader. For v4 the
+                // "pool" side of those transfers is the PoolManager singleton.
+                isV4
+                  ? v3TradersByTx(client!, t.address, V4_POOL_MANAGER)
+                  : isV3
+                    ? v3TradersByTx(client!, t.address, t.curve)
+                    : Promise.resolve(undefined),
               ]);
               for (const l of logs) {
                 let trader: Address;
                 let isBuy: boolean;
                 let eth: number;
-                if (isV3) {
+                if (isV4) {
+                  const s = parseV4Swap(l, supply);
+                  isBuy = s.isBuy;
+                  eth = s.ethAmount;
+                  trader =
+                    (isBuy
+                      ? traders?.buyerByTx.get(l.transactionHash)
+                      : traders?.sellerByTx.get(l.transactionHash)) ?? s.trader;
+                } else if (isV3) {
                   const s = parseV3Swap(l, tokenIs0, supply);
                   isBuy = s.isBuy;
                   eth = s.ethAmount;

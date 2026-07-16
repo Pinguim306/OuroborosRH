@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useAccount } from "wagmi";
 import { MOCK_TOKENS } from "@/lib/mock/data";
 import { LIVE } from "@/lib/contracts";
@@ -19,7 +20,6 @@ import { compact, shortAddr } from "@/lib/format";
 import { StatTile } from "@/components/StatTile";
 import type { TokenMarket } from "@/lib/types";
 
-const EXPLORER = "https://robinhoodchain.blockscout.com";
 const MEDALS = ["🥇", "🥈", "🥉"];
 
 const fmt = (n: number) => compact(Math.round(n), 0);
@@ -167,10 +167,8 @@ function Breakdown({ label, value }: { label: string; value: number }) {
 
 function Row({ w, i, isMe }: { w: WalletPoints; i: number; isMe: boolean }) {
   return (
-    <a
-      href={`${EXPLORER}/address/${w.address}`}
-      target="_blank"
-      rel="noopener noreferrer"
+    <Link
+      href={`/u/${w.address.toLowerCase()}`}
       className={`flex items-center gap-3 px-5 py-3 text-sm transition hover:bg-white/[0.03] ${
         isMe ? "bg-venom-500/[0.06]" : ""
       }`}
@@ -186,6 +184,6 @@ function Row({ w, i, isMe }: { w: WalletPoints; i: number; isMe: boolean }) {
       <span className="w-24 shrink-0 text-right font-mono font-semibold text-venom-400">
         {fmt(w.total)}
       </span>
-    </a>
+    </Link>
   );
 }
