@@ -20,6 +20,7 @@ import {
   v4PoolManagerAbi,
 } from "./contracts";
 import { ROBINHOOD_CONTRACTS } from "./chain";
+import { isHiddenMarket } from "./useMarkets";
 import type { Address, Holder, TokenMarket, Trade } from "./types";
 
 /**
@@ -517,14 +518,16 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
     if (!LIVE || !client || tokens.length === 0) return;
     let alive = true;
     async function load() {
+      // Hidden tokens contribute nothing to per-token stats or the launchpad totals.
+      const visible = tokens.filter((t) => !isHiddenMarket(t));
       // WETH is only needed to orient V3 pool swaps (token0 vs token1 sort order).
       const [cutoff, wethAddr] = await Promise.all([
         cutoffBlock(client!, DAY),
-        tokens.some((t) => t.mode === "v3") ? wethOf(client!) : Promise.resolve(undefined),
+        visible.some((t) => t.mode === "v3") ? wethOf(client!) : Promise.resolve(undefined),
       ]);
       const next = new Map<string, MarketStat>();
       await Promise.all(
-        tokens.slice(0, 40).map(async (t) => {
+        visible.slice(0, 40).map(async (t) => {
           try {
             // Instant-V3 tokens have no curve — their trades are the Uniswap pool's Swap events
             // (t.curve holds the pool address for them). v4 tokens trade inside the PoolManager

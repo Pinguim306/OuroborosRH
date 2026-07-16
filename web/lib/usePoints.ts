@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
 import { coilPoolId, curveAbi, v3PoolAbi, v4PoolManagerAbi, LIVE } from "./contracts";
+import { isHiddenMarket } from "./useMarkets";
 import {
   parseV3Swap,
   parseV4Swap,
@@ -100,8 +101,11 @@ export function usePoints(tokens: TokenMarket[]): PointsBoard {
           return t;
         };
 
+        // Hidden tokens (hardcoded, env address list, or the time cutoff) never score —
+        // enforced here so it holds no matter what list a caller passes.
+        const visible = tokens.filter((t) => !isHiddenMarket(t));
         await Promise.all(
-          tokens.slice(0, 40).map(async (t) => {
+          visible.slice(0, 40).map(async (t) => {
             try {
               const supply = supplyOf(t);
               const tokenIs0 = weth ? t.address.toLowerCase() < weth.toLowerCase() : true;

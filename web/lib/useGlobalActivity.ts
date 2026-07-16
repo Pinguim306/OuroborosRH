@@ -14,6 +14,7 @@ import {
   INFRA_ADDRESSES,
   V4_POOL_MANAGER,
 } from "./useActivity";
+import { isHiddenMarket } from "./useMarkets";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -72,9 +73,11 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
 
     async function load() {
       try {
+        // Hidden tokens never feed the boards, whatever list the caller passed.
+        const visible = tokens.filter((t) => !isHiddenMarket(t));
         const [clock, weth] = await Promise.all([
           blockClock(client!),
-          tokens.some((t) => t.mode === "v3") ? wethOf(client!) : Promise.resolve(undefined),
+          visible.some((t) => t.mode === "v3") ? wethOf(client!) : Promise.resolve(undefined),
         ]);
         const hourAgo = clock.latestNum - BigInt(Math.max(1, Math.floor(HOUR / clock.spb)));
 
@@ -83,7 +86,7 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
         const vol1hByToken = new Map<string, number>();
 
         await Promise.all(
-          tokens.slice(0, 40).map(async (t) => {
+          visible.slice(0, 40).map(async (t) => {
             try {
               const supply = supplyOf(t);
               const tokenIs0 = weth ? t.address.toLowerCase() < weth.toLowerCase() : true;
@@ -193,7 +196,7 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
 
         // Creator leaderboard: tokens launched + combined volume of those tokens.
         const byCreator = new Map<string, CreatorStat>();
-        for (const t of tokens) {
+        for (const t of visible) {
           const k = t.creator.toLowerCase();
           const s = byCreator.get(k) ?? { address: t.creator, tokens: 0, volumeEth: 0 };
           s.tokens += 1;
@@ -211,7 +214,7 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
         for (const [addr, vol] of pool) {
           if (vol <= 0) continue;
           if (!hot || vol > hot.vol1hEth) {
-            const token = tokens.find((t) => t.address.toLowerCase() === addr);
+            const token = visible.find((t) => t.address.toLowerCase() === addr);
             if (token) hot = { token, vol1hEth: vol };
           }
         }
