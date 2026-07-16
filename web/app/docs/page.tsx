@@ -17,7 +17,6 @@ const sections = [
   { id: "fees", label: "Fees & the split" },
   { id: "rewards", label: "Holder rewards" },
   { id: "points", label: "Coil Points" },
-  { id: "legacy", label: "Legacy curve tokens" },
   { id: "safety", label: "Safety" },
   { id: "faq", label: "FAQ" },
 ] as const;
@@ -200,16 +199,6 @@ export default function DocsPage() {
             </p>
           </Section>
 
-          <Section id="legacy" title="Legacy tokens">
-            <p>
-              Earlier versions of Coil launched tokens two other ways: on a bonding curve that
-              migrated to a DEX pair once filled, and, more recently, straight into a Uniswap V3 pool
-              (whose 1% fee tier was harvested and split to holders). New launches use neither path —
-              every token now launches on Uniswap v4 — but every legacy token keeps working exactly
-              as before: its page, trading, rewards, and fee harvest remain fully functional.
-            </p>
-          </Section>
-
           <Section id="safety" title="Safety">
             <ul className="my-3 space-y-2">
               <Bullet>
@@ -224,10 +213,6 @@ export default function DocsPage() {
               <Bullet>
                 <strong>No frozen rewards.</strong> Dividend authority is renounced at launch — no
                 human can ever exclude a holder from rewards.
-              </Bullet>
-              <Bullet>
-                <strong>Unaudited.</strong> Coil is reference software. Nothing here is financial
-                advice. Trade responsibly and only with what you can afford to lose.
               </Bullet>
             </ul>
           </Section>
