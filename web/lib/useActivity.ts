@@ -11,6 +11,11 @@ import {
   launchpadAbi,
   CONTRACTS,
   LIVE,
+  LAUNCHPADS,
+  COIL_LAUNCHPAD,
+  COIL_SWAP_ROUTER,
+  COIL_SWAP_ROUTER_V3,
+  COIL_BURNER,
   coilPoolId,
   v4PoolManagerAbi,
 } from "./contracts";
@@ -110,18 +115,39 @@ export function parseV4Swap(
 }
 
 /**
- * Addresses that execute swaps on users' behalf (routers/aggregators/bots). V3
- * Swap events carry these as sender/recipient, so they must never be credited
- * as traders on boards. Lowercase.
+ * Addresses that execute swaps on users' behalf or custody liquidity (routers, aggregators,
+ * launchpads, pool singletons, the burner). Swap/Transfer events carry these as sender/recipient
+ * on relayed legs, so they must never be credited as traders on boards. Built from the deployed
+ * platform contracts (env-configured) plus known third-party routers. Lowercase.
  */
 export const INFRA_ADDRESSES = new Set(
   [
     "0xCaf681a66D020601342297493863E78C959E5cb2", // Uniswap SwapRouter02 (chain 4663)
+    "0x8876789976dEcBfCbBbe364623C63652db8C0904", // Uniswap UniversalRouter (chain 4663)
     "0x65050A9b7E5075A2bA5cED7b1b64EE66262c40Dc", // router/aggregator seen relaying user swaps
     ZERO,
     DEAD,
-  ].map((a) => a.toLowerCase()),
+    // Coil platform contracts — routers relay user swaps, the rest custody funds.
+    COIL_SWAP_ROUTER,
+    COIL_SWAP_ROUTER_V3,
+    COIL_LAUNCHPAD,
+    COIL_BURNER,
+    ...LAUNCHPADS,
+    ...Object.values(ROBINHOOD_CONTRACTS),
+  ]
+    .map((a) => String(a).toLowerCase())
+    .filter((a) => a.startsWith("0x")),
 );
+
+/** Routers that PULL the seller's tokens into themselves before settling with the pool
+ *  (user → router → pool). The pool-side Transfer then names the router, so the real wallet is
+ *  the same-tx Transfer INTO the router. */
+export const RELAYER_ROUTERS = [
+  COIL_SWAP_ROUTER,
+  COIL_SWAP_ROUTER_V3,
+  "0xCaf681a66D020601342297493863E78C959E5cb2" as Address, // SwapRouter02
+  "0x8876789976dEcBfCbBbe364623C63652db8C0904" as Address, // UniversalRouter
+].filter((a) => a.toLowerCase() !== ZERO);
 
 /**
  * Resolve the real wallet behind each V3 swap of a pool. The Swap event's
@@ -162,6 +188,42 @@ export async function v3TradersByTx(
     for (const l of intoPool) {
       const from = (l.args as { from?: Address }).from;
       if (from && !INFRA_ADDRESSES.has(from.toLowerCase())) sellerByTx.set(l.transactionHash, from);
+    }
+
+    // Relayed legs: Coil's routers pull the seller's tokens into themselves before settling
+    // (user → router → pool), so the pool-side Transfer names the router. The same-tx Transfer
+    // into/out of the router names the real wallet — use it wherever the direct pass drew a blank.
+    const [intoRouter, outOfRouter] = await Promise.all([
+      client.getContractEvents({
+        address: token,
+        abi: tokenAbi,
+        eventName: "Transfer",
+        args: { to: RELAYER_ROUTERS },
+        fromBlock: 0n,
+        toBlock: "latest",
+      }),
+      client.getContractEvents({
+        address: token,
+        abi: tokenAbi,
+        eventName: "Transfer",
+        args: { from: RELAYER_ROUTERS },
+        fromBlock: 0n,
+        toBlock: "latest",
+      }),
+    ]);
+    for (const l of intoRouter) {
+      const from = (l.args as { from?: Address }).from;
+      if (
+        from &&
+        !INFRA_ADDRESSES.has(from.toLowerCase()) &&
+        !sellerByTx.has(l.transactionHash)
+      )
+        sellerByTx.set(l.transactionHash, from);
+    }
+    for (const l of outOfRouter) {
+      const to = (l.args as { to?: Address }).to;
+      if (to && !INFRA_ADDRESSES.has(to.toLowerCase()) && !buyerByTx.has(l.transactionHash))
+        buyerByTx.set(l.transactionHash, to);
     }
   } catch {
     /* fall back to the Swap event's own addresses */

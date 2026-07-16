@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
 import { coilPoolId, curveAbi, tokenAbi, v3PoolAbi, v4PoolManagerAbi, LIVE } from "./contracts";
-import { V4_POOL_MANAGER } from "./useActivity";
+import { RELAYER_ROUTERS, V4_POOL_MANAGER } from "./useActivity";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -62,11 +62,13 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
                   fromBlock: 0n,
                   toBlock: "latest",
                 }),
+                // Routers (Coil Swap, UniversalRouter, …) hop the tokens through themselves, so
+                // the user's leg may face the router instead of the PoolManager.
                 client.getContractEvents({
                   address: t.address,
                   abi: tokenAbi,
                   eventName: "Transfer",
-                  args: { from: V4_POOL_MANAGER, to: user },
+                  args: { from: [V4_POOL_MANAGER, ...RELAYER_ROUTERS], to: user },
                   fromBlock: 0n,
                   toBlock: "latest",
                 }),
@@ -74,7 +76,7 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
                   address: t.address,
                   abi: tokenAbi,
                   eventName: "Transfer",
-                  args: { from: user, to: V4_POOL_MANAGER },
+                  args: { from: user, to: [V4_POOL_MANAGER, ...RELAYER_ROUTERS] },
                   fromBlock: 0n,
                   toBlock: "latest",
                 }),
@@ -96,21 +98,22 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
                   fromBlock: 0n,
                   toBlock: "latest",
                 }),
-                // pool → user token transfer = the user bought
+                // pool/router → user token transfer = the user bought (routers hop the tokens
+                // through themselves, so the user's leg may face the router, not the pool)
                 client.getContractEvents({
                   address: t.address,
                   abi: tokenAbi,
                   eventName: "Transfer",
-                  args: { from: pool, to: user },
+                  args: { from: [pool, ...RELAYER_ROUTERS], to: user },
                   fromBlock: 0n,
                   toBlock: "latest",
                 }),
-                // user → pool token transfer = the user sold
+                // user → pool/router token transfer = the user sold
                 client.getContractEvents({
                   address: t.address,
                   abi: tokenAbi,
                   eventName: "Transfer",
-                  args: { from: user, to: pool },
+                  args: { from: user, to: [pool, ...RELAYER_ROUTERS] },
                   fromBlock: 0n,
                   toBlock: "latest",
                 }),
