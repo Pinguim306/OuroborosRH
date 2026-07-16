@@ -13,6 +13,7 @@ import type { Address } from "@/lib/types";
 import { StatTile } from "@/components/StatTile";
 import { ProgressBar } from "@/components/ProgressBar";
 import { TradeWidget } from "@/components/TradeWidget";
+import { V4TradeWidget } from "@/components/V4TradeWidget";
 import { RewardsPanel } from "@/components/RewardsPanel";
 import { MarketcapChart } from "@/components/MarketcapChart";
 import { CandleChart } from "@/components/CandleChart";
@@ -304,27 +305,17 @@ export default function TokenPage() {
         {/* Right: actions */}
         <div className="space-y-6 lg:sticky lg:top-20 lg:self-start">
           {isV4 ? (
-            <div className="glass p-6 text-center">
-              <div className="text-3xl">🔁</div>
-              <h3 className="mt-2 font-semibold">Trade on Coil Swap</h3>
-              <p className="mt-1 text-sm text-white/50">
-                ${token.symbol} trades through the Uniswap v4 pool. Buy and sell it on Coil Swap.
-              </p>
-              <Link
-                href={`/swap?token=${token.address}`}
-                className="btn-primary mt-4 w-full justify-center"
-              >
-                Open in Coil Swap →
-              </Link>
+            <>
+              <V4TradeWidget token={token} ethUsd={ethUsd} />
               <button
                 type="button"
                 onClick={() => navigator.clipboard?.writeText(token.address)}
                 title="Copy contract address"
-                className="mt-3 block w-full break-all font-mono text-[11px] text-white/40 underline decoration-dotted hover:text-white"
+                className="block w-full break-all text-center font-mono text-[11px] text-white/40 underline decoration-dotted hover:text-white"
               >
                 {token.address} ⧉
               </button>
-            </div>
+            </>
           ) : (
             <>
               <TradeWidget token={token} />
