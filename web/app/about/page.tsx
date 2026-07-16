@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { copy } from "@/lib/copy";
 import { LoopDiagram } from "@/components/LoopDiagram";
+import { BurnTicker } from "@/components/BurnTicker";
 
 export default function AboutPage() {
   return (
@@ -66,6 +67,9 @@ export default function AboutPage() {
                 trade on the platform feeds the burn: more volume, more $COIL gone forever.
               </p>
             </div>
+          </div>
+          <div className="mt-5">
+            <BurnTicker />
           </div>
         </div>
       </section>

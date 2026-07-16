@@ -10,6 +10,7 @@ import { useEthPrice } from "@/lib/usePrice";
 import { compact, usdFromEth, timeAgo } from "@/lib/format";
 import type { TokenMarket } from "@/lib/types";
 import { TokenCard } from "@/components/TokenCard";
+import { BurnTicker } from "@/components/BurnTicker";
 import { TokenAvatar } from "@/components/TokenAvatar";
 import { StatTile } from "@/components/StatTile";
 import { useSearch } from "@/components/SearchProvider";
@@ -160,6 +161,11 @@ export default function HomePage() {
           <StatTile label="24h volume" value={usdFromEth(T.volume24hEth, ethUsd, 0)} />
           <StatTile label="Total volume" value={usdFromEth(T.volumeEth, ethUsd, 0)} />
           <StatTile label="Total holders" value={compact(T.holders, 0)} />
+        </div>
+
+        {/* Live $COIL buyback & burn (renders only when the burner is configured) */}
+        <div className="mt-3">
+          <BurnTicker />
         </div>
 
         {/* Content */}
