@@ -50,6 +50,26 @@ export default function AboutPage() {
         </span>
       </Link>
 
+      {/* Buyback & burn */}
+      <section className="pt-6">
+        <div className="glass-strong overflow-hidden rounded-2xl border border-venom-500/25 p-6 md:p-8">
+          <div className="flex items-start gap-4">
+            <span className="text-4xl leading-none">🔥</span>
+            <div>
+              <h2 className="font-display text-2xl font-bold md:text-3xl">
+                Every launch buys &amp; burns <span className="text-gradient">$COIL</span>
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/55 md:text-base">
+                Coil is deflationary by design. A slice of every token&apos;s protocol fees is routed
+                on-chain to buy <span className="font-semibold text-white">$COIL</span> on the open
+                market and burn it — permanently removing it from supply. Every new launch and every
+                trade on the platform feeds the burn: more volume, more $COIL gone forever.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* How the loop works */}
       <section className="py-16 md:py-24">
         <div className="mx-auto max-w-2xl text-center">
