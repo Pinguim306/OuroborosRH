@@ -72,6 +72,11 @@ const HIDE_BEFORE = parseCutoff(process.env.NEXT_PUBLIC_HIDE_TOKENS_BEFORE);
 const isHidden = (t: TokenMarket): boolean =>
   isHiddenToken(t.address) || (HIDE_BEFORE > 0 && t.createdAt > 0 && t.createdAt < HIDE_BEFORE);
 
+/** The full "hidden" predicate (hardcoded list + NEXT_PUBLIC_HIDDEN_TOKENS + the time cutoff),
+ *  exported so scoring/activity hooks can enforce it themselves — a hidden token must never earn
+ *  points or volume even if a caller ever passes an unfiltered list. */
+export const isHiddenMarket = isHidden;
+
 function imageFrom(metadataURI: string): string {
   // Image URLs (uploaded to IPFS or a remote host) render as an <img>; short
   // metadata renders as an emoji badge; otherwise a default coin.

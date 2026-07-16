@@ -13,6 +13,7 @@ import {
   v3TradersByTx,
   V4_POOL_MANAGER,
 } from "./useActivity";
+import { isHiddenMarket } from "./useMarkets";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -55,14 +56,16 @@ export function useWalletActivity(tokens: TokenMarket[], wallet?: Address): Wall
 
     (async () => {
       try {
+        // Hidden tokens never count toward a profile's footprint either.
+        const visible = tokens.filter((t) => !isHiddenMarket(t));
         const [clock, weth] = await Promise.all([
           blockClock(client),
-          tokens.some((t) => t.mode === "v3") ? wethOf(client) : Promise.resolve(undefined),
+          visible.some((t) => t.mode === "v3") ? wethOf(client) : Promise.resolve(undefined),
         ]);
 
         const all: (WalletTrade & { bn: bigint })[] = [];
         await Promise.all(
-          tokens.slice(0, 40).map(async (t) => {
+          visible.slice(0, 40).map(async (t) => {
             try {
               const supply = supplyOf(t);
               const tokenIs0 = weth ? t.address.toLowerCase() < weth.toLowerCase() : true;
