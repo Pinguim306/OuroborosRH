@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { encodeFunctionData, formatEther, maxUint256, parseEther } from "viem";
+import { encodeFunctionData, formatEther, isAddress, maxUint256, parseEther } from "viem";
 import {
   useAccount,
   useReadContract,
@@ -103,6 +103,13 @@ export function SwapWidget() {
   const [customSlip, setCustomSlip] = useState(""); // when non-empty, overrides the preset chips
   const [flash, setFlash] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Preselect a token from `?token=<address>` (used by the token page's "Open in Coil Swap" CTA).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search).get("token");
+    if (q && isAddress(q) && !isHiddenToken(q)) setToken(q as Address);
+  }, []);
 
   const isBuy = dir === "buy";
   const isV4 = token ? isCoilToken(token) : false;
