@@ -528,15 +528,17 @@ export function useTokenHolders(token?: TokenMarket): { holders: Holder[]; isLoa
 export function useLaunchpadTotals(tokens: TokenMarket[], stats: Map<string, MarketStat>) {
   return useMemo(() => {
     let volume24hEth = 0;
+    let volumeEth = 0; // all-time, summed across every token
     let highestAthEth = 0;
     let holders = 0;
     for (const t of tokens) {
       const s = stats.get(t.address.toLowerCase());
       if (!s) continue;
       volume24hEth += s.volume24hEth;
+      volumeEth += s.volumeEth;
       if (s.athEth > highestAthEth) highestAthEth = s.athEth;
       holders += s.holders;
     }
-    return { tokens: tokens.length, volume24hEth, highestAthEth, holders };
+    return { tokens: tokens.length, volume24hEth, volumeEth, highestAthEth, holders };
   }, [tokens, stats]);
 }
