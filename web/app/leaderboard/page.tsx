@@ -104,7 +104,7 @@ export default function LeaderboardPage() {
 
       {LIVE && (
         <p className="mt-6 text-center text-[11px] text-white/25">
-          Volume aggregates bonding-curve trades and V3 pool swaps.
+          Volume aggregates bonding-curve trades, V3 pool swaps, and v4 pool swaps.
         </p>
       )}
     </div>
