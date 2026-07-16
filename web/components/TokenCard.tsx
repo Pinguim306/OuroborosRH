@@ -49,7 +49,11 @@ export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: 
   const hasSocials = !!(twitter || website);
 
   const badge =
-    token.mode === "v3" ? (
+    token.mode === "v4" ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-venom-500/10 px-2 py-0.5 text-[10px] font-semibold text-venom-400">
+        ⚡ Uniswap v4
+      </span>
+    ) : token.mode === "v3" ? (
       <span className="inline-flex items-center gap-1 rounded-full bg-venom-500/10 px-2 py-0.5 text-[10px] font-semibold text-venom-400">
         ⚡ Uniswap V3
       </span>
@@ -98,8 +102,8 @@ export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: 
           </div>
         </div>
 
-        {/* Bonding-curve tokens keep the progress bar; graduated / V3 use the compact badge below. */}
-        {token.mode !== "v3" && !token.graduated && (
+        {/* Bonding-curve tokens keep the progress bar; graduated / V3 / v4 use the compact badge below. */}
+        {token.mode !== "v3" && token.mode !== "v4" && !token.graduated && (
           <div className="mt-3">
             <ProgressBar value={token.graduationProgress} label="Bonding curve" />
           </div>

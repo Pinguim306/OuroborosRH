@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { formatEther, parseEther } from "viem";
-import { useReadContract, useReadContracts, useSimulateContract } from "wagmi";
+import { encodeAbiParameters, formatEther, keccak256 } from "viem";
+import { useReadContract, useReadContracts } from "wagmi";
 import {
   CONTRACTS,
   LAUNCHPADS,
@@ -15,22 +15,23 @@ import {
   COIL_LAUNCHPAD,
   coilLaunchpadV4Abi,
   LAUNCH_LIVE,
-  SWAP_LIVE,
-  COIL_SWAP_ROUTER,
-  coilSwapRouterAbi,
-  coilPoolKey,
+  coilPoolId,
   isCoilToken,
+  v4PoolManagerAbi,
+  type CoilMarket,
 } from "./contracts";
+import { ROBINHOOD_CONTRACTS } from "./chain";
 import type { Address, TokenMarket } from "./types";
 
 /**
  * Live on-chain read hooks. Markets are read from EVERY configured launchpad
  * (comma-separated NEXT_PUBLIC_LAUNCHPAD_ADDRESS) and merged newest-first, so a
- * contract upgrade never wipes the listings. Two market modes:
+ * contract upgrade never wipes the listings. Three market modes:
  *   - curve: Market.curve is a BondingCurve (price/progress/graduation reads);
- *   - v3:    Market.curve is a Uniswap V3 pool (price derived from slot0).
- * Mode is flagged by the launchpad's isV3Token (older launchpads lack the getter,
- * so their reads fail -> curve mode, which is correct for them).
+ *   - v3:    Market.curve is a Uniswap V3 pool (price derived from slot0);
+ *   - v4:    the token IS the pool/hook (CoilLaunchpad; price from the v4 PoolManager's slot0).
+ * v3-vs-curve is flagged by the launchpad's isV3Token (older launchpads lack the
+ * getter, so their reads fail -> curve mode, which is correct for them).
  */
 
 interface MarketTuple {
@@ -86,6 +87,63 @@ function v3PriceFromSlot0(slot0: unknown, tokenIs0: boolean): number {
   const ratio = Number(sq) / 2 ** 96; // sqrt(token1/token0)
   const price1per0 = ratio * ratio;
   return tokenIs0 ? price1per0 : price1per0 > 0 ? 1 / price1per0 : 0;
+}
+
+/*
+ * ---- Uniswap v4 (CoilHook) pool pricing -------------------------------------------------------
+ * v4 pools live inside the singleton PoolManager, which has no per-pool getters — state is read
+ * with `extsload(slot)`. `mapping(PoolId => Pool.State) _pools` sits at storage slot 6 (v4-core's
+ * StateLibrary.POOLS_SLOT) and `slot0` (packed sqrtPriceX96 | tick | fees) is the first word of
+ * Pool.State, so its slot is keccak256(abi.encode(poolId, 6)).
+ */
+const V4_POOL_MANAGER = ROBINHOOD_CONTRACTS.v4PoolManager as Address;
+const V4_POOLS_SLOT = 6n;
+
+/** Storage slot of a Coil token's pool `slot0` inside the v4 PoolManager. */
+function v4Slot0Slot(token: Address): `0x${string}` {
+  return keccak256(
+    encodeAbiParameters(
+      [{ type: "bytes32" }, { type: "uint256" }],
+      [coilPoolId(token), V4_POOLS_SLOT],
+    ),
+  );
+}
+
+/** Token price in ETH from the packed slot0 word (sqrtPriceX96 = low 160 bits). The Coil pool is
+ *  (currency0 = native ETH, currency1 = token), so (sqrtP/2^96)^2 = tokens-per-ETH and the token's
+ *  ETH price is its inverse. Both sides are 18 decimals — no scaling needed. */
+function v4PriceFromPackedSlot0(word: unknown): number {
+  if (typeof word !== "string" || !word.startsWith("0x")) return 0;
+  let sqrtP: bigint;
+  try {
+    sqrtP = BigInt(word) & ((1n << 160n) - 1n);
+  } catch {
+    return 0;
+  }
+  if (sqrtP === 0n) return 0;
+  const ratio = Number(sqrtP) / 2 ** 96;
+  const tokensPerEth = ratio * ratio;
+  return tokensPerEth > 0 ? 1 / tokensPerEth : 0;
+}
+
+/** Map a CoilLaunchpad market + its live reads onto the shared TokenMarket shape. */
+function fromV4Market(m: CoilMarket, supply: bigint, priceEth: number): TokenMarket {
+  const tuple: MarketTuple = {
+    token: m.token,
+    curve: m.token, // v4 has no separate curve; the token IS the pool/hook
+    creator: m.creator,
+    name: m.name,
+    symbol: m.symbol,
+    metadataURI: m.metadataURI,
+    createdAt: m.createdAt,
+  };
+  const t = mapToken(tuple, 0n, 0n, false, 0n, 0n, supply, undefined);
+  t.mode = "v4";
+  t.creatorFees = m.creatorRewards;
+  t.launchpad = COIL_LAUNCHPAD;
+  t.priceRh = priceEth;
+  t.marketCapRh = priceEth * num(supply);
+  return t;
 }
 
 function mapToken(
@@ -219,7 +277,7 @@ export function useLiveMarkets(): { tokens: TokenMarket[]; isLoading: boolean } 
     query: { enabled: LIVE && markets.length > 0 },
   });
 
-  const tokens = useMemo(() => {
+  const v3Tokens = useMemo(() => {
     if (!statsQ.data) return [];
     const r = statsQ.data;
     return markets
@@ -227,7 +285,57 @@ export function useLiveMarkets(): { tokens: TokenMarket[]; isLoading: boolean } 
       .filter((t) => !isHidden(t));
   }, [markets, statsQ.data, weth]);
 
-  return { tokens, isLoading: marketsQ.isLoading || statsQ.isLoading };
+  // v4 markets live in the CoilLaunchpad — a separate factory the reads above can't see.
+  const v4MarketsQ = useReadContract({
+    address: COIL_LAUNCHPAD,
+    abi: coilLaunchpadV4Abi,
+    functionName: "getMarkets",
+    args: [0n, 50n],
+    query: { enabled: LIVE && LAUNCH_LIVE },
+  });
+  const v4Markets = useMemo(
+    () =>
+      (((v4MarketsQ.data as readonly CoilMarket[] | undefined) ?? [])).filter(
+        (m) => !isHiddenToken(m.token),
+      ),
+    [v4MarketsQ.data],
+  );
+
+  const v4StatsQ = useReadContracts({
+    contracts: v4Markets.flatMap(
+      (m) =>
+        [
+          { address: m.token, abi: tokenAbi, functionName: "totalSupply" },
+          {
+            address: V4_POOL_MANAGER,
+            abi: v4PoolManagerAbi,
+            functionName: "extsload",
+            args: [v4Slot0Slot(m.token)],
+          },
+        ] as const,
+    ),
+    query: { enabled: LIVE && v4Markets.length > 0 },
+  });
+
+  const v4Tokens = useMemo(() => {
+    const r = v4StatsQ.data;
+    if (!r) return [] as TokenMarket[];
+    return v4Markets
+      .map((m, i) =>
+        fromV4Market(m, bn(r[i * 2]?.result), v4PriceFromPackedSlot0(r[i * 2 + 1]?.result)),
+      )
+      .filter((t) => !isHidden(t));
+  }, [v4Markets, v4StatsQ.data]);
+
+  const tokens = useMemo(
+    () => [...v3Tokens, ...v4Tokens].sort((a, b) => b.createdAt - a.createdAt),
+    [v3Tokens, v4Tokens],
+  );
+
+  return {
+    tokens,
+    isLoading: marketsQ.isLoading || statsQ.isLoading || v4MarketsQ.isLoading || v4StatsQ.isLoading,
+  };
 }
 
 /** Read a single token/curve by token address, searching every launchpad. */
@@ -313,15 +421,12 @@ export function useLiveToken(tokenAddress?: Address): {
   };
 }
 
-/** ETH probe used to derive a v4 token's spot price by simulating a tiny buy. */
-const V4_PRICE_PROBE = parseEther("0.001");
-
 /**
  * Read a single v4 (CoilHook) token by address. v4 tokens live in the CoilLaunchpad, not the v3
  * launchpads, so `useLiveToken` can't see them — the /token page falls back to this when a token
  * is a Coil hook (detected purely from its flag-encoded address, no RPC). Price/market cap are
- * derived by simulating a small buy through the Coil Swap router (the same route the swap uses),
- * so they show as soon as the pool has liquidity; if the simulation can't run, they read 0.
+ * read straight from the pool's slot0 in the v4 PoolManager (a plain view call — reliable even
+ * before the pool has traded); if the read fails, they show 0 rather than breaking the page.
  */
 export function useLiveTokenV4(tokenAddress?: Address): {
   token: TokenMarket | undefined;
@@ -361,44 +466,31 @@ export function useLiveTokenV4(tokenAddress?: Address): {
     query: { enabled: enabled && found },
   });
 
-  // Spot price = probe ETH in / tokens out for a tiny buy. Deadline is fixed per token so the
-  // simulation isn't re-issued every render.
-  const deadline = useMemo(() => BigInt(Math.floor(Date.now() / 1000) + 3600), [tokenAddress]);
-  const simQ = useSimulateContract({
-    address: COIL_SWAP_ROUTER,
-    abi: coilSwapRouterAbi,
-    functionName: "swapExactInSingle",
-    args: tokenAddress
-      ? [coilPoolKey(tokenAddress), true, V4_PRICE_PROBE, 0n, COIL_SWAP_ROUTER, deadline]
-      : undefined,
-    value: V4_PRICE_PROBE,
-    account: COIL_SWAP_ROUTER,
-    query: { enabled: enabled && found && SWAP_LIVE },
+  // Spot price straight from the pool's slot0 word in the PoolManager.
+  const slot0Q = useReadContract({
+    address: V4_POOL_MANAGER,
+    abi: v4PoolManagerAbi,
+    functionName: "extsload",
+    args: [tokenAddress ? v4Slot0Slot(tokenAddress) : (`0x${"0".repeat(64)}` as `0x${string}`)],
+    query: { enabled: enabled && found },
   });
-  const tokensOut = bn(simQ.data?.result);
 
   const token = useMemo(() => {
     if (!m) return undefined;
-    const supply = bn(supplyQ.data);
-    const tuple: MarketTuple = {
-      token: m[0],
-      curve: m[0], // v4 has no separate curve; the token IS the pool/hook
-      creator: m[1],
-      name: m[3],
-      symbol: m[4],
-      metadataURI: m[5],
-      createdAt: m[6],
-    };
-    const t = mapToken(tuple, 0n, 0n, false, 0n, 0n, supply, undefined);
-    t.mode = "v4";
-    t.creatorFees = m[2];
-    t.launchpad = COIL_LAUNCHPAD;
-    if (tokensOut > 0n) {
-      t.priceRh = Number(formatEther(V4_PRICE_PROBE)) / Number(formatEther(tokensOut));
-      t.marketCapRh = t.priceRh * num(supply);
-    }
-    return t;
-  }, [m, supplyQ.data, tokensOut]);
+    return fromV4Market(
+      {
+        token: m[0],
+        creator: m[1],
+        creatorRewards: m[2],
+        name: m[3],
+        symbol: m[4],
+        metadataURI: m[5],
+        createdAt: m[6],
+      },
+      bn(supplyQ.data),
+      v4PriceFromPackedSlot0(slot0Q.data),
+    );
+  }, [m, supplyQ.data, slot0Q.data]);
 
   return {
     token,

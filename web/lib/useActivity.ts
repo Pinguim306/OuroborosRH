@@ -4,7 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
 import type { PublicClient } from "viem";
-import { curveAbi, tokenAbi, v3PoolAbi, launchpadAbi, CONTRACTS, LIVE } from "./contracts";
+import {
+  curveAbi,
+  tokenAbi,
+  v3PoolAbi,
+  launchpadAbi,
+  CONTRACTS,
+  LIVE,
+  coilPoolId,
+  v4PoolManagerAbi,
+} from "./contracts";
+import { ROBINHOOD_CONTRACTS } from "./chain";
 import type { Address, Holder, TokenMarket, Trade } from "./types";
 
 /**
@@ -61,6 +71,40 @@ export function parseV3Swap(
     mcap: price * supply,
     isBuy: amtTok < 0n,
     trader: (a.recipient ?? a.sender ?? ZERO) as Address,
+    id: `${l.transactionHash}-${l.logIndex}`,
+  };
+}
+
+/** The v4 PoolManager singleton — every v4 pool's Swap events are emitted here, keyed by PoolId. */
+export const V4_POOL_MANAGER = ROBINHOOD_CONTRACTS.v4PoolManager as Address;
+
+/**
+ * Decode a Uniswap v4 PoolManager Swap log for a Coil pool (currency0 = ETH, currency1 = token).
+ * Amounts are the swapper's balance deltas: on a buy the user pays ETH (amount0 < 0) and receives
+ * tokens (amount1 > 0). sqrtPriceX96 is the post-swap price; tokens-per-ETH = (sqrtP/2^96)^2.
+ */
+export function parseV4Swap(
+  l: { args: unknown; blockNumber: bigint; transactionHash: string; logIndex: number },
+  supply: number,
+): ParsedSwap {
+  const a = l.args as {
+    sender?: Address;
+    amount0?: bigint;
+    amount1?: bigint;
+    sqrtPriceX96?: bigint;
+  };
+  const amtEth = a.amount0 ?? 0n;
+  const amtTok = a.amount1 ?? 0n;
+  const ratio = Number(a.sqrtPriceX96 ?? 0n) / 2 ** 96;
+  const tokensPerEth = ratio * ratio;
+  const price = tokensPerEth > 0 ? 1 / tokensPerEth : 0;
+  return {
+    bn: l.blockNumber,
+    ethAmount: Number(formatEther(amtEth < 0n ? -amtEth : amtEth)),
+    tokenAmount: Number(formatEther(amtTok < 0n ? -amtTok : amtTok)),
+    mcap: price * supply,
+    isBuy: amtTok > 0n, // the user received tokens
+    trader: (a.sender ?? ZERO) as Address, // the router — refined via token Transfers per tx
     id: `${l.transactionHash}-${l.logIndex}`,
   };
 }
@@ -246,11 +290,43 @@ export function useTokenActivity(token?: TokenMarket): Activity {
         const cutoff = clock.latestNum > back ? clock.latestNum - back : 0n;
         const supply = supplyOf(token);
 
-        // One normalized shape for both sources: bonding-curve Trade events, or —
-        // for instant-V3 tokens — the Uniswap pool's Swap events.
+        // One normalized shape for all sources: bonding-curve Trade events, a V3 pool's Swap
+        // events, or — for v4 tokens — the PoolManager's Swap events filtered by PoolId.
         const parsed: { trade: Trade; mcap: number; bn: bigint }[] = [];
 
-        if (token.mode === "v3") {
+        if (token.mode === "v4") {
+          const [logs, traders] = await Promise.all([
+            client.getContractEvents({
+              address: V4_POOL_MANAGER,
+              abi: v4PoolManagerAbi,
+              eventName: "Swap",
+              args: { id: coilPoolId(token.address) },
+              fromBlock: 0n,
+              toBlock: "latest",
+            }),
+            // v4 token balances move PoolManager ↔ wallet, so the same Transfer-based wallet
+            // resolution used for V3 pools works with the PoolManager as the "pool".
+            v3TradersByTx(client, token.address, V4_POOL_MANAGER),
+          ]);
+          for (const l of logs) {
+            const s = parseV4Swap(l, supply);
+            const wallet = s.isBuy
+              ? traders.buyerByTx.get(l.transactionHash)
+              : traders.sellerByTx.get(l.transactionHash);
+            parsed.push({
+              bn: s.bn,
+              mcap: s.mcap,
+              trade: {
+                id: s.id,
+                trader: wallet ?? s.trader,
+                isBuy: s.isBuy,
+                rhAmount: s.ethAmount,
+                tokenAmount: s.tokenAmount,
+                time: 0,
+              },
+            });
+          }
+        } else if (token.mode === "v3") {
           const [logs, wethAddr, traders] = await Promise.all([
             client.getContractEvents({
               address: curve, // the pool
@@ -388,24 +464,34 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
       await Promise.all(
         tokens.slice(0, 40).map(async (t) => {
           try {
-            // Instant-V3 tokens have no curve — their trades are the Uniswap pool's
-            // Swap events (t.curve holds the pool address for them).
+            // Instant-V3 tokens have no curve — their trades are the Uniswap pool's Swap events
+            // (t.curve holds the pool address for them). v4 tokens trade inside the PoolManager
+            // singleton, whose Swap events are filtered by the token's PoolId.
             const [trades, transfers] = await Promise.all([
-              t.mode === "v3"
+              t.mode === "v4"
                 ? client!.getContractEvents({
-                    address: t.curve,
-                    abi: v3PoolAbi,
+                    address: V4_POOL_MANAGER,
+                    abi: v4PoolManagerAbi,
                     eventName: "Swap",
+                    args: { id: coilPoolId(t.address) },
                     fromBlock: 0n,
                     toBlock: "latest",
                   })
-                : client!.getContractEvents({
-                    address: t.curve,
-                    abi: curveAbi,
-                    eventName: "Trade",
-                    fromBlock: 0n,
-                    toBlock: "latest",
-                  }),
+                : t.mode === "v3"
+                  ? client!.getContractEvents({
+                      address: t.curve,
+                      abi: v3PoolAbi,
+                      eventName: "Swap",
+                      fromBlock: 0n,
+                      toBlock: "latest",
+                    })
+                  : client!.getContractEvents({
+                      address: t.curve,
+                      abi: curveAbi,
+                      eventName: "Trade",
+                      fromBlock: 0n,
+                      toBlock: "latest",
+                    }),
               client!.getContractEvents({
                 address: t.address,
                 abi: tokenAbi,
@@ -423,7 +509,11 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
             for (const l of trades) {
               let nat: number;
               let mcap: number;
-              if (t.mode === "v3") {
+              if (t.mode === "v4") {
+                const s = parseV4Swap(l, supply);
+                nat = s.ethAmount;
+                mcap = s.mcap;
+              } else if (t.mode === "v3") {
                 const s = parseV3Swap(l, tokenIs0, supply);
                 nat = s.ethAmount;
                 mcap = s.mcap;
@@ -443,7 +533,15 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
               if (a.from && a.from !== ZERO) bal.set(a.from, (bal.get(a.from) ?? 0n) - a.value);
               if (a.to && a.to !== ZERO) bal.set(a.to, (bal.get(a.to) ?? 0n) + a.value);
             }
-            const excluded = new Set([t.curve.toLowerCase(), DEAD, ZERO, t.address.toLowerCase()]);
+            // The PoolManager holds every v4 pool's liquidity — never a "holder" (harmless for
+            // curve/V3 tokens, which it never touches).
+            const excluded = new Set([
+              t.curve.toLowerCase(),
+              DEAD,
+              ZERO,
+              t.address.toLowerCase(),
+              V4_POOL_MANAGER.toLowerCase(),
+            ]);
             let holders = 0;
             for (const [addr, v] of bal) if (v > 0n && !excluded.has(addr.toLowerCase())) holders++;
             next.set(t.address.toLowerCase(), { volumeEth: vol, volume24hEth: vol24, athEth: ath, holders, lastBlock });
@@ -495,7 +593,13 @@ export function useTokenHolders(token?: TokenMarket): { holders: Holder[]; isLoa
           if (a.from && a.from !== ZERO) bal.set(a.from, (bal.get(a.from) ?? 0n) - a.value);
           if (a.to && a.to !== ZERO) bal.set(a.to, (bal.get(a.to) ?? 0n) + a.value);
         }
-        const excluded = new Set([token.curve.toLowerCase(), DEAD, ZERO, token.address.toLowerCase()]);
+        const excluded = new Set([
+          token.curve.toLowerCase(),
+          DEAD,
+          ZERO,
+          token.address.toLowerCase(),
+          V4_POOL_MANAGER.toLowerCase(), // holds every v4 pool's liquidity — never a "holder"
+        ]);
         const supply = supplyOf(token);
         const holders: Holder[] = [...bal.entries()]
           .filter(([a, v]) => v > 0n && !excluded.has(a.toLowerCase()))
