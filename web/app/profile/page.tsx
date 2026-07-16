@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { shortAddr } from "@/lib/format";
+import { ipfsToHttp } from "@/lib/metadata";
 import { useAuth } from "@/components/AuthProvider";
 import { WalletButton } from "@/components/WalletButton";
 
@@ -26,7 +27,7 @@ export default function ProfilePage() {
       setLoaded(false);
       return;
     }
-    fetch(`/api/profile/${sessionAddress}`)
+    fetch(`/api/profile/${sessionAddress}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
         if (j.profile) {
@@ -77,7 +78,14 @@ export default function ProfilePage() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Couldn't save.");
-      setMsg({ ok: true, text: "Profile saved." });
+      // Read it straight back to confirm it actually persisted (catches a misconfigured DB that
+      // accepts writes but doesn't retain them, instead of a false "saved").
+      const check = await fetch(`/api/profile/${sessionAddress}`, { cache: "no-store" }).then((x) => x.json());
+      if (check?.profile?.username) {
+        setMsg({ ok: true, text: "Profile saved." });
+      } else {
+        setMsg({ ok: false, text: "Saved, but it didn't read back — the database may not be connected. Check /api/status." });
+      }
     } catch (err) {
       setMsg({ ok: false, text: (err as Error).message ?? "Couldn't save." });
     } finally {
@@ -115,7 +123,7 @@ export default function ProfilePage() {
               <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full bg-obsidian-800 text-2xl">
                 {avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" />
+                  <img src={ipfsToHttp(avatarUrl)} alt="avatar" className="h-full w-full object-cover" />
                 ) : (
                   "👤"
                 )}

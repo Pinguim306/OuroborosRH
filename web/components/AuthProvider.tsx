@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Load the current session on mount.
   useEffect(() => {
     let alive = true;
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => alive && setSessionAddress(j.address ?? null))
       .catch(() => {})

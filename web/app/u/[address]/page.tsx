@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useAccount } from "wagmi";
 import { shortAddr } from "@/lib/format";
+import { ipfsToHttp } from "@/lib/metadata";
 import { useAuth } from "@/components/AuthProvider";
 
 const EXPLORER = "https://robinhoodchain.blockscout.com";
@@ -23,7 +24,7 @@ export default function PublicProfilePage() {
 
   useEffect(() => {
     if (!address) return;
-    fetch(`/api/profile/${address}`)
+    fetch(`/api/profile/${address}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => setProfile(j.profile ?? null))
       .catch(() => {})
@@ -37,7 +38,7 @@ export default function PublicProfilePage() {
           <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full bg-obsidian-800 text-3xl">
             {profile?.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={profile.avatar_url} alt="avatar" className="h-full w-full object-cover" />
+              <img src={ipfsToHttp(profile.avatar_url)} alt="avatar" className="h-full w-full object-cover" />
             ) : (
               "👤"
             )}

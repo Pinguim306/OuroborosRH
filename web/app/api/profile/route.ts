@@ -32,21 +32,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid avatar URL." }, { status: 400 });
   }
 
-  await ensureSchema();
   const lower = username.toLowerCase();
-  const clash = await sql`
-    select address from profiles where username_lower = ${lower} and address <> ${address} limit 1
-  `;
-  if (clash.rows.length > 0) {
-    return NextResponse.json({ error: "That username is taken." }, { status: 409 });
-  }
+  try {
+    await ensureSchema();
+    const clash = await sql`
+      select address from profiles where username_lower = ${lower} and address <> ${address} limit 1
+    `;
+    if (clash.rows.length > 0) {
+      return NextResponse.json({ error: "That username is taken." }, { status: 409 });
+    }
 
-  await sql`
-    insert into profiles (address, username, username_lower, bio, avatar_url)
-    values (${address}, ${username}, ${lower}, ${bio}, ${avatarUrl})
-    on conflict (address) do update
-      set username = ${username}, username_lower = ${lower}, bio = ${bio},
-          avatar_url = ${avatarUrl}, updated_at = now()
-  `;
+    await sql`
+      insert into profiles (address, username, username_lower, bio, avatar_url)
+      values (${address}, ${username}, ${lower}, ${bio}, ${avatarUrl})
+      on conflict (address) do update
+        set username = ${username}, username_lower = ${lower}, bio = ${bio},
+            avatar_url = ${avatarUrl}, updated_at = now()
+    `;
+  } catch (e) {
+    // Surface the real DB error instead of a silent 500 — makes a misconfig debuggable.
+    return NextResponse.json(
+      { error: `Database error: ${(e as Error).message ?? "write failed"}` },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ ok: true, profile: { address, username, bio, avatar_url: avatarUrl } });
 }

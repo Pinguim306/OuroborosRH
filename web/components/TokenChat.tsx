@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { shortAddr, timeAgo } from "@/lib/format";
+import { ipfsToHttp } from "@/lib/metadata";
 import { useAuth } from "./AuthProvider";
 import { WalletButton } from "./WalletButton";
 
@@ -23,7 +24,7 @@ function Avatar({ msg }: { msg: Msg }) {
   const label = (msg.username || msg.address).slice(msg.username ? 0 : 2, msg.username ? 2 : 4).toUpperCase();
   if (msg.avatar_url) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={msg.avatar_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />;
+    return <img src={ipfsToHttp(msg.avatar_url)} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />;
   }
   return (
     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-venom-500/20 text-[10px] font-bold text-venom-300">
@@ -54,7 +55,7 @@ export function TokenChat({ token }: { token: string }) {
     let alive = true;
     async function load() {
       try {
-        const r = await fetch(`/api/chat/${token}?after=${lastIdRef.current}`);
+        const r = await fetch(`/api/chat/${token}?after=${lastIdRef.current}`, { cache: "no-store" });
         if (!r.ok) return;
         const j = await r.json();
         const fresh: Msg[] = j.messages ?? [];
