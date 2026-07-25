@@ -19,7 +19,7 @@ import {
   coilPoolId,
   v4PoolManagerAbi,
 } from "./contracts";
-import { ROBINHOOD_CONTRACTS } from "./chain";
+import { CHAIN_ID, marketKey, uniswapContracts, v4PoolManagerOf } from "./chain";
 import { isHiddenMarket } from "./useMarkets";
 import type { Address, Holder, TokenMarket, Trade } from "./types";
 
@@ -82,7 +82,7 @@ export function parseV3Swap(
 }
 
 /** The v4 PoolManager singleton — every v4 pool's Swap events are emitted here, keyed by PoolId. */
-export const V4_POOL_MANAGER = ROBINHOOD_CONTRACTS.v4PoolManager as Address;
+export const V4_POOL_MANAGER = v4PoolManagerOf(CHAIN_ID);
 
 /**
  * Decode a Uniswap v4 PoolManager Swap log for a Coil pool (currency0 = ETH, currency1 = token).
@@ -134,7 +134,7 @@ export const INFRA_ADDRESSES = new Set(
     COIL_LAUNCHPAD,
     COIL_BURNER,
     ...LAUNCHPADS,
-    ...Object.values(ROBINHOOD_CONTRACTS),
+    ...Object.values(uniswapContracts(CHAIN_ID)),
   ]
     .map((a) => String(a).toLowerCase())
     .filter((a) => a.startsWith("0x")),
@@ -512,7 +512,7 @@ export interface MarketStat {
 export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketStat> {
   const client = usePublicClient();
   const [stats, setStats] = useState<Map<string, MarketStat>>(new Map());
-  const key = tokens.map((t) => t.address).join(",");
+  const key = tokens.map(marketKey).join(",");
 
   useEffect(() => {
     if (!LIVE || !client || tokens.length === 0) return;
@@ -609,7 +609,7 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
             ]);
             let holders = 0;
             for (const [addr, v] of bal) if (v > 0n && !excluded.has(addr.toLowerCase())) holders++;
-            next.set(t.address.toLowerCase(), { volumeEth: vol, volume24hEth: vol24, athEth: ath, holders, lastBlock });
+            next.set(marketKey(t), { volumeEth: vol, volume24hEth: vol24, athEth: ath, holders, lastBlock });
           } catch {
             /* ignore */
           }
@@ -701,7 +701,7 @@ export function useLaunchpadTotals(tokens: TokenMarket[], stats: Map<string, Mar
     let highestAthEth = 0;
     let holders = 0;
     for (const t of tokens) {
-      const s = stats.get(t.address.toLowerCase());
+      const s = stats.get(marketKey(t));
       if (!s) continue;
       volume24hEth += s.volume24hEth;
       volumeEth += s.volumeEth;

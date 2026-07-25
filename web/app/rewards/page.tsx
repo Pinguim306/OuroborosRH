@@ -8,6 +8,7 @@ import { mockRewardPositions } from "@/lib/mock/data";
 import { LIVE } from "@/lib/contracts";
 import { StatTile } from "@/components/StatTile";
 import { LivePortfolio } from "@/components/LivePortfolio";
+import { chainParam } from "@/lib/chain";
 
 export default function RewardsPage() {
   const initial = useMemo(() => mockRewardPositions(), []);
@@ -62,7 +63,7 @@ export default function RewardsPage() {
               key={p.token.address}
               className="glass flex flex-wrap items-center gap-4 p-4 md:flex-nowrap"
             >
-              <Link href={`/token/${p.token.address}`} className="flex min-w-0 flex-1 items-center gap-3">
+              <Link href={`/token/${p.token.address}${chainParam(p.token.chainId)}`} className="flex min-w-0 flex-1 items-center gap-3">
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-obsidian-800 text-2xl">
                   {p.token.image}
                 </div>

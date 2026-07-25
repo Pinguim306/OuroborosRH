@@ -21,7 +21,7 @@ import {
   v4PriceFromPackedSlot0,
   type CoilMarket,
 } from "./contracts";
-import { ROBINHOOD_CONTRACTS } from "./chain";
+import { CHAIN_ID, v4PoolManagerOf } from "./chain";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -97,7 +97,7 @@ function v3PriceFromSlot0(slot0: unknown, tokenIs0: boolean): number {
 
 /* v4 pools live inside the singleton PoolManager — pricing comes from an extsload read of the
  * pool's slot0 word; the slot math + decoding live in lib/contracts (shared with the server API). */
-const V4_POOL_MANAGER = ROBINHOOD_CONTRACTS.v4PoolManager as Address;
+const V4_POOL_MANAGER = v4PoolManagerOf(CHAIN_ID);
 
 /** Map a CoilLaunchpad market + its live reads onto the shared TokenMarket shape. */
 function fromV4Market(m: CoilMarket, supply: bigint, priceEth: number): TokenMarket {
@@ -136,6 +136,7 @@ function mapToken(
     curve: m.curve,
     rewards: m.token, // the token is the dividend vault
     pair,
+    chainId: CHAIN_ID, // stamped by the reader, so downstream links/keys never have to guess
     name: m.name,
     symbol: m.symbol,
     description: m.metadataURI.startsWith("http") ? "" : "",
@@ -263,8 +264,10 @@ export function useLiveMarkets(): { tokens: TokenMarket[]; isLoading: boolean } 
     address: COIL_LAUNCHPAD,
     abi: coilLaunchpadV4Abi,
     functionName: "getMarkets",
+    // Gated on the V4 launchpad alone, not on LIVE: the curve launchpad is a Robinhood-Chain
+    // fact, and a v4-only chain would otherwise read nothing.
     args: [0n, 50n],
-    query: { enabled: LIVE && LAUNCH_LIVE },
+    query: { enabled: LAUNCH_LIVE },
   });
   const v4Markets = useMemo(
     () =>
@@ -287,7 +290,7 @@ export function useLiveMarkets(): { tokens: TokenMarket[]; isLoading: boolean } 
           },
         ] as const,
     ),
-    query: { enabled: LIVE && v4Markets.length > 0 },
+    query: { enabled: v4Markets.length > 0 },
   });
 
   const v4Tokens = useMemo(() => {
@@ -407,7 +410,7 @@ export function useLiveTokenV4(tokenAddress?: Address): {
   notFound: boolean;
 } {
   const zero = "0x0000000000000000000000000000000000000000" as Address;
-  const isV4 = !!tokenAddress && isCoilToken(tokenAddress);
+  const isV4 = !!tokenAddress && isCoilToken(tokenAddress, CHAIN_ID);
   const enabled = LIVE && LAUNCH_LIVE && isV4;
 
   const idxQ = useReadContract({

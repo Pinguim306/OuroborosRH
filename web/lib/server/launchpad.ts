@@ -1,13 +1,6 @@
-import {
-  createPublicClient,
-  encodeFunctionData,
-  formatEther,
-  http,
-  isAddress,
-  maxUint256,
-  type Address,
-} from "viem";
-import { robinhoodChain, ROBINHOOD_CONTRACTS } from "@/lib/chain";
+import { encodeFunctionData, formatEther, isAddress, maxUint256, type Address } from "viem";
+import { robinhoodChain, v4PoolManagerOf } from "@/lib/chain";
+import { publicClientFor } from "@/lib/server/rpc";
 import {
   CONTRACTS,
   LIVE,
@@ -35,13 +28,8 @@ import { MOCK_TOKENS } from "@/lib/mock/data";
  * and broadcast them with their own keys. We never hold keys or sign anything.
  */
 
-const RPC_URL =
-  process.env.RH_RPC_URL || robinhoodChain.rpcUrls.default.http[0];
-
-export const publicClient = createPublicClient({
-  chain: robinhoodChain,
-  transport: http(RPC_URL),
-});
+/** This module reads the DEFAULT chain; `publicClientFor(id)` is the seam for any other. */
+export const publicClient = publicClientFor(robinhoodChain.id);
 
 export const CHAIN_ID = robinhoodChain.id;
 export const NATIVE_SYMBOL = robinhoodChain.nativeCurrency.symbol;
@@ -56,6 +44,8 @@ export interface ApiMarket {
   /** Present (as "v4") for Uniswap-v4 hook tokens — they trade through the CoilSwapRouter, not a
    *  bonding curve; `curve` then just mirrors the token address. Absent for curve/V3 markets. */
   mode?: "v4";
+  /** Which chain this market lives on; undefined = the default chain. */
+  chainId?: number;
   token: Address;
   curve: Address;
   creator: Address;
@@ -119,7 +109,7 @@ function toApiMarket(m: RawMarket, r: readonly { result?: unknown }[]): ApiMarke
   };
 }
 
-const V4_POOL_MANAGER = ROBINHOOD_CONTRACTS.v4PoolManager as Address;
+const V4_POOL_MANAGER = v4PoolManagerOf(CHAIN_ID);
 const V4_DEADLINE_SECONDS = 20 * 60;
 
 function v4Deadline(): bigint {
@@ -326,7 +316,7 @@ export async function fetchMarket(token: Address): Promise<ApiMarket | null> {
   }
 
   // v4 hook tokens are recognizable from their flag-encoded address alone.
-  if (isCoilToken(token)) {
+  if (isCoilToken(token, CHAIN_ID)) {
     const v4 = await fetchV4Market(token).catch(() => null);
     if (v4) return v4;
   }

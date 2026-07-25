@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { MOCK_TOKENS } from "@/lib/mock/data";
-import { LIVE } from "@/lib/contracts";
+import { ANY_LIVE } from "@/lib/contracts";
 import { useLiveMarkets } from "@/lib/useMarkets";
 import { useMarketsActivity, useLaunchpadTotals } from "@/lib/useActivity";
 import { useEthPrice } from "@/lib/usePrice";
@@ -14,6 +14,7 @@ import { BurnTicker } from "@/components/BurnTicker";
 import { TokenAvatar } from "@/components/TokenAvatar";
 import { StatTile } from "@/components/StatTile";
 import { useSearch } from "@/components/SearchProvider";
+import { chainParam, marketKey } from "@/lib/chain";
 
 type Mode = "trending" | "newest" | "highmcap" | "volume" | "oldest" | "lasttrade";
 
@@ -35,19 +36,19 @@ export default function HomePage() {
   const ethUsd = useEthPrice();
 
   const { tokens: liveTokens, isLoading } = useLiveMarkets();
-  const all: TokenMarket[] = LIVE ? liveTokens : MOCK_TOKENS;
+  const all: TokenMarket[] = ANY_LIVE ? liveTokens : MOCK_TOKENS;
   const stats = useMarketsActivity(all);
   const totals = useLaunchpadTotals(all, stats);
 
   const enriched: Enriched[] = useMemo(
     () =>
       all.map((t) => {
-        const s = stats.get(t.address.toLowerCase());
+        const s = stats.get(marketKey(t));
         return {
           ...t,
-          volume24hRh: LIVE ? (s?.volume24hEth ?? 0) : t.volume24hRh,
-          _volumeTotal: LIVE ? (s?.volumeEth ?? 0) : t.volume24hRh,
-          _lastBlock: LIVE ? (s?.lastBlock ?? 0) : t.createdAt,
+          volume24hRh: ANY_LIVE ? (s?.volume24hEth ?? 0) : t.volume24hRh,
+          _volumeTotal: ANY_LIVE ? (s?.volumeEth ?? 0) : t.volume24hRh,
+          _lastBlock: ANY_LIVE ? (s?.lastBlock ?? 0) : t.createdAt,
         };
       }),
     [all, stats],
@@ -103,7 +104,7 @@ export default function HomePage() {
     highestAthEth: Math.max(0, ...all.map((t) => t.marketCapRh)),
     holders: all.reduce((s, t) => s + t.holders, 0),
   };
-  const T = LIVE ? totals : demoTotals;
+  const T = ANY_LIVE ? totals : demoTotals;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 lg:py-8">
@@ -169,7 +170,7 @@ export default function HomePage() {
         </div>
 
         {/* Content */}
-        {LIVE && isLoading && filtered.length === 0 ? (
+        {ANY_LIVE && isLoading && filtered.length === 0 ? (
           <div className="glass mt-6 p-10 text-center text-white/50">Loading markets…</div>
         ) : filtered.length === 0 ? (
           <div className="glass mt-6 p-10 text-center text-white/50">
@@ -190,7 +191,7 @@ export default function HomePage() {
           <CoinTable tokens={filtered} ethUsd={ethUsd} />
         )}
 
-        {LIVE && (
+        {ANY_LIVE && (
           <p className="mt-6 text-center text-[11px] text-white/25">
             Volume, holders &amp; last-trade read live from on-chain events.
           </p>
@@ -204,7 +205,7 @@ export default function HomePage() {
 function TrendingCard({ token, ethUsd }: { token: Enriched; ethUsd: number }) {
   return (
     <Link
-      href={`/token/${token.address}`}
+      href={`/token/${token.address}${chainParam(token.chainId)}`}
       className="group relative block h-36 overflow-hidden rounded-2xl border border-white/10 transition hover:border-venom-500/40"
     >
       <TokenAvatar
@@ -245,7 +246,7 @@ function CoinTable({ tokens, ethUsd }: { tokens: Enriched[]; ethUsd: number }) {
           {tokens.map((t) => (
             <tr key={t.address} className="border-b border-white/5 transition hover:bg-white/5">
               <td className="py-2.5 pl-2">
-                <Link href={`/token/${t.address}`} className="flex items-center gap-3">
+                <Link href={`/token/${t.address}${chainParam(t.chainId)}`} className="flex items-center gap-3">
                   <TokenAvatar
                     uri={t.image}
                     symbol={t.symbol}

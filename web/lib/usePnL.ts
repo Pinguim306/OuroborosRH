@@ -5,6 +5,7 @@ import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
 import { coilPoolId, curveAbi, tokenAbi, v3PoolAbi, v4PoolManagerAbi, LIVE } from "./contracts";
 import { RELAYER_ROUTERS, V4_POOL_MANAGER } from "./useActivity";
+import { marketKey } from "./chain";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -34,7 +35,7 @@ interface SwapLegs {
 export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, TokenPnl> {
   const client = usePublicClient();
   const [data, setData] = useState<Map<string, TokenPnl>>(new Map());
-  const key = tokens.map((t) => t.address).join(",") + (user ?? "");
+  const key = tokens.map(marketKey).join(",") + (user ?? "");
 
   useEffect(() => {
     if (!LIVE || !client || !user || tokens.length === 0) {
@@ -160,7 +161,7 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
               }
             }
 
-            next.set(t.address.toLowerCase(), pnl);
+            next.set(marketKey(t), pnl);
           } catch {
             /* leave the token without PnL rather than breaking the page */
           }

@@ -3,13 +3,19 @@
 import { useMemo, useState } from "react";
 import { isAddress } from "viem";
 import type { Address } from "@/lib/types";
-import { NATIVE_SYMBOL } from "@/lib/chain";
+import { CHAIN_ID, chainConfig } from "@/lib/chain";
 import { isCoilToken, isHiddenToken, type CoilMarket } from "@/lib/contracts";
 
-/** null address = native ETH. */
+/** null address = the chain's native coin. */
 export type TokenChoice = { address: Address | null; symbol: string; name?: string };
 
-export const ETH_CHOICE: TokenChoice = { address: null, symbol: NATIVE_SYMBOL, name: "Ether" };
+/** The native-coin row. Named per chain, so Arc offers "USDC / USD Coin", not "ETH / Ether". */
+export function nativeChoice(chainId?: number): TokenChoice {
+  const c = chainConfig(chainId);
+  return { address: null, symbol: c.nativeSymbol, name: c.nativeName };
+}
+
+export const ETH_CHOICE: TokenChoice = nativeChoice();
 
 function shortAddr(a: string) {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -58,13 +64,16 @@ export function TokenSelect({
   markets,
   onSelect,
   onClose,
+  chainId = CHAIN_ID,
 }: {
   markets: readonly CoilMarket[];
   onSelect: (t: TokenChoice) => void;
   onClose: () => void;
+  chainId?: number;
 }) {
   const [q, setQ] = useState("");
   const s = q.trim().toLowerCase();
+  const native = nativeChoice(chainId);
 
   const filtered = useMemo(() => {
     if (!s) return markets;
@@ -79,7 +88,7 @@ export function TokenSelect({
   const pastedRaw = isAddress(q.trim()) ? (q.trim() as Address) : null;
   const pasted = pastedRaw && !isHiddenToken(pastedRaw) ? pastedRaw : null; // never surface hidden tokens
   const pastedListed = pasted && markets.some((m) => m.token.toLowerCase() === pasted.toLowerCase());
-  const showEth = !s || NATIVE_SYMBOL.toLowerCase().includes(s) || "ether".includes(s);
+  const showEth = !s || native.symbol.toLowerCase().includes(s) || (native.name ?? "").toLowerCase().includes(s);
 
   function pick(t: TokenChoice) {
     onSelect(t);
@@ -109,7 +118,7 @@ export function TokenSelect({
         />
 
         <div className="mt-3 max-h-72 space-y-0.5 overflow-y-auto">
-          {showEth && <Row symbol={NATIVE_SYMBOL} name="Ether" onClick={() => pick(ETH_CHOICE)} />}
+          {showEth && <Row symbol={native.symbol} name={native.name} onClick={() => pick(native)} />}
 
           {filtered.map((m) => (
             <Row
@@ -117,7 +126,7 @@ export function TokenSelect({
               symbol={m.symbol}
               name={m.name}
               addr={m.token}
-              v4={isCoilToken(m.token)}
+              v4={isCoilToken(m.token, chainId)}
               onClick={() => pick({ address: m.token, symbol: m.symbol, name: m.name })}
             />
           ))}

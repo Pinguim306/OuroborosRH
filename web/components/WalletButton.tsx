@@ -5,14 +5,19 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useAccount, useConnect, useDisconnect, useSwitchChain, type Connector } from "wagmi";
 import { shortAddr } from "@/lib/format";
-import { CHAIN_ID, robinhoodChain } from "@/lib/chain";
+import { chainConfig } from "@/lib/chain";
+import { useSelectedChainId } from "@/lib/useSelectedChain";
 
 export function WalletButton() {
   const { address, isConnected, chainId } = useAccount();
   const { connect, connectors, isPending, error } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChain, isPending: switching } = useSwitchChain();
-  const wrongChain = isConnected && chainId !== CHAIN_ID;
+  // The chain the UI is pointed at (default chain unless the URL says otherwise) — writes are
+  // pinned to it, so that's what the wallet has to be on.
+  const selectedChainId = useSelectedChainId();
+  const selectedChain = chainConfig(selectedChainId).chain;
+  const wrongChain = isConnected && chainId !== selectedChainId;
   const [open, setOpen] = useState(false);
   const [picker, setPicker] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -176,16 +181,16 @@ export function WalletButton() {
 
   return (
     <div className="relative flex items-center gap-2" ref={ref}>
-      {/* Wallet is on another network — every tx is pinned to Robinhood Chain, so
+      {/* Wallet is on another network — every tx is pinned to the selected chain, so
           surface it and offer a one-click switch (wagmi adds the chain if missing). */}
       {wrongChain && (
         <button
-          onClick={() => switchChain({ chainId: CHAIN_ID })}
+          onClick={() => switchChain({ chainId: selectedChainId })}
           disabled={switching}
           className="flex items-center gap-1.5 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-300 transition hover:bg-amber-400/20 disabled:opacity-50"
         >
           <span aria-hidden>⚠</span>
-          {switching ? "Switching…" : `Switch to ${robinhoodChain.name}`}
+          {switching ? "Switching…" : `Switch to ${selectedChain.name}`}
         </button>
       )}
       <button onClick={toggleMenu} className="btn-ghost">

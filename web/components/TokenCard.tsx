@@ -7,6 +7,7 @@ import { normalizeSocial } from "@/lib/metadata";
 import { useTokenMeta } from "@/lib/useMeta";
 import { ProgressBar } from "./ProgressBar";
 import { TokenAvatar } from "./TokenAvatar";
+import { chainParam } from "@/lib/chain";
 
 function XIcon() {
   return (
@@ -69,7 +70,7 @@ export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: 
     <div className="glass group relative p-4 transition hover:border-venom-500/40 hover:shadow-venom">
       {/* Whole-card link overlay; socials sit above it so they stay independently clickable. */}
       <Link
-        href={`/token/${token.address}`}
+        href={`/token/${token.address}${chainParam(token.chainId)}`}
         aria-label={token.name}
         className="absolute inset-0 z-0 rounded-2xl"
       />

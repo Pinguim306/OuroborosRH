@@ -1,4 +1,4 @@
-import { NATIVE_SYMBOL } from "./chain";
+import { chainConfig } from "./chain";
 
 export function compact(n: number, digits = 2): string {
   if (!isFinite(n)) return "0";
@@ -10,17 +10,20 @@ export function compact(n: number, digits = 2): string {
   return n.toFixed(digits);
 }
 
-export function rh(n: number, digits = 2): string {
-  return `${compact(n, digits)} ${NATIVE_SYMBOL}`;
+/** A native-coin amount with its ticker. `chainId` omitted = the default chain, so every existing
+ *  call still prints "ETH"; an Arc amount prints "USDC" once the caller carries a chain id. */
+export function rh(n: number, digits = 2, chainId?: number): string {
+  return `${compact(n, digits)} ${chainConfig(chainId).nativeSymbol}`;
 }
 
 export function usd(n: number): string {
   return `$${compact(n)}`;
 }
 
-/** Format an ETH amount as USD using the live ETH price; falls back to ETH. */
-export function usdFromEth(eth: number, ethUsd: number, digits = 2): string {
-  if (!ethUsd || !isFinite(ethUsd)) return rh(eth, digits);
+/** Format a native-coin amount as USD using its live price (see `useEthPrice`, which knows which
+ *  chains are stable-native); falls back to the native amount. */
+export function usdFromEth(eth: number, ethUsd: number, digits = 2, chainId?: number): string {
+  if (!ethUsd || !isFinite(ethUsd)) return rh(eth, digits, chainId);
   const v = eth * ethUsd;
   if (v > 0 && v < 0.01) return "<$0.01";
   return `$${compact(v, digits)}`;

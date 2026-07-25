@@ -5,7 +5,7 @@ import Link from "next/link";
 import { formatEther, parseEther, parseEventLogs } from "viem";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { copy } from "@/lib/copy";
-import { CHAIN_ID, NATIVE_SYMBOL } from "@/lib/chain";
+import { CHAIN_ID, NATIVE_SYMBOL, dexscreenerPageUrl, explorerUrl } from "@/lib/chain";
 import { LIVE, CONTRACTS, launchpadAbi, COIL_LAUNCHPAD, LAUNCH_LIVE, coilLaunchpadV4Abi } from "@/lib/contracts";
 import { ProgressBar } from "@/components/ProgressBar";
 import { LaunchWidget } from "@/components/LaunchWidget";
@@ -95,6 +95,9 @@ export default function CreatePage() {
       return undefined;
     }
   }, [receipt]);
+
+  // Null on chains DexScreener doesn't index, which hides the link there.
+  const dexUrl = dexscreenerPageUrl(newTokenAddress, CHAIN_ID);
 
   // Ping the Telegram announcement endpoint once the launch confirms. Fire-and-
   // forget: a failed announcement never affects the launch UX. The endpoint
@@ -468,16 +471,18 @@ export default function CreatePage() {
                         {newTokenAddress} ⧉
                       </button>
                       <div className="mt-2 flex flex-wrap items-center justify-center gap-3 text-[11px]">
+                        {dexUrl && (
+                          <a
+                            href={dexUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-venom-400 hover:underline"
+                          >
+                            DexScreener ↗
+                          </a>
+                        )}
                         <a
-                          href={`https://dexscreener.com/robinhood/${newTokenAddress}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-venom-400 hover:underline"
-                        >
-                          DexScreener ↗
-                        </a>
-                        <a
-                          href={`https://robinhoodchain.blockscout.com/token/${newTokenAddress}`}
+                          href={explorerUrl("token", newTokenAddress, CHAIN_ID)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-venom-400 hover:underline"

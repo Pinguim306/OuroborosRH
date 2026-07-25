@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAccount } from "wagmi";
 import { shortAddr, timeAgo } from "@/lib/format";
 import { ipfsToHttp } from "@/lib/metadata";
+import { useSelectedChainId } from "@/lib/useSelectedChain";
 import { useAuth } from "./AuthProvider";
 import { WalletButton } from "./WalletButton";
 
@@ -36,6 +37,8 @@ function Avatar({ msg }: { msg: Msg }) {
 /** Per-token comment thread. Reads/writes /api/chat/[token]; posting needs a signed-in wallet. */
 export function TokenChat({ token }: { token: string }) {
   const { isConnected } = useAccount();
+  // Rooms are keyed by (chain, token) server-side — the same address can exist on two chains.
+  const chainId = useSelectedChainId();
   const { sessionAddress, signIn, signingIn } = useAuth();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [text, setText] = useState("");
@@ -50,12 +53,17 @@ export function TokenChat({ token }: { token: string }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, []);
 
-  // Poll for new messages.
+  // Poll for new messages. Switching room (token or chain) restarts from an empty thread — message
+  // ids are per-room, so carrying them across would merge two rooms.
   useEffect(() => {
     let alive = true;
+    lastIdRef.current = 0;
+    setMessages([]);
     async function load() {
       try {
-        const r = await fetch(`/api/chat/${token}?after=${lastIdRef.current}`, { cache: "no-store" });
+        const r = await fetch(`/api/chat/${token}?chain=${chainId}&after=${lastIdRef.current}`, {
+          cache: "no-store",
+        });
         if (!r.ok) return;
         const j = await r.json();
         const fresh: Msg[] = j.messages ?? [];
@@ -76,7 +84,7 @@ export function TokenChat({ token }: { token: string }) {
       alive = false;
       clearInterval(id);
     };
-  }, [token]);
+  }, [token, chainId]);
 
   // Keep pinned to the newest message.
   useEffect(() => {
@@ -89,7 +97,7 @@ export function TokenChat({ token }: { token: string }) {
     setSending(true);
     setNotice(null);
     try {
-      const r = await fetch(`/api/chat/${token}`, {
+      const r = await fetch(`/api/chat/${token}?chain=${chainId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body }),

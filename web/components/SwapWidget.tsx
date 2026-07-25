@@ -11,7 +11,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import type { Address } from "@/lib/types";
-import { CHAIN_ID, NATIVE_SYMBOL, ROBINHOOD_CONTRACTS } from "@/lib/chain";
+import { CHAIN_ID, NATIVE_SYMBOL, uniswapContracts } from "@/lib/chain";
 import {
   COIL_LAUNCHPAD,
   COIL_SWAP_ROUTER,
@@ -42,8 +42,9 @@ const SLIPPAGE_OPTIONS = [
 ];
 const MAX_SLIPPAGE_PCT = 49; // hard ceiling on the custom slippage input
 
-const SWAP02 = ROBINHOOD_CONTRACTS.swapRouter02 as Address;
-const V3_FACTORY = ROBINHOOD_CONTRACTS.uniswapV3Factory as Address;
+const UNISWAP = uniswapContracts(CHAIN_ID);
+const SWAP02 = UNISWAP.swapRouter02 as Address;
+const V3_FACTORY = UNISWAP.uniswapV3Factory as Address;
 const ADDRESS_THIS = "0x0000000000000000000000000000000000000002" as Address;
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 
@@ -112,7 +113,7 @@ export function SwapWidget() {
   }, []);
 
   const isBuy = dir === "buy";
-  const isV4 = token ? isCoilToken(token) : false;
+  const isV4 = token ? isCoilToken(token, CHAIN_ID) : false;
   const useV3Fee = !isV4 && V3_FEE_LIVE;
   const spender = isV4 ? COIL_SWAP_ROUTER : useV3Fee ? COIL_SWAP_ROUTER_V3 : SWAP02;
   const feeCharged = isV4 || useV3Fee;

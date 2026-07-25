@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { MOCK_TOKENS } from "@/lib/mock/data";
-import { LIVE } from "@/lib/contracts";
+import { ANY_LIVE } from "@/lib/contracts";
 import { useLiveMarkets } from "@/lib/useMarkets";
 import {
   usePoints,
@@ -54,10 +54,10 @@ const RULES = [
 export default function PointsPage() {
   const { address } = useAccount();
   const { tokens: liveTokens, isLoading: marketsLoading } = useLiveMarkets();
-  const all: TokenMarket[] = LIVE ? liveTokens : MOCK_TOKENS;
+  const all: TokenMarket[] = ANY_LIVE ? liveTokens : MOCK_TOKENS;
   const { board, totalPoints, isLoading } = usePoints(all);
 
-  const loading = LIVE && (marketsLoading || isLoading) && board.length === 0;
+  const loading = ANY_LIVE && (marketsLoading || isLoading) && board.length === 0;
   const meIdx = address ? board.findIndex((w) => w.address.toLowerCase() === address.toLowerCase()) : -1;
   const me = meIdx >= 0 ? board[meIdx] : undefined;
 
@@ -94,7 +94,7 @@ export default function PointsPage() {
       </p>
 
       {/* Your score */}
-      {LIVE && address && me && (
+      {ANY_LIVE && address && me && (
         <div className="glass-strong mt-8 p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -115,7 +115,7 @@ export default function PointsPage() {
           </div>
         </div>
       )}
-      {LIVE && address && !me && !loading && (
+      {ANY_LIVE && address && !me && !loading && (
         <div className="glass mt-8 p-5 text-sm text-white/50">
           Your wallet has no points yet — one trade is all it takes to get on the board.
         </div>

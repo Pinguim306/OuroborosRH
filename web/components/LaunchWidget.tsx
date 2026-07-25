@@ -9,7 +9,7 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { CHAIN_ID, NATIVE_SYMBOL } from "@/lib/chain";
+import { CHAIN_ID, NATIVE_SYMBOL, explorerUrl } from "@/lib/chain";
 import {
   COIL_LAUNCHPAD,
   COIL_SWAP_ROUTER,
@@ -136,10 +136,10 @@ export function LaunchWidget({
         args: [name, symbol, creator],
       })) as Hex;
 
-      // 2. Mine the salt so the hook address carries the required flags.
+      // 2. Mine the salt so the hook address carries the flags THIS chain's launchpad demands.
       setPhase("mining");
       setTried(0);
-      const { salt, address: mined } = await mineSalt(COIL_LAUNCHPAD, initCodeHash, setTried);
+      const { salt, address: mined } = await mineSalt(COIL_LAUNCHPAD, initCodeHash, CHAIN_ID, setTried);
       setTokenAddr(mined);
 
       // 3. Fetch the creation fee and launch.
@@ -207,7 +207,7 @@ export function LaunchWidget({
                   Open your token ↗
                 </Link>
                 <a
-                  href={`https://robinhoodchain.blockscout.com/token/${tokenAddr}`}
+                  href={explorerUrl("token", tokenAddr, CHAIN_ID)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-venom-400 hover:underline"

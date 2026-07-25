@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
 import { coilPoolId, curveAbi, v3PoolAbi, v4PoolManagerAbi, LIVE } from "./contracts";
+import { marketKey } from "./chain";
 import {
   blockClock,
   parseV3Swap,
@@ -156,7 +157,7 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
                   isBuy = a.isBuy;
                   eth = Number(formatEther(a.nativeAmount ?? 0n));
                 }
-                const k = t.address.toLowerCase();
+                const k = marketKey(t);
                 volByToken.set(k, (volByToken.get(k) ?? 0) + eth);
                 if (l.blockNumber >= hourAgo) {
                   vol1hByToken.set(k, (vol1hByToken.get(k) ?? 0) + eth);
@@ -200,7 +201,7 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
           const k = t.creator.toLowerCase();
           const s = byCreator.get(k) ?? { address: t.creator, tokens: 0, volumeEth: 0 };
           s.tokens += 1;
-          s.volumeEth += volByToken.get(t.address.toLowerCase()) ?? 0;
+          s.volumeEth += volByToken.get(marketKey(t)) ?? 0;
           byCreator.set(k, s);
         }
         const creators = [...byCreator.values()]
@@ -211,10 +212,10 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
         // volume so the card isn't empty on a quiet hour).
         let hot: GlobalActivity["hot"];
         const pool = vol1hByToken.size > 0 ? vol1hByToken : volByToken;
-        for (const [addr, vol] of pool) {
+        for (const [k, vol] of pool) {
           if (vol <= 0) continue;
           if (!hot || vol > hot.vol1hEth) {
-            const token = visible.find((t) => t.address.toLowerCase() === addr);
+            const token = visible.find((t) => marketKey(t) === k);
             if (token) hot = { token, vol1hEth: vol };
           }
         }
