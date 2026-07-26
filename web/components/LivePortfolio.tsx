@@ -11,7 +11,8 @@ import {
   useWriteContract,
 } from "wagmi";
 import { coilHookAbi, tokenAbi } from "@/lib/contracts";
-import { CHAIN_ID, chainParam, marketKey } from "@/lib/chain";
+import { asSupportedChainId, chainParam, marketKey } from "@/lib/chain";
+import { useSelectedChainId } from "@/lib/useSelectedChain";
 import { useLiveMarkets } from "@/lib/useMarkets";
 import { usePnL, type TokenPnl } from "@/lib/usePnL";
 import type { TokenMarket } from "@/lib/types";
@@ -224,7 +225,7 @@ function CreatorRow({
       <button
         onClick={() =>
           writeContract({
-            chainId: CHAIN_ID,
+            chainId: asSupportedChainId(row.token.chainId),
             address: row.token.address,
             abi: coilHookAbi,
             functionName: "sweepCreator",
@@ -301,7 +302,12 @@ function PositionRow({
 
       <button
         onClick={() =>
-          writeContract({ chainId: CHAIN_ID, address: p.token.address, abi: tokenAbi, functionName: "claim" })
+          writeContract({
+              chainId: asSupportedChainId(p.token.chainId),
+              address: p.token.address,
+              abi: tokenAbi,
+              functionName: "claim",
+            })
         }
         disabled={p.claimableRh <= 0 || busy}
         className="btn-ghost"

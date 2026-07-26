@@ -11,14 +11,10 @@ import {
   useWriteContract,
 } from "wagmi";
 import type { Address } from "@/lib/types";
-import { CHAIN_ID, NATIVE_SYMBOL, uniswapContracts } from "@/lib/chain";
+import { chainConfig, uniswapContracts } from "@/lib/chain";
+import { useSelectedChainId } from "@/lib/useSelectedChain";
 import {
-  COIL_LAUNCHPAD,
-  COIL_SWAP_ROUTER,
-  COIL_SWAP_ROUTER_V3,
-  LAUNCH_LIVE,
-  SWAP_LIVE,
-  V3_FEE_LIVE,
+  coilContracts,
   V3_FEE_TIERS,
   coilLaunchpadV4Abi,
   coilPoolKey,
@@ -42,9 +38,6 @@ const SLIPPAGE_OPTIONS = [
 ];
 const MAX_SLIPPAGE_PCT = 49; // hard ceiling on the custom slippage input
 
-const UNISWAP = uniswapContracts(CHAIN_ID);
-const SWAP02 = UNISWAP.swapRouter02 as Address;
-const V3_FACTORY = UNISWAP.uniswapV3Factory as Address;
 const ADDRESS_THIS = "0x0000000000000000000000000000000000000002" as Address;
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 
@@ -90,12 +83,29 @@ function Pill({ symbol, onClick }: { symbol: string | null; onClick?: () => void
 
 /**
  * Uniswap-style swap: two panels (Sell / Buy) with a token-select modal and a flip arrow.
- * Every trade is ETH ↔ token (the routers pair against ETH). A Coil (v4) token routes through the
+ * Every trade is native-coin ↔ token (the routers pair against the chain's gas coin: ETH on
+ * Robinhood Chain, USDC on Arc). A Coil (v4) token routes through the
  * CoilSwapRouter; any other token routes through the v3 fee wrapper (or SwapRouter02). The quote
  * comes from an eth_call simulation of the real swap.
  */
 export function SwapWidget() {
   const { address, isConnected } = useAccount();
+  // The Swap page trades on whichever network the picker is pointed at. Every address below —
+  // both routers, the launchpad the token list comes from, the Uniswap peripherals — is per-chain,
+  // and so is the gas token's ticker, so they are all resolved here rather than at module scope.
+  const chainId = useSelectedChainId();
+  const {
+    coilLaunchpad: COIL_LAUNCHPAD,
+    coilSwapRouter: COIL_SWAP_ROUTER,
+    coilSwapRouterV3: COIL_SWAP_ROUTER_V3,
+    launchLive: LAUNCH_LIVE,
+    swapLive: SWAP_LIVE,
+    v3FeeLive: V3_FEE_LIVE,
+  } = coilContracts(chainId);
+  const NATIVE_SYMBOL = chainConfig(chainId).nativeSymbol;
+  const UNISWAP = uniswapContracts(chainId);
+  const SWAP02 = UNISWAP.swapRouter02 as Address;
+  const V3_FACTORY = UNISWAP.uniswapV3Factory as Address;
   const [token, setToken] = useState<Address | null>(null); // the non-ETH asset
   const [tokenSym, setTokenSym] = useState<string>("");
   const [dir, setDir] = useState<"buy" | "sell">("buy"); // buy = pay ETH; sell = pay token
@@ -113,7 +123,7 @@ export function SwapWidget() {
   }, []);
 
   const isBuy = dir === "buy";
-  const isV4 = token ? isCoilToken(token, CHAIN_ID) : false;
+  const isV4 = token ? isCoilToken(token, chainId) : false;
   const useV3Fee = !isV4 && V3_FEE_LIVE;
   const spender = isV4 ? COIL_SWAP_ROUTER : useV3Fee ? COIL_SWAP_ROUTER_V3 : SWAP02;
   const feeCharged = isV4 || useV3Fee;
@@ -122,7 +132,7 @@ export function SwapWidget() {
 
   // token picker list
   const { data: marketsRaw } = useReadContract({
-    chainId: CHAIN_ID,
+    chainId,
     address: COIL_LAUNCHPAD,
     abi: coilLaunchpadV4Abi,
     functionName: "getMarkets",
@@ -135,7 +145,7 @@ export function SwapWidget() {
 
   // on-chain symbol for a nicer label (esp. imported tokens)
   const { data: onchainSym } = useReadContract({
-    chainId: CHAIN_ID,
+    chainId,
     address: token ?? undefined,
     abi: tokenAbi,
     functionName: "symbol",
@@ -144,7 +154,7 @@ export function SwapWidget() {
   const displaySym = (onchainSym as string) || tokenSym || "token";
 
   const { data: weth } = useReadContract({
-    chainId: CHAIN_ID,
+    chainId,
     address: SWAP02,
     abi: swapRouter02Abi,
     functionName: "WETH",
@@ -159,7 +169,7 @@ export function SwapWidget() {
     contracts:
       token && wethAddr
         ? V3_FEE_TIERS.map((fee) => ({
-            chainId: CHAIN_ID,
+            chainId,
             address: V3_FACTORY,
             abi: uniswapV3FactoryAbi,
             functionName: "getPool" as const,
@@ -177,7 +187,7 @@ export function SwapWidget() {
   );
   const { data: liqProbes } = useReadContracts({
     contracts: foundPools.map((p) => ({
-      chainId: CHAIN_ID,
+      chainId,
       address: p.pool as Address,
       abi: uniswapV3PoolAbi,
       functionName: "liquidity" as const,
@@ -201,7 +211,7 @@ export function SwapWidget() {
   const feeTierLabel = `${bestFee / 10000}%`;
 
   const { data: tokenBal } = useReadContract({
-    chainId: CHAIN_ID,
+    chainId,
     address: token ?? undefined,
     abi: tokenAbi,
     functionName: "balanceOf",
@@ -209,7 +219,7 @@ export function SwapWidget() {
     query: { enabled: !!token && !!address && !isBuy },
   });
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    chainId: CHAIN_ID,
+    chainId,
     address: token ?? undefined,
     abi: tokenAbi,
     functionName: "allowance",
@@ -222,7 +232,7 @@ export function SwapWidget() {
   const quoteReady = routable && !!address && amountWei > 0n && (isBuy || !needsApproval);
 
   const { data: simV4, error: errV4 } = useSimulateContract({
-    chainId: CHAIN_ID,
+    chainId,
     address: COIL_SWAP_ROUTER,
     abi: coilSwapRouterAbi,
     functionName: "swapExactInSingle",
@@ -231,7 +241,7 @@ export function SwapWidget() {
     query: { enabled: quoteReady && isV4 },
   });
   const { data: simV3, error: errV3 } = useSimulateContract({
-    chainId: CHAIN_ID,
+    chainId,
     address: SWAP02,
     abi: swapRouter02Abi,
     functionName: "exactInputSingle",
@@ -253,7 +263,7 @@ export function SwapWidget() {
     query: { enabled: quoteReady && !isV4 && !useV3Fee && !!weth },
   });
   const { data: simV3Fee, error: errV3Fee } = useSimulateContract({
-    chainId: CHAIN_ID,
+    chainId,
     address: COIL_SWAP_ROUTER_V3,
     abi: coilSwapRouterV3Abi,
     functionName: isBuy ? "buy" : "sell",
@@ -322,7 +332,7 @@ export function SwapWidget() {
   function approve() {
     if (!token) return;
     writeContract({
-      chainId: CHAIN_ID,
+      chainId,
       address: token,
       abi: tokenAbi,
       functionName: "approve",
@@ -334,7 +344,7 @@ export function SwapWidget() {
     if (!token || !address) return;
     if (isV4) {
       writeContract({
-        chainId: CHAIN_ID,
+        chainId,
         address: COIL_SWAP_ROUTER,
         abi: coilSwapRouterAbi,
         functionName: "swapExactInSingle",
@@ -346,7 +356,7 @@ export function SwapWidget() {
     if (useV3Fee) {
       if (isBuy) {
         writeContract({
-          chainId: CHAIN_ID,
+          chainId,
           address: COIL_SWAP_ROUTER_V3,
           abi: coilSwapRouterV3Abi,
           functionName: "buy",
@@ -355,7 +365,7 @@ export function SwapWidget() {
         });
       } else {
         writeContract({
-          chainId: CHAIN_ID,
+          chainId,
           address: COIL_SWAP_ROUTER_V3,
           abi: coilSwapRouterV3Abi,
           functionName: "sell",
@@ -367,7 +377,7 @@ export function SwapWidget() {
     if (!weth) return;
     if (isBuy) {
       writeContract({
-        chainId: CHAIN_ID,
+        chainId,
         address: SWAP02,
         abi: swapRouter02Abi,
         functionName: "exactInputSingle",
@@ -406,7 +416,7 @@ export function SwapWidget() {
         args: [minOut, address],
       });
       writeContract({
-        chainId: CHAIN_ID,
+        chainId,
         address: SWAP02,
         abi: swapRouter02Abi,
         functionName: "multicall",
@@ -534,7 +544,7 @@ export function SwapWidget() {
       )}
       {noPool ? (
         <p className="px-1 text-xs text-warn">
-          No Uniswap v3 pool found for this token in any fee tier on Robinhood Chain.
+          No Uniswap v3 pool found for this token in any fee tier on {chainConfig(chainId).chain.name}.
         </p>
       ) : (
         simError &&
@@ -572,10 +582,17 @@ export function SwapWidget() {
       <p className="pt-1 text-center text-[11px] text-ink-4">
         {feeCharged
           ? "Routed through Coil · a small interface fee supports the protocol."
-          : "Routed on Robinhood Chain."}
+          : `Routed on ${chainConfig(chainId).chain.name}.`}
       </p>
 
-      {pickerOpen && <TokenSelect markets={markets} onSelect={onPick} onClose={() => setPickerOpen(false)} />}
+      {pickerOpen && (
+        <TokenSelect
+          markets={markets}
+          chainId={chainId}
+          onSelect={onPick}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </div>
   );
 }

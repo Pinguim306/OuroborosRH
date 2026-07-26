@@ -59,7 +59,7 @@ export default function DocsPage() {
 
           <Section id="intro" title="Introduction">
             <p>
-              Coil is a launchpad on Robinhood Chain. Every launch goes{" "}
+              Coil is a multi-chain launchpad. Every launch goes{" "}
               <strong>straight into a Uniswap v4 pool</strong>: the token is tradable the second the
               launch transaction confirms. The difference is <strong>the loop</strong>: a small fee
               is taken on every swap by the pool&apos;s hook and split on-chain the instant it&apos;s

@@ -12,8 +12,9 @@ import type { TokenMarket } from "@/lib/types";
 import { copy } from "@/lib/copy";
 import { compact, rh, usdFromEth } from "@/lib/format";
 import { useEthPrice } from "@/lib/usePrice";
-import { CHAIN_ID, NATIVE_SYMBOL } from "@/lib/chain";
+import { asSupportedChainId, chainConfig } from "@/lib/chain";
 import { LIVE, coilHookAbi, tokenAbi } from "@/lib/contracts";
+import { useSelectedChainId } from "@/lib/useSelectedChain";
 import { useTotalFeesEth } from "@/lib/useFees";
 
 /**
@@ -26,16 +27,22 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
   const { address, isConnected } = useAccount();
   const creatorMode = Boolean(token.creatorFees);
   const isV4 = token.mode === "v4";
+  // Claim on the coin's own chain: the reward balance lives in that chain's token contract, and
+  // the gas token whose symbol we print differs (ETH on Robinhood, USDC on Arc).
+  const selectedChainId = useSelectedChainId();
+  const chainId = asSupportedChainId(token.chainId ?? selectedChainId);
+  const NATIVE_SYMBOL = chainConfig(chainId).nativeSymbol;
 
   // --- Demo state (only used when !LIVE) ---
   const [holding] = useState(() => (token.priceRh > 0 ? (token.marketCapRh / token.priceRh) * 0.004 : 0));
   const [simClaimable, setSimClaimable] = useState(() => token.rewardsPoolRh * 0.004);
   const [flash, setFlash] = useState<string | null>(null);
-  const ethUsd = useEthPrice();
+  const ethUsd = useEthPrice(chainId);
   const totalFeesEth = useTotalFeesEth(token);
 
   // --- Live reads ---
   const claimableQ = useReadContract({
+    chainId,
     address: token.address,
     abi: tokenAbi,
     functionName: "claimableRewardOf",
@@ -43,6 +50,7 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
     query: { enabled: LIVE && !!address && !isV4 },
   });
   const pendingV4Q = useReadContract({
+    chainId,
     address: token.address,
     abi: coilHookAbi,
     functionName: "pendingOf",
@@ -50,6 +58,7 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
     query: { enabled: LIVE && !!address && isV4 },
   });
   const balanceQ = useReadContract({
+    chainId,
     address: token.address,
     abi: tokenAbi,
     functionName: "balanceOf",
@@ -100,7 +109,7 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
       setTimeout(() => setFlash(null), 2600);
       return;
     }
-    writeContract({ chainId: CHAIN_ID, address: token.address, abi: tokenAbi, functionName: "claim" });
+    writeContract({ chainId, address: token.address, abi: tokenAbi, functionName: "claim" });
   }
 
   // Creator Rewards launch: the holder fee share pays the creator's wallet, so there is nothing

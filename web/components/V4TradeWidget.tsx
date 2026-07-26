@@ -12,14 +12,9 @@ import {
   useWriteContract,
 } from "wagmi";
 import type { Address, TokenMarket } from "@/lib/types";
-import { CHAIN_ID, NATIVE_SYMBOL } from "@/lib/chain";
-import {
-  COIL_SWAP_ROUTER,
-  SWAP_LIVE,
-  coilPoolKey,
-  coilSwapRouterAbi,
-  tokenAbi,
-} from "@/lib/contracts";
+import { asSupportedChainId, chainConfig } from "@/lib/chain";
+import { coilContracts, coilPoolKey, coilSwapRouterAbi, tokenAbi } from "@/lib/contracts";
+import { useSelectedChainId } from "@/lib/useSelectedChain";
 import { WalletButton } from "./WalletButton";
 
 const SLIPPAGE_OPTIONS = [
@@ -50,6 +45,13 @@ function fmt(x: bigint, dp = 4) {
  */
 export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: number }) {
   const { address, isConnected } = useAccount();
+  // The coin's own chain — a token page can be reached from a `?chain=` link, and the router,
+  // the pool and the gas token all differ per chain. Reading or writing against the default
+  // chain here would quote the wrong pool and send the swap to the wrong network entirely.
+  const selectedChainId = useSelectedChainId();
+  const chainId = asSupportedChainId(token.chainId ?? selectedChainId);
+  const { coilSwapRouter: COIL_SWAP_ROUTER, swapLive: SWAP_LIVE } = coilContracts(chainId);
+  const NATIVE_SYMBOL = chainConfig(chainId).nativeSymbol;
   const [dir, setDir] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   const [slippage, setSlippage] = useState(300n);
@@ -63,7 +65,7 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
   const deadline = useMemo(() => BigInt(Math.floor(Date.now() / 1000) + 1200), [amount, dir]);
 
   const { data: tokenBal, refetch: refetchBal } = useReadContract({
-    chainId: CHAIN_ID,
+    chainId,
     address: tokenAddr,
     abi: tokenAbi,
     functionName: "balanceOf",
@@ -71,7 +73,7 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
     query: { enabled: !!address },
   });
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    chainId: CHAIN_ID,
+    chainId,
     address: tokenAddr,
     abi: tokenAbi,
     functionName: "allowance",
@@ -83,7 +85,7 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
   const quoteReady = SWAP_LIVE && !!address && amountWei > 0n && (isBuy || !needsApproval);
 
   const { data: sim, error: simError } = useSimulateContract({
-    chainId: CHAIN_ID,
+    chainId,
     address: COIL_SWAP_ROUTER,
     abi: coilSwapRouterAbi,
     functionName: "swapExactInSingle",
@@ -129,7 +131,7 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
 
   function approve() {
     writeContract({
-      chainId: CHAIN_ID,
+      chainId,
       address: tokenAddr,
       abi: tokenAbi,
       functionName: "approve",
@@ -140,7 +142,7 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
   function swap() {
     if (!address || amountWei === 0n) return;
     writeContract({
-      chainId: CHAIN_ID,
+      chainId,
       address: COIL_SWAP_ROUTER,
       abi: coilSwapRouterAbi,
       functionName: "swapExactInSingle",

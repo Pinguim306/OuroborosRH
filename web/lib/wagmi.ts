@@ -1,6 +1,6 @@
 import { createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
-import { arcChain, arcTestnet, robinhoodChain, SUPPORTED_CHAINS } from "./chain";
+import { arcChain, robinhoodChain, SUPPORTED_CHAINS } from "./chain";
 
 /**
  * wagmi config. EIP-6963 multi-injected discovery (on by default) surfaces every
@@ -20,7 +20,6 @@ export const wagmiConfig = createConfig({
   transports: {
     [robinhoodChain.id]: http(),
     [arcChain.id]: http(),
-    [arcTestnet.id]: http(),
   },
   ssr: true,
 });

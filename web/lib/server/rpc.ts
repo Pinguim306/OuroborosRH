@@ -1,5 +1,5 @@
 import { createPublicClient, http, type PublicClient } from "viem";
-import { chainConfig, DEFAULT_CHAIN_ID, arcChain, arcTestnet } from "@/lib/chain";
+import { chainConfig, DEFAULT_CHAIN_ID, arcChain } from "@/lib/chain";
 
 /**
  * Server-side read clients, one per chain. The /api/* routes run on Vercel, where the browser's
@@ -10,7 +10,6 @@ import { chainConfig, DEFAULT_CHAIN_ID, arcChain, arcTestnet } from "@/lib/chain
 const SERVER_RPC: Record<number, string | undefined> = {
   [DEFAULT_CHAIN_ID]: process.env.RH_RPC_URL,
   [arcChain.id]: process.env.ARC_RPC_URL,
-  [arcTestnet.id]: process.env.ARC_TESTNET_RPC_URL,
 };
 
 const clients = new Map<number, PublicClient>();

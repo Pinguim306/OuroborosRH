@@ -4,7 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { copy } from "@/lib/copy";
-import { COIL_TOKEN, isDeployed } from "@/lib/contracts";
+import { coilContracts, isDeployed } from "@/lib/contracts";
+import { chainParam } from "@/lib/chain";
+import { useSelectedChainId } from "@/lib/useSelectedChain";
 import { shortAddr } from "@/lib/format";
 import { useSearch } from "./SearchProvider";
 import { WalletButton } from "./WalletButton";
@@ -16,6 +18,9 @@ import { IconMenu, IconSearch } from "./Icon";
  *  home grid. */
 export function TopBar({ onMenu }: { onMenu: () => void }) {
   const { query, setQuery } = useSearch();
+  // $COIL is deployed per chain — the badge has to name the one on the selected network.
+  const chainId = useSelectedChainId();
+  const { coilToken: COIL_TOKEN } = coilContracts(chainId);
   const pathname = usePathname();
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -59,7 +64,7 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
         {isDeployed(COIL_TOKEN) && (
           <div className="hidden shrink-0 items-center gap-1.5 rounded-xl border border-coil-500/25 bg-coil-500/5 px-3 py-2 text-xs md:flex">
             <Link
-              href={`/token/${COIL_TOKEN}`}
+              href={`/token/${COIL_TOKEN}${chainParam(chainId)}`}
               className="font-semibold text-coil-400 hover:underline"
             >
               Official CA:

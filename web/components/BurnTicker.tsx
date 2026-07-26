@@ -11,11 +11,10 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { CHAIN_ID, NATIVE_SYMBOL } from "@/lib/chain";
+import { chainConfig, chainParam } from "@/lib/chain";
+import { useSelectedChainId } from "@/lib/useSelectedChain";
 import {
-  BURNER_LIVE,
-  COIL_BURNER,
-  COIL_TOKEN,
+  coilContracts,
   coilBurnerAbi,
   coilHookAbi,
   isDeployed,
@@ -38,23 +37,29 @@ const DEAD = "0x000000000000000000000000000000000000dEaD" as const;
  */
 export function BurnTicker() {
   const { isConnected } = useAccount();
-  const ethUsd = useEthPrice();
+  // Each chain runs its own burner against its own $COIL, so the ticker follows the network the
+  // page is pointed at — otherwise browsing Arc would show Robinhood's burn totals.
+  const chainId = useSelectedChainId();
+  const { coilBurner: COIL_BURNER, burnerLive: BURNER_LIVE, coilToken: COIL_TOKEN } =
+    coilContracts(chainId);
+  const NATIVE_SYMBOL = chainConfig(chainId).nativeSymbol;
+  const ethUsd = useEthPrice(chainId);
   const [flash, setFlash] = useState<string | null>(null);
   const [action, setAction] = useState<"burn" | "collect" | null>(null);
 
   const statsQ = useReadContracts({
     contracts: [
-      { chainId: CHAIN_ID, address: COIL_BURNER, abi: coilBurnerAbi, functionName: "totalCoilBurned" },
-      { chainId: CHAIN_ID, address: COIL_BURNER, abi: coilBurnerAbi, functionName: "totalEthSpent" },
-      { chainId: CHAIN_ID, address: COIL_BURNER, abi: coilBurnerAbi, functionName: "coil" },
+      { chainId, address: COIL_BURNER, abi: coilBurnerAbi, functionName: "totalCoilBurned" },
+      { chainId, address: COIL_BURNER, abi: coilBurnerAbi, functionName: "totalEthSpent" },
+      { chainId, address: COIL_BURNER, abi: coilBurnerAbi, functionName: "coil" },
       // Total burned from ANY source — the burner sends here too, but so do manual burns
       // (dev wallet, community). This is the headline number when COIL_TOKEN is configured.
-      { chainId: CHAIN_ID, address: COIL_TOKEN, abi: tokenAbi, functionName: "balanceOf", args: [DEAD] },
+      { chainId, address: COIL_TOKEN, abi: tokenAbi, functionName: "balanceOf", args: [DEAD] },
     ],
     query: { enabled: BURNER_LIVE, refetchInterval: 30_000 },
   });
   const pendingQ = useBalance({
-    chainId: CHAIN_ID,
+    chainId,
     address: BURNER_LIVE ? COIL_BURNER : undefined,
     query: { enabled: BURNER_LIVE, refetchInterval: 30_000 },
   });
@@ -67,7 +72,7 @@ export function BurnTicker() {
     contracts: v4Tokens.map(
       (t) =>
         ({
-          chainId: CHAIN_ID,
+          chainId,
           address: t.address,
           abi: coilHookAbi,
           functionName: "treasuryAccruedETH",
@@ -116,7 +121,7 @@ export function BurnTicker() {
     if (!topAccrued.token) return;
     setAction("collect");
     writeContract({
-      chainId: CHAIN_ID,
+      chainId,
       address: topAccrued.token.address,
       abi: coilHookAbi,
       functionName: "sweepTreasury",
@@ -126,7 +131,7 @@ export function BurnTicker() {
   function burn() {
     setAction("burn");
     writeContract({
-      chainId: CHAIN_ID,
+      chainId,
       address: COIL_BURNER,
       abi: coilBurnerAbi,
       functionName: "buybackAndBurn",
@@ -135,7 +140,7 @@ export function BurnTicker() {
   }
 
   const coilLabel = isDeployed(COIL_TOKEN) ? (
-    <Link href={`/token/${COIL_TOKEN}`} className="font-bold text-coil-400 hover:underline">
+    <Link href={`/token/${COIL_TOKEN}${chainParam(chainId)}`} className="font-bold text-coil-400 hover:underline">
       $COIL
     </Link>
   ) : (
