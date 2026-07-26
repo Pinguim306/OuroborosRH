@@ -8,8 +8,10 @@ import { copy } from "@/lib/copy";
 import { chainConfig, dexscreenerPageUrl, explorerUrl } from "@/lib/chain";
 import { useSelectedChainId } from "@/lib/useSelectedChain";
 import { coilContracts, launchpadAbi, coilLaunchpadV4Abi } from "@/lib/contracts";
+import { DEFAULT_TOTAL_FEE_BPS, useLaunchFee } from "@/lib/useLaunchFee";
 import { ProgressBar } from "@/components/ProgressBar";
 import { LaunchWidget } from "@/components/LaunchWidget";
+import { FeeRatePicker } from "@/components/FeeRatePicker";
 import { IconCrown, IconImage, IconRewards, IconWarning } from "@/components/Icon";
 import { IconBolt, IconCoin, IconExternal } from "@/components/Icon";
 
@@ -40,6 +42,18 @@ export default function CreatePage() {
   // that doesn't offer it — the launch would then be sent with the wrong immutable flag.
   const loopRewardsAvailable = chainConfig(chainId).loopRewards;
   const rewards = loopRewardsAvailable ? rewardsChoice : "creator";
+
+  // Per-swap fee rate. Only launchpads at LAUNCHPAD_VERSION 4+ take one from the creator; older
+  // ones carry a split fixed at deployment, so the control stays hidden there rather than
+  // pretending to a choice the contract won't honour.
+  const { configurable: feeConfigurable, minBps, maxBps } = useLaunchFee(chainId);
+  const [feeChoice, setFeeChoice] = useState(DEFAULT_TOTAL_FEE_BPS);
+  // Clamped rather than synced, for the same reason as `rewards` above: switching chains must never
+  // leave a rate behind that the new chain's launchpad would reject at signing time.
+  const totalFeeBps =
+    feeConfigurable && minBps !== undefined && maxBps !== undefined
+      ? Math.min(Math.max(feeChoice, minBps), maxBps)
+      : undefined;
 
   // Image upload state
   const fileRef = useRef<HTMLInputElement>(null);
@@ -261,8 +275,12 @@ export default function CreatePage() {
         <p className="mt-3 text-ink-3">{copy.create.subtitle}</p>
       </div>
 
+      {/* The "nothing else" promise has to follow the actual fee. Arc charges 2 USDC to launch, and
+          this line used to claim there was no creation fee directly above a summary quoting one. */}
       <p className="mx-auto mt-4 max-w-lg text-center text-sm leading-relaxed text-ink-3">
-        No presale, no team allocation, no creation fee — you pay network gas and nothing else.
+        {feeEth
+          ? `No presale, no team allocation — a ${feeEth} ${NATIVE_SYMBOL} creation fee plus network gas, and nothing else.`
+          : "No presale, no team allocation, no creation fee — you pay network gas and nothing else."}
       </p>
 
       <div className="mt-8 grid gap-6 md:grid-cols-[1fr_360px]">
@@ -405,6 +423,18 @@ export default function CreatePage() {
               </div>
             )}
 
+            {/* Per-swap fee — only on launchpads that let the creator set one. */}
+            {mode === "v4" && totalFeeBps !== undefined && (
+              <FeeRatePicker
+                bps={totalFeeBps}
+                onChange={setFeeChoice}
+                minBps={minBps!}
+                maxBps={maxBps!}
+                creatorRewards={rewards === "creator"}
+                chainId={chainId}
+              />
+            )}
+
             {/* Dev buy — V3: the pool's first swap inside the launch tx (front-run-proof).
                 v4: a follow-up buy fired right after launch, through Coil Swap. */}
             <div>
@@ -436,7 +466,11 @@ export default function CreatePage() {
               <li>
                 Pool fee:{" "}
                 <span className="text-ink-2">
-                  {mode === "v4" ? "0% LP + native per-swap fee" : "1% (Uniswap V3)"}
+                  {mode !== "v4"
+                    ? "1% (Uniswap V3)"
+                    : totalFeeBps !== undefined
+                      ? `0% LP + ${totalFeeBps / 100}% per swap`
+                      : "0% LP + native per-swap fee"}
                 </span>
               </li>
               <li>Liquidity: <span className="text-ink-2">locked forever</span></li>
@@ -488,6 +522,7 @@ export default function CreatePage() {
               name={form.name}
               symbol={form.symbol}
               creatorRewards={rewards === "creator"}
+              totalFeeBps={totalFeeBps}
               devBuyWei={devBuyWei}
               buildMetadataURI={buildMetadataURI}
             />

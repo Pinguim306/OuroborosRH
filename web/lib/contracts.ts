@@ -481,6 +481,19 @@ export function isHiddenToken(address?: string): boolean {
   return !!address && HIDDEN_TOKENS.has(address.toLowerCase());
 }
 
+/**
+ * The v4 launch factory. Two generations of launchpad answer to this ABI at once, and which one a
+ * chain runs is a deploy-time fact, not a global one: `LAUNCHPAD_VERSION` 3 takes a fixed fee split
+ * baked in at deployment, 4 lets the creator pick the total rate and slides the protocol's share
+ * against it. Robinhood Chain is live on 3; Arc is born on 4.
+ *
+ * Both signatures therefore live here side by side, exactly as `launchpadAbi` already carries the
+ * v1 and v2 curve overloads — viem selects by argument count. Reading the version and passing the
+ * matching arity is cheaper and safer than shipping two ABIs and picking between them: the extra
+ * argument is the *only* difference, and a mismatch is not a silent one — the salt is mined against
+ * `hookInitCodeHash`, so calling the wrong arity produces an address the hook's own constructor
+ * rejects, and the launch reverts having spent nothing but gas.
+ */
 export const coilLaunchpadV4Abi = [
   {
     type: "function",
@@ -498,6 +511,24 @@ export const coilLaunchpadV4Abi = [
       { name: "positionId", type: "uint256" },
     ],
   },
+  // v4+: the creator's chosen total per-swap rate, in bps.
+  {
+    type: "function",
+    name: "createTokenV4",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "symbol", type: "string" },
+      { name: "metadataURI", type: "string" },
+      { name: "salt", type: "bytes32" },
+      { name: "creatorRewards", type: "bool" },
+      { name: "totalFeeBps", type: "uint256" },
+    ],
+    outputs: [
+      { name: "token", type: "address" },
+      { name: "positionId", type: "uint256" },
+    ],
+  },
   {
     type: "function",
     name: "hookInitCodeHash",
@@ -508,6 +539,50 @@ export const coilLaunchpadV4Abi = [
       { name: "creator", type: "address" },
     ],
     outputs: [{ type: "bytes32" }],
+  },
+  // v4+: the rate is a hook constructor argument, so it changes the init code hash — and therefore
+  // the salt. Mining against the 3-arg hash on a v4 launchpad yields an address that isn't the one
+  // the launch actually deploys to.
+  {
+    type: "function",
+    name: "hookInitCodeHash",
+    stateMutability: "view",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "symbol", type: "string" },
+      { name: "creator", type: "address" },
+      { name: "totalFeeBps", type: "uint256" },
+    ],
+    outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "LAUNCHPAD_VERSION",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  // The rate range a creator may pick from (v4+ only; the read reverts on v3).
+  { type: "function", name: "MIN_FEE_BPS", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "MAX_FEE_BPS", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  // The exact waterfall a launch at this rate would carry. The contract is the authority on the
+  // split — the frontend must never recompute the curve, or a curve the owner retunes on-chain
+  // would quietly disagree with what the creator was shown before signing.
+  {
+    type: "function",
+    name: "resolveFees",
+    stateMutability: "view",
+    inputs: [{ name: "totalFeeBps", type: "uint256" }],
+    outputs: [
+      {
+        type: "tuple",
+        components: [
+          { name: "protocolBps", type: "uint256" },
+          { name: "holderBps", type: "uint256" },
+          { name: "burnBps", type: "uint256" },
+        ],
+      },
+    ],
   },
   { type: "function", name: "creationFee", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "tokenSupply", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },

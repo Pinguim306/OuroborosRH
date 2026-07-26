@@ -19,6 +19,7 @@ import {
   coilSwapRouterAbi,
 } from "@/lib/contracts";
 import { mineSalt } from "@/lib/mineSalt";
+import { useLaunchFee } from "@/lib/useLaunchFee";
 import { WalletButton } from "./WalletButton";
 
 type Phase = "idle" | "uploading" | "mining" | "submitting" | "done" | "error";
@@ -35,12 +36,16 @@ export function LaunchWidget({
   name,
   symbol,
   creatorRewards,
+  totalFeeBps,
   devBuyWei,
   buildMetadataURI,
 }: {
   name: string;
   symbol: string;
   creatorRewards: boolean;
+  /** The creator's chosen per-swap rate, in bps. Undefined on launchpads below
+   *  `LAUNCHPAD_VERSION` 4, whose split is fixed at deployment and takes no rate argument. */
+  totalFeeBps?: number;
   /** Optional dev buy (in wei). v4 can't buy atomically in the launch tx, so if set we fire a
    *  follow-up buy through the CoilSwapRouter once the launch confirms. */
   devBuyWei: bigint;
@@ -53,6 +58,9 @@ export function LaunchWidget({
   // salt's hook flags and the tx's chain must all agree, or createTokenV4 reverts.
   const chainId = useSelectedChainId();
   const { coilLaunchpad, coilSwapRouter, swapLive, launchLive } = coilContracts(chainId);
+  // Which create signature this chain's launchpad answers to. Same hook the /create form uses to
+  // decide whether to show the rate control, so the two can't disagree about what gets sent.
+  const { configurable: feeConfigurable } = useLaunchFee(chainId);
   const nativeSymbol = chainConfig(chainId).nativeSymbol;
   const publicClient = usePublicClient({ chainId });
   const { writeContractAsync } = useWriteContract();
@@ -123,6 +131,12 @@ export function LaunchWidget({
       setErr("Name and symbol are required.");
       return;
     }
+    // Belt and braces: this launchpad takes a rate but none arrived. Sending the older 5-argument
+    // call would hit a selector the contract doesn't have and revert with nothing to explain it.
+    if (feeConfigurable && totalFeeBps === undefined) {
+      setErr("Still reading this network's fee range — try again in a second.");
+      return;
+    }
     setErr(null);
     setTokenAddr(null);
     try {
@@ -133,11 +147,17 @@ export function LaunchWidget({
       const metadataURI = await buildMetadataURI();
 
       // 1. Exact init-code hash for THIS launch (name/symbol/creator baked in).
+      //
+      //    On a v4+ launchpad the rate is a hook constructor argument, so it lands in the init code
+      //    and therefore in the mined address. The rate used here MUST be the one the transaction
+      //    below carries, or the salt points at a contract that never gets deployed. Passing it
+      //    through a single local is what guarantees that — `rate` is read once and used twice.
+      const rate = feeConfigurable ? BigInt(totalFeeBps!) : undefined;
       const initCodeHash = (await publicClient.readContract({
         address: coilLaunchpad,
         abi: coilLaunchpadV4Abi,
         functionName: "hookInitCodeHash",
-        args: [name, symbol, creator],
+        args: rate === undefined ? [name, symbol, creator] : [name, symbol, creator, rate],
       })) as Hex;
 
       // 2. Mine the salt so the hook address carries the flags THIS chain's launchpad demands.
@@ -159,7 +179,10 @@ export function LaunchWidget({
         address: coilLaunchpad,
         abi: coilLaunchpadV4Abi,
         functionName: "createTokenV4",
-        args: [name, symbol, metadataURI, salt, creatorRewards],
+        args:
+          rate === undefined
+            ? [name, symbol, metadataURI, salt, creatorRewards]
+            : [name, symbol, metadataURI, salt, creatorRewards, rate],
         value: creationFee,
       });
       setHash(txHash);
