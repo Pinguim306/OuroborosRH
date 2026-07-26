@@ -34,7 +34,12 @@ export default function CreatePage() {
   const [devBuy, setDevBuy] = useState("");
   // Rewards mode: Loop Rewards streams the fee share to all holders (classic);
   // Creator Rewards pays it to the creator's wallet. Fixed forever at launch.
-  const [rewards, setRewards] = useState<"loop" | "creator">("loop");
+  const [rewardsChoice, setRewards] = useState<"loop" | "creator">("loop");
+  // Some chains offer only Creator Rewards. Deriving the effective value (rather than syncing
+  // state on a chain change) means the picker can never leave a stale "loop" behind on a chain
+  // that doesn't offer it — the launch would then be sent with the wrong immutable flag.
+  const loopRewardsAvailable = chainConfig(chainId).loopRewards;
+  const rewards = loopRewardsAvailable ? rewardsChoice : "creator";
 
   // Image upload state
   const fileRef = useRef<HTMLInputElement>(null);
@@ -329,45 +334,60 @@ export default function CreatePage() {
             {supportsRewardsMode && (
               <div>
                 <span className="label mb-1.5 block">Rewards mode</span>
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      {
-                        key: "loop",
-                        title: "Loop Rewards",
-                        Icon: IconRewards,
-                        desc: "The per-swap fee's holder slice streams to every holder automatically — the classic Coil loop.",
-                      },
-                      {
-                        key: "creator",
-                        title: "Creator Rewards",
-                        Icon: IconCrown,
-                        desc: "The per-swap fee's holder slice is paid straight to your wallet instead.",
-                      },
-                    ] as const
-                  ).map((opt) => (
-                    <button
-                      key={opt.key}
-                      type="button"
-                      onClick={() => setRewards(opt.key)}
-                      className={`rounded-xl border p-3 text-left transition ${
-                        rewards === opt.key
-                          ? "border-coil-500/60 bg-coil-500/10"
-                          : "border-white/10 bg-obsidian-900/60 hover:border-white/25"
-                      }`}
-                    >
-                      <div
-                        className={`flex items-center gap-1.5 text-sm font-semibold ${
-                          rewards === opt.key ? "text-coil-400" : "text-ink-2"
+                {loopRewardsAvailable ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        {
+                          key: "loop",
+                          title: "Loop Rewards",
+                          Icon: IconRewards,
+                          desc: "The per-swap fee's holder slice streams to every holder automatically — the classic Coil loop.",
+                        },
+                        {
+                          key: "creator",
+                          title: "Creator Rewards",
+                          Icon: IconCrown,
+                          desc: "The per-swap fee's holder slice is paid straight to your wallet instead.",
+                        },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setRewards(opt.key)}
+                        className={`rounded-xl border p-3 text-left transition ${
+                          rewards === opt.key
+                            ? "border-coil-500/60 bg-coil-500/10"
+                            : "border-white/10 bg-obsidian-900/60 hover:border-white/25"
                         }`}
                       >
-                        <opt.Icon size={15} />
-                        {opt.title}
-                      </div>
-                      <p className="mt-1 text-[11px] leading-relaxed text-ink-3">{opt.desc}</p>
-                    </button>
-                  ))}
-                </div>
+                        <div
+                          className={`flex items-center gap-1.5 text-sm font-semibold ${
+                            rewards === opt.key ? "text-coil-400" : "text-ink-2"
+                          }`}
+                        >
+                          <opt.Icon size={15} />
+                          {opt.title}
+                        </div>
+                        <p className="mt-1 text-[11px] leading-relaxed text-ink-3">{opt.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  /* Creator-Rewards-only chain: state it rather than showing a picker with one
+                     disabled half, which reads as something being broken. */
+                  <div className="rounded-xl border border-coil-500/40 bg-coil-500/10 p-3">
+                    <div className="flex items-center gap-1.5 text-sm font-semibold text-coil-400">
+                      <IconCrown size={15} />
+                      Creator Rewards
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-ink-3">
+                      Every launch on {chainConfig(chainId).chain.name} pays the per-swap fee&apos;s
+                      holder slice straight to your wallet. Fixed at launch, like everywhere else.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

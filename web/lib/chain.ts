@@ -147,6 +147,13 @@ export type ChainConfig = {
   explorerBase: string;
   /** DexScreener's slug, or null on chains it doesn't index (Arc). */
   dexscreenerSlug: string | null;
+  /**
+   * Whether this chain offers Loop Rewards (the holder slice streaming to every holder) alongside
+   * Creator Rewards. Where it is false, every launch is Creator Rewards and the picker is replaced
+   * by a note — the contract already takes the flag per launch, so this is purely which choices
+   * the chain offers.
+   */
+  loopRewards: boolean;
   uniswap: UniswapContracts;
 };
 
@@ -160,6 +167,7 @@ export const CHAINS: Record<number, ChainConfig> = {
     nativeUsd: { kind: "oracle", coingeckoId: "ethereum", coinbasePair: "ETH-USD" },
     explorerBase: robinhoodChain.blockExplorers.default.url,
     dexscreenerSlug: DEXSCREENER_CHAIN,
+    loopRewards: true,
     uniswap: ROBINHOOD_CONTRACTS,
   },
   // Arc mainnet: Uniswap isn't deployed there yet, so every address is env-only — bringing the
@@ -173,6 +181,8 @@ export const CHAINS: Record<number, ChainConfig> = {
     nativeUsd: { kind: "stable" },
     explorerBase: arcChain.blockExplorers.default.url,
     dexscreenerSlug: null,
+    // Arc launches are Creator Rewards only.
+    loopRewards: false,
     uniswap: {
       uniswapV2Router: optAddr(process.env.NEXT_PUBLIC_ARC_UNISWAP_V2_ROUTER),
       uniswapV2Factory: optAddr(process.env.NEXT_PUBLIC_ARC_UNISWAP_V2_FACTORY),
