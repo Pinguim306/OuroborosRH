@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function SwapPage() {
   return (
-    <div className="mx-auto max-w-lg px-4 py-12 sm:py-16">
+    <div className="mx-auto max-w-3xl px-4 py-12 sm:py-16">
       <div className="mb-8 text-center">
         <h1 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
           <span className="text-gradient">Swap</span>
@@ -19,7 +19,11 @@ export default function SwapPage() {
         </p>
       </div>
 
-      <SwapWidget />
+      {/* The widget stays narrow — a trade form reads better in one column — but the page around
+          it does not have to be, so the notes below can sit three-up instead of in a 32rem gutter. */}
+      <div className="mx-auto max-w-lg">
+        <SwapWidget />
+      </div>
 
       {/* The widget alone left most of the viewport empty. These are the three things a trader
           actually needs to know before routing an order here. */}
