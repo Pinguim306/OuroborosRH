@@ -5,7 +5,8 @@ import Link from "next/link";
 import { formatEther, parseEther, parseEventLogs } from "viem";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { copy } from "@/lib/copy";
-import { CHAIN_ID, NATIVE_SYMBOL, dexscreenerPageUrl, explorerUrl } from "@/lib/chain";
+import { chainConfig, dexscreenerPageUrl, explorerUrl } from "@/lib/chain";
+import { useSelectedChainId } from "@/lib/useSelectedChain";
 import { LIVE, CONTRACTS, launchpadAbi, COIL_LAUNCHPAD, LAUNCH_LIVE, coilLaunchpadV4Abi } from "@/lib/contracts";
 import { ProgressBar } from "@/components/ProgressBar";
 import { LaunchWidget } from "@/components/LaunchWidget";
@@ -14,6 +15,9 @@ import { IconBolt, IconCoin, IconExternal } from "@/components/Icon";
 
 export default function CreatePage() {
   const { isConnected } = useAccount();
+  // Launches go to the network the picker is on; LaunchWidget resolves the same id for the write.
+  const chainId = useSelectedChainId();
+  const NATIVE_SYMBOL = chainConfig(chainId).nativeSymbol;
   // The launchpad is v4-only: every launch goes through the Uniswap-v4 CoilHook, so its native
   // per-swap fee always feeds the $COIL buy&burn. The legacy instant-V3 path is retired, but `mode`
   // stays a union type so the (now single-branch) conditionals below remain valid.
@@ -99,7 +103,7 @@ export default function CreatePage() {
   }, [receipt]);
 
   // Null on chains DexScreener doesn't index, which hides the link there.
-  const dexUrl = dexscreenerPageUrl(newTokenAddress, CHAIN_ID);
+  const dexUrl = dexscreenerPageUrl(newTokenAddress, chainId);
 
   // Ping the Telegram announcement endpoint once the launch confirms. Fire-and-
   // forget: a failed announcement never affects the launch UX. The endpoint
@@ -220,7 +224,7 @@ export default function CreatePage() {
       : ([form.name, form.symbol, metadataURI, devBuyWei] as const);
 
     writeContract({
-      chainId: CHAIN_ID,
+      chainId: chainId,
       address: CONTRACTS.launchpad,
       abi: launchpadAbi,
       functionName: "createTokenV3",
@@ -490,7 +494,7 @@ export default function CreatePage() {
                           </a>
                         )}
                         <a
-                          href={explorerUrl("token", newTokenAddress, CHAIN_ID)}
+                          href={explorerUrl("token", newTokenAddress, chainId)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-coil-400 hover:underline"

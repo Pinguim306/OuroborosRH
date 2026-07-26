@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { CONTRACTS, launchpadAbi, feeLockerAbi } from "@/lib/contracts";
-import { CHAIN_ID } from "@/lib/chain";
+import { asSupportedChainId } from "@/lib/chain";
 import { usdFromEth } from "@/lib/format";
 import { useEthPrice } from "@/lib/usePrice";
 import type { Address, TokenMarket } from "@/lib/types";
@@ -102,7 +102,13 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
       </div>
       <button
         onClick={() =>
-          writeContract({ chainId: CHAIN_ID, address: locker, abi: feeLockerAbi, functionName: "collect", args: [positionId] })
+          writeContract({
+            chainId: asSupportedChainId(token.chainId),
+            address: locker,
+            abi: feeLockerAbi,
+            functionName: "collect",
+            args: [positionId],
+          })
         }
         disabled={busy}
         className="btn-ghost shrink-0"

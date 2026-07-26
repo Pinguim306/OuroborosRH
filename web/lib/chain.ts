@@ -86,8 +86,6 @@ export const ROBINHOOD_CONTRACTS = {
  *  `process.env[key]` reads as undefined in the browser bundle. Public defaults ship below, so
  *  nothing has to be configured for reads to work. */
 const ARC_RPC_URL = (process.env.NEXT_PUBLIC_ARC_RPC_URL ?? "").trim() || "https://5042.rpc.thirdweb.com";
-const ARC_TESTNET_RPC_URL =
-  (process.env.NEXT_PUBLIC_ARC_TESTNET_RPC_URL ?? "").trim() || "https://rpc.testnet.arc.network";
 
 /**
  * Circle's Arc — gas is paid in USDC. The EVM scales Arc's native USDC to 18 decimals (verified
@@ -107,18 +105,6 @@ export const arcChain = defineChain({
   testnet: false,
 });
 
-export const arcTestnet = defineChain({
-  id: 5042002,
-  name: "Arc Testnet",
-  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-  rpcUrls: {
-    default: { http: [ARC_TESTNET_RPC_URL] },
-  },
-  blockExplorers: {
-    default: { name: "Blockscout", url: "https://testnet.arcscan.app" },
-  },
-  testnet: true,
-});
 
 /** Optional address from env — undefined (not zero) when unset, so "not deployed here" is a
  *  distinct state from "deployed at 0x0". */
@@ -195,33 +181,13 @@ export const CHAINS: Record<number, ChainConfig> = {
       v4PoolManager: optAddr(process.env.NEXT_PUBLIC_ARC_V4_POOL_MANAGER),
     },
   },
-  [arcTestnet.id]: {
-    chain: arcTestnet,
-    shortName: "Arc Testnet",
-    accent: "#f5a524",
-    nativeSymbol: arcTestnet.nativeCurrency.symbol,
-    nativeName: "USD Coin",
-    nativeUsd: { kind: "stable" },
-    explorerBase: arcTestnet.blockExplorers.default.url,
-    dexscreenerSlug: null,
-    uniswap: {
-      uniswapV2Router: optAddr(process.env.NEXT_PUBLIC_ARC_TESTNET_UNISWAP_V2_ROUTER),
-      uniswapV2Factory: optAddr(process.env.NEXT_PUBLIC_ARC_TESTNET_UNISWAP_V2_FACTORY),
-      uniswapV3Factory: optAddr(process.env.NEXT_PUBLIC_ARC_TESTNET_UNISWAP_V3_FACTORY),
-      swapRouter02: optAddr(process.env.NEXT_PUBLIC_ARC_TESTNET_SWAP_ROUTER_02),
-      // Known deployment — built in so the chain reads with zero configuration.
-      v4PoolManager:
-        optAddr(process.env.NEXT_PUBLIC_ARC_TESTNET_V4_POOL_MANAGER) ??
-        "0x46Eb19af432954d126077E1764ef5F6A0013dE68",
-    },
-  },
 };
 
 /** The chain everything falls back to — identical to CHAIN_ID, which stays the pinned tx chain. */
 export const DEFAULT_CHAIN_ID = CHAIN_ID;
 
 /** Every chain the app knows about, default first (wagmi treats chains[0] as the fallback). */
-export const SUPPORTED_CHAINS = [robinhoodChain, arcChain, arcTestnet] as const;
+export const SUPPORTED_CHAINS = [robinhoodChain, arcChain] as const;
 
 /** Narrow chain id — what wagmi's `switchChain`/`chainId` options accept. */
 export type SupportedChainId = (typeof SUPPORTED_CHAINS)[number]["id"];
@@ -237,6 +203,19 @@ export const CHAIN_PARAM = "chain";
 export function parseChainParam(raw: string | null | undefined): SupportedChainId {
   const id = Number(raw);
   return raw && Number.isInteger(id) && CHAINS[id] ? (id as SupportedChainId) : DEFAULT_CHAIN_ID;
+}
+
+/**
+ * Narrow a loose chain id — a token's `chainId`, a cached row, an API field — to one this build
+ * actually supports, falling back to the default chain.
+ *
+ * wagmi's `chainId` option is typed to the registered union, so this is what lets a token carry its
+ * own chain into a read or a write. It is also the guard for ids that used to be supported and no
+ * longer are: a coin persisted with a retired chain's id resolves to the default chain instead of
+ * being handed to wagmi, which has no transport for it and would throw at call time.
+ */
+export function asSupportedChainId(id?: number): SupportedChainId {
+  return id != null && CHAINS[id] ? (id as SupportedChainId) : DEFAULT_CHAIN_ID;
 }
 
 export function chainParam(chainId?: number): string {

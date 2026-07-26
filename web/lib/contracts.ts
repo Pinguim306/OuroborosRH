@@ -1,5 +1,5 @@
 import { encodeAbiParameters, keccak256 } from "viem";
-import { arcChain, arcTestnet, DEFAULT_CHAIN_ID } from "./chain";
+import { arcChain, DEFAULT_CHAIN_ID } from "./chain";
 import type { Address } from "./types";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
@@ -105,7 +105,7 @@ function coilContractsFrom(env: {
  * Per-chain Coil deployments. ENV CONVENTION: the default chain keeps the unprefixed
  * NEXT_PUBLIC_* names it has always used (nothing to re-configure); every other chain takes the
  * same name behind a chain prefix — NEXT_PUBLIC_<PREFIX>_<NAME>, e.g.
- * NEXT_PUBLIC_ARC_TESTNET_COIL_LAUNCHPAD. Prefixes: ARC (5042), ARC_TESTNET (5042002).
+ * NEXT_PUBLIC_ARC_COIL_LAUNCHPAD. Prefix: ARC (5042).
  * Next.js inlines NEXT_PUBLIC_* only at *literal* `process.env.X` sites, so every var is spelled
  * out below — a computed `process.env[key]` reads as undefined in the browser bundle.
  */
@@ -133,20 +133,6 @@ const COIL_CONTRACTS: Record<number, CoilContracts> = {
     coilToken: process.env.NEXT_PUBLIC_ARC_COIL_TOKEN,
     hookVersion: process.env.NEXT_PUBLIC_ARC_COIL_HOOK_VERSION,
     defaultHookVersion: LATEST_HOOK_VERSION,
-  }),
-  [arcTestnet.id]: coilContractsFrom({
-    launchpadAddress: process.env.NEXT_PUBLIC_ARC_TESTNET_LAUNCHPAD_ADDRESS,
-    coilSwapRouter: process.env.NEXT_PUBLIC_ARC_TESTNET_COIL_SWAP_ROUTER,
-    coilSwapRouterV3: process.env.NEXT_PUBLIC_ARC_TESTNET_COIL_SWAP_ROUTER_V3,
-    // Known deployment — built in so the chain reads with zero configuration.
-    coilLaunchpad:
-      (process.env.NEXT_PUBLIC_ARC_TESTNET_COIL_LAUNCHPAD ?? "").trim() ||
-      "0x652B2dC7D9EFcc3B3Af9a71cFeaC8dDf6F06bF13",
-    coilBurner: process.env.NEXT_PUBLIC_ARC_TESTNET_COIL_BURNER,
-    coilToken: process.env.NEXT_PUBLIC_ARC_TESTNET_COIL_TOKEN,
-    // First launchpad carrying CoilHook v2 — its ARCT token is already 0x2088.
-    hookVersion: process.env.NEXT_PUBLIC_ARC_TESTNET_COIL_HOOK_VERSION,
-    defaultHookVersion: 2,
   }),
 };
 
