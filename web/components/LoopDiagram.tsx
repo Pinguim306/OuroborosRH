@@ -27,7 +27,6 @@ export function LoopDiagram() {
   const cx = 160;
   const cy = 160;
   const r = 110;
-  const circumference = 2 * Math.PI * r;
 
   return (
     <div className="relative mx-auto aspect-square w-full max-w-sm">
@@ -51,17 +50,27 @@ export function LoopDiagram() {
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="url(#coil-ring)" strokeWidth="2" opacity="0.35" />
         <circle cx={cx} cy={cy} r={r - 30} fill="none" stroke={palette.coil400} strokeWidth="1" opacity="0.1" />
 
-        {/* The spark: one short arc chasing the ring forever. `travel` shifts the dash offset, so
-            nothing actually rotates and the nodes stay upright. Hidden under reduced-motion. */}
+        {/*
+          The spark: one short arc chasing the ring forever. `travel` shifts the dash offset, so
+          nothing actually rotates and the nodes stay upright. Hidden under reduced-motion.
+
+          `pathLength={100}` is what makes the loop seamless. A dash animation only reads as
+          continuous when the offset travels exactly one dash PERIOD — anything else snaps back at
+          the end of each iteration. The period here is the circumference (~691 units), but the
+          keyframe lives in the Tailwind config and cannot know the radius, so the two could never
+          agree on a number. Normalising the path to 100 units moves the dash maths into a fixed
+          scale both sides can share: the pattern below sums to 100, and `travel` runs to -100.
+        */}
         <circle
           cx={cx}
           cy={cy}
           r={r}
+          pathLength={100}
           fill="none"
           stroke={palette.spark}
           strokeWidth="3"
           strokeLinecap="round"
-          strokeDasharray={`60 ${circumference - 60}`}
+          strokeDasharray="9 91"
           className="animate-travel motion-reduce:hidden"
           style={{ transformOrigin: "center", transform: "rotate(-90deg)" }}
         />

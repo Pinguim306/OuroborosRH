@@ -91,7 +91,10 @@ const config: Config = {
         },
         dash: { to: { strokeDashoffset: "0" } },
         // The spark running the length of the coil — used by the loop diagram.
-        travel: { to: { strokeDashoffset: "-240" } },
+        // -100 is one full dash period against a `pathLength={100}` path, which is what makes the
+        // loop seamless: end one iteration exactly where the next begins. A raw distance here
+        // (it used to be -240) can only match a specific radius, and matched none of them.
+        travel: { to: { strokeDashoffset: "-100" } },
       },
       animation: {
         "spin-slow": "spin-slow 24s linear infinite",
