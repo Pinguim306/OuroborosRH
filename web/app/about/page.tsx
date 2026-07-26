@@ -30,24 +30,24 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Season points callout */}
+      {/* Multi-chain callout */}
       <Link
-        href="/points"
+        href="/create"
         className="group mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-venom-500/25 bg-gradient-to-r from-venom-500/10 to-transparent px-5 py-4 transition hover:border-venom-500/50"
       >
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🐍</span>
+          <span className="text-2xl">🌐</span>
           <div>
             <div className="text-sm font-bold text-white">
-              Season 1 is live — every trade earns <span className="text-venom-400">Coil Points</span>
+              Coil is now <span className="text-venom-400">multi-chain</span>
             </div>
             <div className="mt-0.5 text-xs text-white/45">
-              Trade, launch, ape early. Scored 100% from on-chain activity.
+              The same locked-liquidity engine, on every chain we support. Pick your network when you launch.
             </div>
           </div>
         </div>
         <span className="text-sm font-semibold text-venom-400 transition group-hover:translate-x-0.5">
-          View the board →
+          Launch a coin →
         </span>
       </Link>
 

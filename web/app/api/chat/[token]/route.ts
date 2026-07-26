@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql, dbConfigured, ensureSchema } from "@/lib/db";
 import { authConfigured, currentAddress } from "@/lib/authServer";
+import { CHAIN_PARAM, parseChainParam } from "@/lib/chain";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,11 @@ const MAX_BODY = 500;
 const RATE_MS = 3000; // one message per 3s per wallet
 const NO_STORE = { "Cache-Control": "no-store, max-age=0" };
 
+/** Which chain's room this request is for. `?chain=<id>` is the site-wide convention and optional
+ *  — absent or unknown ids fall back to the default chain, so clients that don't send it keep
+ *  hitting the room they always have. */
+const chainIdOf = (url: URL): number => parseChainParam(url.searchParams.get(CHAIN_PARAM));
+
 /** Recent messages for a token's chat room. `?after=<id>` returns only newer ones (for polling). */
 export async function GET(req: Request, { params }: { params: { token: string } }) {
   if (!dbConfigured || !TOKEN_RE.test(params.token)) {
@@ -18,12 +24,14 @@ export async function GET(req: Request, { params }: { params: { token: string } 
   }
   await ensureSchema();
   const token = params.token.toLowerCase();
-  const after = Number(new URL(req.url).searchParams.get("after") ?? "0") || 0;
+  const url = new URL(req.url);
+  const chainId = chainIdOf(url);
+  const after = Number(url.searchParams.get("after") ?? "0") || 0;
   const { rows } = await sql`
     select m.id, m.address, m.body, m.created_at, p.username, p.avatar_url
     from messages m
     left join profiles p on p.address = m.address
-    where m.token = ${token} and m.id > ${after}
+    where m.chain_id = ${chainId} and m.token = ${token} and m.id > ${after}
     order by m.id desc
     limit 50
   `;
@@ -51,7 +59,9 @@ export async function POST(req: Request, { params }: { params: { token: string }
 
   await ensureSchema();
   const token = params.token.toLowerCase();
+  const chainId = chainIdOf(new URL(req.url));
 
+  // Rate limit is per wallet, not per room — deliberately spans chains.
   const last = await sql`select created_at from messages where address = ${address} order by id desc limit 1`;
   if (last.rows[0]) {
     const dt = Date.now() - new Date(last.rows[0].created_at as string).getTime();
@@ -59,7 +69,7 @@ export async function POST(req: Request, { params }: { params: { token: string }
   }
 
   const { rows } = await sql`
-    insert into messages (token, address, body) values (${token}, ${address}, ${body})
+    insert into messages (chain_id, token, address, body) values (${chainId}, ${token}, ${address}, ${body})
     returning id, address, body, created_at
   `;
   const prof = await sql`select username, avatar_url from profiles where address = ${address} limit 1`;

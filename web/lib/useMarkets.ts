@@ -7,6 +7,7 @@ import {
   CONTRACTS,
   LAUNCHPADS,
   LIVE,
+  coilContracts,
   launchpadAbi,
   curveAbi,
   tokenAbi,
@@ -21,7 +22,7 @@ import {
   v4PriceFromPackedSlot0,
   type CoilMarket,
 } from "./contracts";
-import { ROBINHOOD_CONTRACTS } from "./chain";
+import { CHAIN_ID, DEFAULT_CHAIN_ID, v4PoolManagerOf, type SupportedChainId } from "./chain";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -97,10 +98,14 @@ function v3PriceFromSlot0(slot0: unknown, tokenIs0: boolean): number {
 
 /* v4 pools live inside the singleton PoolManager — pricing comes from an extsload read of the
  * pool's slot0 word; the slot math + decoding live in lib/contracts (shared with the server API). */
-const V4_POOL_MANAGER = ROBINHOOD_CONTRACTS.v4PoolManager as Address;
-
 /** Map a CoilLaunchpad market + its live reads onto the shared TokenMarket shape. */
-function fromV4Market(m: CoilMarket, supply: bigint, priceEth: number): TokenMarket {
+function fromV4Market(
+  m: CoilMarket,
+  supply: bigint,
+  priceEth: number,
+  chainId: number,
+  launchpad: Address,
+): TokenMarket {
   const tuple: MarketTuple = {
     token: m.token,
     curve: m.token, // v4 has no separate curve; the token IS the pool/hook
@@ -110,10 +115,10 @@ function fromV4Market(m: CoilMarket, supply: bigint, priceEth: number): TokenMar
     metadataURI: m.metadataURI,
     createdAt: m.createdAt,
   };
-  const t = mapToken(tuple, 0n, 0n, false, 0n, 0n, supply, undefined);
+  const t = mapToken(tuple, 0n, 0n, false, 0n, 0n, supply, chainId, undefined);
   t.mode = "v4";
   t.creatorFees = m.creatorRewards;
-  t.launchpad = COIL_LAUNCHPAD;
+  t.launchpad = launchpad;
   t.priceRh = priceEth;
   t.marketCapRh = priceEth * num(supply);
   return t;
@@ -127,6 +132,7 @@ function mapToken(
   realNative: bigint,
   rewardsPool: bigint,
   supply: bigint,
+  chainId: number,
   pair?: Address,
 ): TokenMarket {
   const priceRh = num(price);
@@ -136,6 +142,7 @@ function mapToken(
     curve: m.curve,
     rewards: m.token, // the token is the dividend vault
     pair,
+    chainId, // stamped by the reader, so downstream links/keys never have to guess
     name: m.name,
     symbol: m.symbol,
     description: m.metadataURI.startsWith("http") ? "" : "",
@@ -183,6 +190,7 @@ function fromStats(
   launchpad: Address,
   r: readonly { result?: unknown }[],
   b: number,
+  chainId: number,
   weth?: Address,
 ): TokenMarket {
   const t = mapToken(
@@ -193,6 +201,7 @@ function fromStats(
     bn(r[b + 3]?.result),
     bn(r[b + 4]?.result),
     bn(r[b + 5]?.result),
+    chainId,
     asAddr(r[b + 6]?.result),
   );
   t.launchpad = launchpad;
@@ -211,21 +220,36 @@ function fromStats(
   return t;
 }
 
-/** Read all markets from every configured launchpad + their on-chain stats. */
-export function useLiveMarkets(): { tokens: TokenMarket[]; isLoading: boolean } {
+/** Read all markets from every configured launchpad + their on-chain stats, on ONE chain.
+ *  Every read is pinned to `chainId` so the listings can never mix pools from two chains. */
+export function useLiveMarkets(chainId: SupportedChainId = DEFAULT_CHAIN_ID): {
+  tokens: TokenMarket[];
+  isLoading: boolean;
+} {
+  const coil = coilContracts(chainId);
+  const { launchpads, launchpad, live, coilLaunchpad, launchLive } = coil;
+  const v4PoolManager = v4PoolManagerOf(chainId);
+
   const marketsQ = useReadContracts({
-    contracts: LAUNCHPADS.map(
+    contracts: launchpads.map(
       (lp) =>
-        ({ address: lp, abi: launchpadAbi, functionName: "getMarkets", args: [0n, 50n] }) as const,
+        ({
+          address: lp,
+          abi: launchpadAbi,
+          functionName: "getMarkets",
+          args: [0n, 50n],
+          chainId,
+        }) as const,
     ),
-    query: { enabled: LIVE },
+    query: { enabled: live },
   });
 
   const wethQ = useReadContract({
-    address: CONTRACTS.launchpad,
+    address: launchpad,
     abi: launchpadAbi,
     functionName: "weth",
-    query: { enabled: LIVE },
+    chainId,
+    query: { enabled: live },
   });
   const weth = asAddr(wethQ.data);
 
@@ -234,37 +258,40 @@ export function useLiveMarkets(): { tokens: TokenMarket[]; isLoading: boolean } 
     const out: { m: MarketTuple; launchpad: Address }[] = [];
     (marketsQ.data ?? []).forEach((res, i) => {
       const page = (res?.result ?? []) as readonly MarketTuple[];
-      for (const m of page) out.push({ m, launchpad: LAUNCHPADS[i] });
+      for (const m of page) out.push({ m, launchpad: launchpads[i] });
     });
     out.sort((a, b) => Number(b.m.createdAt) - Number(a.m.createdAt));
     return out;
-  }, [marketsQ.data]);
+  }, [marketsQ.data, launchpads]);
 
   const contracts = useMemo(
-    () => markets.flatMap(({ m, launchpad }) => statsCalls(m, launchpad)),
-    [markets],
+    () => markets.flatMap(({ m, launchpad: lp }) => statsCalls(m, lp).map((c) => ({ ...c, chainId }))),
+    [markets, chainId],
   );
 
   const statsQ = useReadContracts({
     contracts,
-    query: { enabled: LIVE && markets.length > 0 },
+    query: { enabled: live && markets.length > 0 },
   });
 
   const v3Tokens = useMemo(() => {
     if (!statsQ.data) return [];
     const r = statsQ.data;
     return markets
-      .map(({ m, launchpad }, i) => fromStats(m, launchpad, r, i * STATS_PER_MARKET, weth))
+      .map(({ m, launchpad: lp }, i) => fromStats(m, lp, r, i * STATS_PER_MARKET, chainId, weth))
       .filter((t) => !isHidden(t));
-  }, [markets, statsQ.data, weth]);
+  }, [markets, statsQ.data, weth, chainId]);
 
   // v4 markets live in the CoilLaunchpad — a separate factory the reads above can't see.
   const v4MarketsQ = useReadContract({
-    address: COIL_LAUNCHPAD,
+    address: coilLaunchpad,
     abi: coilLaunchpadV4Abi,
     functionName: "getMarkets",
+    // Gated on the V4 launchpad alone, not on `live`: the curve launchpad is a Robinhood-Chain
+    // fact, and a v4-only chain (Arc) would otherwise read nothing.
     args: [0n, 50n],
-    query: { enabled: LIVE && LAUNCH_LIVE },
+    chainId,
+    query: { enabled: launchLive },
   });
   const v4Markets = useMemo(
     () =>
@@ -278,16 +305,17 @@ export function useLiveMarkets(): { tokens: TokenMarket[]; isLoading: boolean } 
     contracts: v4Markets.flatMap(
       (m) =>
         [
-          { address: m.token, abi: tokenAbi, functionName: "totalSupply" },
+          { address: m.token, abi: tokenAbi, functionName: "totalSupply", chainId },
           {
-            address: V4_POOL_MANAGER,
+            address: v4PoolManager,
             abi: v4PoolManagerAbi,
             functionName: "extsload",
             args: [coilSlot0Slot(m.token)],
+            chainId,
           },
         ] as const,
     ),
-    query: { enabled: LIVE && v4Markets.length > 0 },
+    query: { enabled: v4Markets.length > 0 && !!v4PoolManager },
   });
 
   const v4Tokens = useMemo(() => {
@@ -295,10 +323,16 @@ export function useLiveMarkets(): { tokens: TokenMarket[]; isLoading: boolean } 
     if (!r) return [] as TokenMarket[];
     return v4Markets
       .map((m, i) =>
-        fromV4Market(m, bn(r[i * 2]?.result), v4PriceFromPackedSlot0(r[i * 2 + 1]?.result)),
+        fromV4Market(
+          m,
+          bn(r[i * 2]?.result),
+          v4PriceFromPackedSlot0(r[i * 2 + 1]?.result),
+          chainId,
+          coilLaunchpad,
+        ),
       )
       .filter((t) => !isHidden(t));
-  }, [v4Markets, v4StatsQ.data]);
+  }, [v4Markets, v4StatsQ.data, chainId, coilLaunchpad]);
 
   const tokens = useMemo(
     () => [...v3Tokens, ...v4Tokens].sort((a, b) => b.createdAt - a.createdAt),
@@ -384,7 +418,9 @@ export function useLiveToken(tokenAddress?: Address): {
 
   const mapped = useMemo(() => {
     if (!tuple || !found || !statsQ.data) return undefined;
-    return fromStats(tuple, found.launchpad, statsQ.data, 0, weth);
+    // Curve/v3 markets only exist on the default chain (that topology is Robinhood-Chain's);
+    // every other chain is v4-only and resolves through useLiveTokenV4.
+    return fromStats(tuple, found.launchpad, statsQ.data, 0, DEFAULT_CHAIN_ID, weth);
   }, [tuple, found, statsQ.data, weth]);
 
   return {
@@ -401,30 +437,38 @@ export function useLiveToken(tokenAddress?: Address): {
  * read straight from the pool's slot0 in the v4 PoolManager (a plain view call — reliable even
  * before the pool has traded); if the read fails, they show 0 rather than breaking the page.
  */
-export function useLiveTokenV4(tokenAddress?: Address): {
+export function useLiveTokenV4(
+  tokenAddress?: Address,
+  chainId: SupportedChainId = DEFAULT_CHAIN_ID,
+): {
   token: TokenMarket | undefined;
   isLoading: boolean;
   notFound: boolean;
 } {
   const zero = "0x0000000000000000000000000000000000000000" as Address;
-  const isV4 = !!tokenAddress && isCoilToken(tokenAddress);
-  const enabled = LIVE && LAUNCH_LIVE && isV4;
+  const { coilLaunchpad, launchLive } = coilContracts(chainId);
+  const v4PoolManager = v4PoolManagerOf(chainId);
+  const isV4 = !!tokenAddress && isCoilToken(tokenAddress, chainId);
+  // Not gated on the curve launchpad: a v4-only chain (Arc) has none.
+  const enabled = launchLive && isV4;
 
   const idxQ = useReadContract({
-    address: COIL_LAUNCHPAD,
+    address: coilLaunchpad,
     abi: coilLaunchpadV4Abi,
     functionName: "marketIndexByToken",
     args: [tokenAddress ?? zero],
+    chainId,
     query: { enabled },
   });
   const idx = bn(idxQ.data);
   const found = idx > 0n;
 
   const marketQ = useReadContract({
-    address: COIL_LAUNCHPAD,
+    address: coilLaunchpad,
     abi: coilLaunchpadV4Abi,
     functionName: "markets",
     args: [found ? idx - 1n : 0n],
+    chainId,
     query: { enabled: enabled && found },
   });
   // markets(i) => (token, creator, creatorRewards, name, symbol, metadataURI, createdAt)
@@ -436,16 +480,18 @@ export function useLiveTokenV4(tokenAddress?: Address): {
     address: tokenAddress,
     abi: tokenAbi,
     functionName: "totalSupply",
+    chainId,
     query: { enabled: enabled && found },
   });
 
   // Spot price straight from the pool's slot0 word in the PoolManager.
   const slot0Q = useReadContract({
-    address: V4_POOL_MANAGER,
+    address: v4PoolManager,
     abi: v4PoolManagerAbi,
     functionName: "extsload",
     args: [tokenAddress ? coilSlot0Slot(tokenAddress) : (`0x${"0".repeat(64)}` as `0x${string}`)],
-    query: { enabled: enabled && found },
+    chainId,
+    query: { enabled: enabled && found && !!v4PoolManager },
   });
 
   const token = useMemo(() => {
@@ -462,8 +508,10 @@ export function useLiveTokenV4(tokenAddress?: Address): {
       },
       bn(supplyQ.data),
       v4PriceFromPackedSlot0(slot0Q.data),
+      chainId,
+      coilLaunchpad,
     );
-  }, [m, supplyQ.data, slot0Q.data]);
+  }, [m, supplyQ.data, slot0Q.data, chainId, coilLaunchpad]);
 
   return {
     token,

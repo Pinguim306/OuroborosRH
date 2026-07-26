@@ -1,44 +1,198 @@
 import { encodeAbiParameters, keccak256 } from "viem";
+import { arcChain, arcTestnet, DEFAULT_CHAIN_ID } from "./chain";
 import type { Address } from "./types";
 
-/**
- * Deployed contract addresses. NEXT_PUBLIC_LAUNCHPAD_ADDRESS accepts a comma-
- * separated list: the FIRST address is the primary launchpad (new launches go
- * there); the rest are legacy launchpads whose markets are still read and merged
- * into the listings, so upgrading the contract never wipes the site's history.
- * While unset/zero the app runs entirely on the mock-data layer.
- */
-export const LAUNCHPADS: Address[] = (process.env.NEXT_PUBLIC_LAUNCHPAD_ADDRESS ?? "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter((s) => s.startsWith("0x") && s.length === 42) as Address[];
-
-export const CONTRACTS = {
-  launchpad: (LAUNCHPADS[0] ?? "0x0000000000000000000000000000000000000000") as Address,
-};
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
 
 export const isDeployed = (a: Address) =>
   a !== "0x0000000000000000000000000000000000000000";
 
-export const LIVE = isDeployed(CONTRACTS.launchpad);
+export const HOOK_FLAG_MASK = 0x3fffn; // low 14 bits
+
+/**
+ * CoilHook permission bits as encoded in the low 14 bits of the hook address, indexed by hook
+ * VERSION - 1. v1 = BEFORE_SWAP (1<<7) | BEFORE_SWAP_RETURNS_DELTA (1<<3) = 0x88; v2 adds
+ * BEFORE_INITIALIZE (1<<13) = 0x2088. The bits are not cosmetic: CoilHook's constructor compares
+ * every permission bit of its own address for EQUALITY against `getHookPermissions()` and reverts
+ * otherwise, so a salt mined for the wrong version makes `createTokenV4` revert on-chain.
+ */
+export const HOOK_FLAGS_BY_VERSION = [0x88n, 0x2088n] as const;
+export type HookVersion = 1 | 2;
+
+const LATEST_HOOK_VERSION: HookVersion = 2;
+
+/** The Coil deployment on one chain. Every address is zero while unset — `isDeployed` gates the UI. */
+export type CoilContracts = {
+  /** FIRST is the primary launchpad (new launches go there); the rest are legacy launchpads whose
+   *  markets are still read and merged into the listings, so upgrading never wipes the history. */
+  launchpads: Address[];
+  launchpad: Address;
+  /** The CURVE launchpad is deployed here. Robinhood Chain's topology (curve primary, v4 added
+   *  later) — a v4-only chain has this false, so gate chain-aware UI on `anyLive` instead. */
+  live: boolean;
+  /** Any Coil launchpad at all — curve or v4. The real "this chain has a Coil deployment" test. */
+  anyLive: boolean;
+  coilSwapRouter: Address;
+  swapLive: boolean;
+  coilSwapRouterV3: Address;
+  v3FeeLive: boolean;
+  coilLaunchpad: Address;
+  launchLive: boolean;
+  coilBurner: Address;
+  burnerLive: boolean;
+  coilToken: Address;
+  /** CoilHook version the chain's CURRENTLY DEPLOYED CoilLaunchpad embeds. Bump it (via env) in the
+   *  same change that redeploys the launchpad — never ahead of it. */
+  hookVersion: HookVersion;
+  /** Flags a NEW launch on this chain must mine for — the deployed launchpad's hook, exactly. */
+  hookFlagsMine: bigint;
+  /** Flags a Coil token on this chain can carry: every version up to and including the deployed
+   *  one, because upgrading the launchpad doesn't move the tokens it already launched. */
+  hookFlagsKnown: readonly bigint[];
+};
+
+const addr = (v?: string): Address => ((v ?? "").trim() || ZERO_ADDRESS) as Address;
+
+const addrList = (v?: string): Address[] =>
+  (v ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.startsWith("0x") && s.length === 42) as Address[];
+
+const hookVersionOf = (v: string | undefined, fallback: HookVersion): HookVersion => {
+  const n = Number((v ?? "").trim());
+  return n === 1 || n === 2 ? n : fallback;
+};
+
+function coilContractsFrom(env: {
+  launchpadAddress?: string;
+  coilSwapRouter?: string;
+  coilSwapRouterV3?: string;
+  coilLaunchpad?: string;
+  coilBurner?: string;
+  coilToken?: string;
+  hookVersion?: string;
+  defaultHookVersion: HookVersion;
+}): CoilContracts {
+  const launchpads = addrList(env.launchpadAddress);
+  const launchpad = launchpads[0] ?? ZERO_ADDRESS;
+  const coilSwapRouter = addr(env.coilSwapRouter);
+  const coilSwapRouterV3 = addr(env.coilSwapRouterV3);
+  const coilLaunchpad = addr(env.coilLaunchpad);
+  const coilBurner = addr(env.coilBurner);
+  const hookVersion = hookVersionOf(env.hookVersion, env.defaultHookVersion);
+  return {
+    launchpads,
+    launchpad,
+    live: isDeployed(launchpad),
+    anyLive: isDeployed(launchpad) || isDeployed(coilLaunchpad),
+    coilSwapRouter,
+    swapLive: isDeployed(coilSwapRouter),
+    coilSwapRouterV3,
+    v3FeeLive: isDeployed(coilSwapRouterV3),
+    coilLaunchpad,
+    launchLive: isDeployed(coilLaunchpad),
+    coilBurner,
+    burnerLive: isDeployed(coilBurner),
+    coilToken: addr(env.coilToken),
+    hookVersion,
+    hookFlagsMine: HOOK_FLAGS_BY_VERSION[hookVersion - 1],
+    hookFlagsKnown: HOOK_FLAGS_BY_VERSION.slice(0, hookVersion),
+  };
+}
+
+/**
+ * Per-chain Coil deployments. ENV CONVENTION: the default chain keeps the unprefixed
+ * NEXT_PUBLIC_* names it has always used (nothing to re-configure); every other chain takes the
+ * same name behind a chain prefix — NEXT_PUBLIC_<PREFIX>_<NAME>, e.g.
+ * NEXT_PUBLIC_ARC_TESTNET_COIL_LAUNCHPAD. Prefixes: ARC (5042), ARC_TESTNET (5042002).
+ * Next.js inlines NEXT_PUBLIC_* only at *literal* `process.env.X` sites, so every var is spelled
+ * out below — a computed `process.env[key]` reads as undefined in the browser bundle.
+ */
+const COIL_CONTRACTS: Record<number, CoilContracts> = {
+  [DEFAULT_CHAIN_ID]: coilContractsFrom({
+    launchpadAddress: process.env.NEXT_PUBLIC_LAUNCHPAD_ADDRESS,
+    coilSwapRouter: process.env.NEXT_PUBLIC_COIL_SWAP_ROUTER,
+    coilSwapRouterV3: process.env.NEXT_PUBLIC_COIL_SWAP_ROUTER_V3,
+    coilLaunchpad: process.env.NEXT_PUBLIC_COIL_LAUNCHPAD,
+    coilBurner: process.env.NEXT_PUBLIC_COIL_BURNER,
+    coilToken: process.env.NEXT_PUBLIC_COIL_TOKEN,
+    // The live launchpad still embeds CoilHook v1 (every token on this chain is 0x88). Flip to 2
+    // with NEXT_PUBLIC_COIL_HOOK_VERSION *after* the v2 launchpad is deployed here — the web
+    // change must never lead the contract, or mined salts start reverting createTokenV4.
+    hookVersion: process.env.NEXT_PUBLIC_COIL_HOOK_VERSION,
+    defaultHookVersion: 1,
+  }),
+  // Arc mainnet: nothing deployed yet — env-only until it is.
+  [arcChain.id]: coilContractsFrom({
+    launchpadAddress: process.env.NEXT_PUBLIC_ARC_LAUNCHPAD_ADDRESS,
+    coilSwapRouter: process.env.NEXT_PUBLIC_ARC_COIL_SWAP_ROUTER,
+    coilSwapRouterV3: process.env.NEXT_PUBLIC_ARC_COIL_SWAP_ROUTER_V3,
+    coilLaunchpad: process.env.NEXT_PUBLIC_ARC_COIL_LAUNCHPAD,
+    coilBurner: process.env.NEXT_PUBLIC_ARC_COIL_BURNER,
+    coilToken: process.env.NEXT_PUBLIC_ARC_COIL_TOKEN,
+    hookVersion: process.env.NEXT_PUBLIC_ARC_COIL_HOOK_VERSION,
+    defaultHookVersion: LATEST_HOOK_VERSION,
+  }),
+  [arcTestnet.id]: coilContractsFrom({
+    launchpadAddress: process.env.NEXT_PUBLIC_ARC_TESTNET_LAUNCHPAD_ADDRESS,
+    coilSwapRouter: process.env.NEXT_PUBLIC_ARC_TESTNET_COIL_SWAP_ROUTER,
+    coilSwapRouterV3: process.env.NEXT_PUBLIC_ARC_TESTNET_COIL_SWAP_ROUTER_V3,
+    // Known deployment — built in so the chain reads with zero configuration.
+    coilLaunchpad:
+      (process.env.NEXT_PUBLIC_ARC_TESTNET_COIL_LAUNCHPAD ?? "").trim() ||
+      "0x652B2dC7D9EFcc3B3Af9a71cFeaC8dDf6F06bF13",
+    coilBurner: process.env.NEXT_PUBLIC_ARC_TESTNET_COIL_BURNER,
+    coilToken: process.env.NEXT_PUBLIC_ARC_TESTNET_COIL_TOKEN,
+    // First launchpad carrying CoilHook v2 — its ARCT token is already 0x2088.
+    hookVersion: process.env.NEXT_PUBLIC_ARC_TESTNET_COIL_HOOK_VERSION,
+    defaultHookVersion: 2,
+  }),
+};
+
+/** Coil deployment for a chain id; unknown/omitted ids resolve to the default chain. */
+export function coilContracts(chainId?: number): CoilContracts {
+  return (chainId != null ? COIL_CONTRACTS[chainId] : undefined) ?? COIL_CONTRACTS[DEFAULT_CHAIN_ID];
+}
+
+const DEFAULT_COIL = COIL_CONTRACTS[DEFAULT_CHAIN_ID];
+
+/**
+ * Deployed contract addresses on the DEFAULT chain. NEXT_PUBLIC_LAUNCHPAD_ADDRESS accepts a comma-
+ * separated list: the FIRST address is the primary launchpad (new launches go there); the rest are
+ * legacy launchpads whose markets are still read and merged into the listings, so upgrading the
+ * contract never wipes the site's history. While unset/zero the app runs entirely on the mock-data
+ * layer. Everything below is the default chain's slice of `coilContracts()` — chain-aware callers
+ * should take the chain id and go through that instead.
+ */
+export const LAUNCHPADS: Address[] = DEFAULT_COIL.launchpads;
+
+export const CONTRACTS = {
+  launchpad: DEFAULT_COIL.launchpad,
+};
+
+export const LIVE = DEFAULT_COIL.live;
+
+/** "This chain has a Coil deployment at all" — curve launchpad OR v4 launchpad. `LIVE` alone means
+ *  the CURVE launchpad, which is a Robinhood-Chain fact: a v4-only chain would read as not-live and
+ *  fall back to mock data. Use this for the mock-vs-live switch; keep `LIVE` for curve-only paths. */
+export const ANY_LIVE = DEFAULT_COIL.anyLive;
 
 /**
  * The v4 Swap tab. `NEXT_PUBLIC_COIL_SWAP_ROUTER` is the deployed CoilSwapRouter; while unset the
  * Swap tab shows a "not live yet" state. Coil (v4) tokens are the hook itself, so their pool is
  * fully determined by the token address — see `coilPoolKey`.
  */
-export const COIL_SWAP_ROUTER = ((process.env.NEXT_PUBLIC_COIL_SWAP_ROUTER ?? "").trim() ||
-  "0x0000000000000000000000000000000000000000") as Address;
+export const COIL_SWAP_ROUTER = DEFAULT_COIL.coilSwapRouter;
 
-export const SWAP_LIVE = isDeployed(COIL_SWAP_ROUTER);
+export const SWAP_LIVE = DEFAULT_COIL.swapLive;
 
 /** The v3 interface-fee wrapper (CoilSwapRouterV3). When set, non-Coil (v3) tokens route through
  *  it so the interface fee is charged on any token; otherwise they route through SwapRouter02
  *  directly (no fee). */
-export const COIL_SWAP_ROUTER_V3 = ((process.env.NEXT_PUBLIC_COIL_SWAP_ROUTER_V3 ?? "").trim() ||
-  "0x0000000000000000000000000000000000000000") as Address;
+export const COIL_SWAP_ROUTER_V3 = DEFAULT_COIL.coilSwapRouterV3;
 
-export const V3_FEE_LIVE = isDeployed(COIL_SWAP_ROUTER_V3);
+export const V3_FEE_LIVE = DEFAULT_COIL.v3FeeLive;
 
 export const coilSwapRouterV3Abi = [
   {
@@ -270,10 +424,9 @@ export const coilSwapRouterAbi = [
  * The v4 launch factory (CoilLaunchpad). `NEXT_PUBLIC_COIL_LAUNCHPAD` is the deployed address;
  * while unset the browser launch flow shows a "not live yet" state.
  */
-export const COIL_LAUNCHPAD = ((process.env.NEXT_PUBLIC_COIL_LAUNCHPAD ?? "").trim() ||
-  "0x0000000000000000000000000000000000000000") as Address;
+export const COIL_LAUNCHPAD = DEFAULT_COIL.coilLaunchpad;
 
-export const LAUNCH_LIVE = isDeployed(COIL_LAUNCHPAD);
+export const LAUNCH_LIVE = DEFAULT_COIL.launchLive;
 
 /**
  * The $COIL buyback & burn. `NEXT_PUBLIC_COIL_BURNER` is the deployed CoilBuybackBurner (it
@@ -281,12 +434,10 @@ export const LAUNCH_LIVE = isDeployed(COIL_LAUNCHPAD);
  * `NEXT_PUBLIC_COIL_TOKEN` is the official $COIL token, used to link the burn stats to its page.
  * While the burner is unset the burn ticker simply doesn't render.
  */
-export const COIL_BURNER = ((process.env.NEXT_PUBLIC_COIL_BURNER ?? "").trim() ||
-  "0x0000000000000000000000000000000000000000") as Address;
-export const BURNER_LIVE = isDeployed(COIL_BURNER);
+export const COIL_BURNER = DEFAULT_COIL.coilBurner;
+export const BURNER_LIVE = DEFAULT_COIL.burnerLive;
 
-export const COIL_TOKEN = ((process.env.NEXT_PUBLIC_COIL_TOKEN ?? "").trim() ||
-  "0x0000000000000000000000000000000000000000") as Address;
+export const COIL_TOKEN = DEFAULT_COIL.coilToken;
 
 export const coilBurnerAbi = [
   { type: "function", name: "coil", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
@@ -305,20 +456,26 @@ export const coilBurnerAbi = [
   },
 ] as const;
 
-/** The BEFORE_SWAP | BEFORE_SWAP_RETURNS_DELTA flag bits every CoilHook address encodes in its
- *  low 14 bits (0x88). A token launched by the CoilLaunchpad IS its hook, so this alone tells a
- *  Coil (v4) token from any other token — no RPC call needed. */
-export const COIL_HOOK_FLAGS = 0x88n;
-export const HOOK_FLAG_MASK = 0x3fffn; // low 14 bits
+/** The hook-permission bits of a CoilHook address on the DEFAULT chain. A token launched by the
+ *  CoilLaunchpad IS its hook, so these alone tell a Coil (v4) token from any other token — no RPC
+ *  call needed. Per-chain callers should read `coilContracts(chainId).hookFlags*` instead. */
+export const COIL_HOOK_FLAGS = DEFAULT_COIL.hookFlagsMine;
 
-export function isCoilToken(token: Address): boolean {
-  return (BigInt(token) & HOOK_FLAG_MASK) === COIL_HOOK_FLAGS;
+export const hookFlagsOf = (token: Address): bigint => BigInt(token) & HOOK_FLAG_MASK;
+
+/** Is this a Coil (v4) token ON THIS CHAIN? Classification is per-chain because the flags are a
+ *  property of the chain's launchpad: widening the set globally would misroute an unrelated
+ *  address that happens to carry another chain's flags into the v4 swap path. */
+export function isCoilToken(token: Address, chainId?: number): boolean {
+  return coilContracts(chainId).hookFlagsKnown.includes(hookFlagsOf(token));
 }
 
 /** Token addresses that must never surface anywhere on the site — listings, trending, search, the
  *  swap token picker, and their own /token/<address> page. Sourced from a hardcoded always-hidden
  *  list (internal/test tokens) plus NEXT_PUBLIC_HIDDEN_TOKENS (comma-separated). Case-insensitive.
- *  The tokens still exist on-chain; this only removes them from the UI. */
+ *  The tokens still exist on-chain; this only removes them from the UI. Deliberately chain-blind:
+ *  the match is on the FULL 20-byte address, so it can only ever collide across chains with a
+ *  literally identical CREATE2 deployment — the shared 088 suffix is just the hook flags. */
 const ALWAYS_HIDDEN: string[] = [
   "0x14557a71a1851317949e99e1ba0e6cd51b9d0088", // MPC — internal test token
   "0x4a5ceb9d6b094c4bfb08c93cadebdf19d944c088", // COIL v1 — launched with the wrong price range; superseded by the relaunch

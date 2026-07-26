@@ -1,4 +1,5 @@
 import { createPool, sql as defaultSql } from "@vercel/postgres";
+import { DEFAULT_CHAIN_ID } from "./chain";
 
 /** First available Postgres connection string. `@vercel/postgres`'s default `sql` only reads
  *  `POSTGRES_URL`, but Vercel's Postgres (now Neon-backed) integrations often inject the URL under a
@@ -19,6 +20,10 @@ export const dbConfigured = !!CONNECTION_STRING;
  *  pool from whatever connection string we found so a differently-named env var still works. */
 const pool = CONNECTION_STRING && !process.env.POSTGRES_URL ? createPool({ connectionString: CONNECTION_STRING }) : null;
 const sql = pool ? pool.sql.bind(pool) : defaultSql;
+
+/** Unparameterized SQL. Postgres rejects bind parameters in DDL, so a constant that has to live
+ *  *inside* DDL (chain_id's default) can't go through `sql`. Compile-time constants only. */
+const ddl = (text: string) => (pool ?? defaultSql).query(text);
 
 let schemaReady: Promise<void> | null = null;
 
@@ -49,7 +54,13 @@ export function ensureSchema(): Promise<void> {
           created_at timestamptz not null default now()
         )
       `;
-      await sql`create index if not exists messages_token_id_idx on messages (token, id desc)`;
+      // Chat rooms are keyed by (chain, token) — the same token address can exist on two chains,
+      // and CREATE2 salt mining makes that more than theoretical. Added after the table shipped:
+      // rows written before this column predate multi-chain, so the default backfills them (and any
+      // insert from an old instance still mid-rollout) to the default chain.
+      await ddl(`alter table messages add column if not exists chain_id bigint not null default ${DEFAULT_CHAIN_ID}`);
+      await sql`create index if not exists messages_chain_token_id_idx on messages (chain_id, token, id desc)`;
+      await sql`drop index if exists messages_token_id_idx`; // subsumed by the chain-first index
     })().catch((e) => {
       schemaReady = null; // let the next request retry
       throw e;

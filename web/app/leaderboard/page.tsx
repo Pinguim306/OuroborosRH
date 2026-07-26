@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { MOCK_TOKENS } from "@/lib/mock/data";
-import { LIVE } from "@/lib/contracts";
+import { ANY_LIVE } from "@/lib/contracts";
 import { useLiveMarkets } from "@/lib/useMarkets";
 import { useGlobalActivity } from "@/lib/useGlobalActivity";
 import { useEthPrice } from "@/lib/usePrice";
@@ -19,10 +19,10 @@ const rank = (i: number) => MEDALS[i] ?? `${i + 1}`;
 export default function LeaderboardPage() {
   const ethUsd = useEthPrice();
   const { tokens: liveTokens, isLoading: marketsLoading } = useLiveMarkets();
-  const all: TokenMarket[] = LIVE ? liveTokens : MOCK_TOKENS;
+  const all: TokenMarket[] = ANY_LIVE ? liveTokens : MOCK_TOKENS;
   const { traders, creators, isLoading } = useGlobalActivity(all);
 
-  const loading = LIVE && (marketsLoading || isLoading) && traders.length === 0;
+  const loading = ANY_LIVE && (marketsLoading || isLoading) && traders.length === 0;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -97,7 +97,7 @@ export default function LeaderboardPage() {
         </div>
       )}
 
-      {LIVE && (
+      {ANY_LIVE && (
         <p className="mt-6 text-center text-[11px] text-white/25">
           Volume aggregates bonding-curve trades, V3 pool swaps, and v4 pool swaps.
         </p>

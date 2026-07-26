@@ -10,7 +10,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import { coilHookAbi, tokenAbi } from "@/lib/contracts";
-import { CHAIN_ID } from "@/lib/chain";
+import { CHAIN_ID, chainParam, marketKey } from "@/lib/chain";
 import { useLiveMarkets } from "@/lib/useMarkets";
 import { usePnL, type TokenPnl } from "@/lib/usePnL";
 import type { TokenMarket } from "@/lib/types";
@@ -114,7 +114,7 @@ export function LivePortfolio() {
   const totalClaimable = positions.reduce((s, p) => s + p.claimableRh, 0);
   const totalValue = positions.reduce((s, p) => s + p.balance * p.token.priceRh, 0);
   const totalNetPnl = positions.reduce((s, p) => {
-    const c = pnl.get(p.token.address.toLowerCase());
+    const c = pnl.get(marketKey(p.token));
     if (!c) return s;
     return s + p.balance * p.token.priceRh + c.receivedEth - c.investedEth;
   }, 0);
@@ -151,7 +151,7 @@ export function LivePortfolio() {
               key={p.token.address}
               position={p}
               ethUsd={ethUsd}
-              pnl={pnl.get(p.token.address.toLowerCase())}
+              pnl={pnl.get(marketKey(p.token))}
             />
           ))}
         </div>
@@ -197,7 +197,7 @@ function CreatorRow({
 
   return (
     <div className="glass flex flex-wrap items-center gap-4 p-4 md:flex-nowrap">
-      <Link href={`/token/${row.token.address}`} className="flex min-w-0 flex-1 items-center gap-3">
+      <Link href={`/token/${row.token.address}${chainParam(row.token.chainId)}`} className="flex min-w-0 flex-1 items-center gap-3">
         <TokenAvatar
           uri={row.token.image}
           symbol={row.token.symbol}
@@ -254,7 +254,7 @@ function PositionRow({
 
   return (
     <div className="glass flex flex-wrap items-center gap-4 p-4 md:flex-nowrap">
-      <Link href={`/token/${p.token.address}`} className="flex min-w-0 flex-1 items-center gap-3">
+      <Link href={`/token/${p.token.address}${chainParam(p.token.chainId)}`} className="flex min-w-0 flex-1 items-center gap-3">
         <TokenAvatar
           uri={p.token.image}
           symbol={p.token.symbol}

@@ -7,6 +7,7 @@ import { normalizeSocial } from "@/lib/metadata";
 import { useTokenMeta } from "@/lib/useMeta";
 import { ProgressBar } from "./ProgressBar";
 import { TokenAvatar } from "./TokenAvatar";
+import { chainParam } from "@/lib/chain";
 
 function XIcon() {
   return (
@@ -66,10 +67,10 @@ export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: 
     );
 
   return (
-    <div className="glass group relative p-4 transition hover:border-venom-500/40 hover:shadow-venom">
+    <div className="glass lift group relative p-4 hover:border-venom-500/40 hover:shadow-venom">
       {/* Whole-card link overlay; socials sit above it so they stay independently clickable. */}
       <Link
-        href={`/token/${token.address}`}
+        href={`/token/${token.address}${chainParam(token.chainId)}`}
         aria-label={token.name}
         className="absolute inset-0 z-0 rounded-2xl"
       />
@@ -90,13 +91,13 @@ export function TokenCard({ token, ethUsd = 0 }: { token: TokenMarket; ethUsd?: 
         <div className="mt-4 grid grid-cols-2 gap-2 text-center">
           <div>
             <div className="label">Marketcap</div>
-            <div className="mt-0.5 text-sm font-semibold text-white">
+            <div className="tabular mt-0.5 text-sm font-semibold text-white">
               {usdFromEth(token.marketCapRh, ethUsd, 0)}
             </div>
           </div>
           <div>
             <div className="label">24h Volume</div>
-            <div className="mt-0.5 text-sm font-semibold text-venom-400">
+            <div className="tabular mt-0.5 text-sm font-semibold text-venom-400">
               {usdFromEth(token.volume24hRh, ethUsd, 0)}
             </div>
           </div>

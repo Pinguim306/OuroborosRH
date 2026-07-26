@@ -11,7 +11,7 @@ import {
 import type { Address, TokenMarket } from "@/lib/types";
 import { copy } from "@/lib/copy";
 import { compact, rh } from "@/lib/format";
-import { CHAIN_ID, NATIVE_SYMBOL, ROBINHOOD_CONTRACTS } from "@/lib/chain";
+import { CHAIN_ID, NATIVE_SYMBOL, uniswapContracts } from "@/lib/chain";
 import { CONTRACTS, LIVE, curveAbi, tokenAbi, routerAbi, launchpadAbi, swapRouter02Abi } from "@/lib/contracts";
 
 // Total per-trade fee on the curve. The internal split lives in the contract.
@@ -21,8 +21,10 @@ const SLIPPAGE_BPS = 500n; // 5% max slippage on curve trades
 // AMM's own fee, so a wider min-out buffer avoids spurious reverts.
 const GRAD_SLIPPAGE_BPS = 600n; // ~6%
 
-const ROUTER = ROBINHOOD_CONTRACTS.uniswapV2Router as Address;
-const SWAP02 = ROBINHOOD_CONTRACTS.swapRouter02 as Address;
+// Uniswap peripherals for the chain this widget trades on (writes are pinned to CHAIN_ID).
+const UNISWAP = uniswapContracts(CHAIN_ID);
+const ROUTER = UNISWAP.uniswapV2Router as Address;
+const SWAP02 = UNISWAP.swapRouter02 as Address;
 const ZERO = "0x0000000000000000000000000000000000000000" as const;
 // SwapRouter02 sentinel: swap output stays in the router (for a follow-up unwrap).
 const ADDRESS_THIS = "0x0000000000000000000000000000000000000002" as Address;

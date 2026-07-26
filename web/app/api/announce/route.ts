@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { publicClient, normalizeAddress } from "@/lib/server/launchpad";
+import { CHAIN_ID, chainParam, explorerUrl } from "@/lib/chain";
 import {
   CONTRACTS,
   LIVE,
@@ -26,11 +27,11 @@ import {
 
 const MAX_AGE_SECONDS = 15 * 60;
 
-// Best-effort duplicate suppression (per serverless instance).
+// Best-effort duplicate suppression (per serverless instance). Keyed by chain AND token: the
+// same address can be launched on two chains, and suppressing the second as a dup would be silent.
 const announced = new Map<string, number>();
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://ouroborosrh.fun").replace(/\/$/, "");
-const EXPLORER = "https://robinhoodchain.blockscout.com";
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
   }
   if (!token) return NextResponse.json({ error: "invalid token address" }, { status: 400 });
 
-  const key = token.toLowerCase();
+  const key = `${CHAIN_ID}:${token.toLowerCase()}`;
   if (announced.has(key)) return NextResponse.json({ skipped: true });
 
   // Verify on-chain: the token must be registered on a launchpad (v4 hooks are recognizable from
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
     let createdAt: bigint;
     let flavor: string;
 
-    if (isCoilToken(token) && LAUNCH_LIVE) {
+    if (isCoilToken(token, CHAIN_ID) && LAUNCH_LIVE) {
       const idx = (await publicClient.readContract({
         address: COIL_LAUNCHPAD,
         abi: coilLaunchpadV4Abi,
@@ -122,8 +123,8 @@ export async function POST(req: NextRequest) {
       `<b>${esc(name)}</b> ($${esc(symbol)}) — ${flavor}`,
       `CA: <code>${token}</code>`,
       ``,
-      `<a href="${SITE_URL}/token/${token}">Trade on Coil</a>` +
-        ` · <a href="${EXPLORER}/token/${token}">Explorer</a>`,
+      `<a href="${SITE_URL}/token/${token}${chainParam(CHAIN_ID)}">Trade on Coil</a>` +
+        ` · <a href="${explorerUrl("token", token, CHAIN_ID)}">Explorer</a>`,
     ];
 
     const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {

@@ -4,18 +4,26 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { copy } from "@/lib/copy";
 import { Logo } from "./Logo";
+import {
+  IconBook,
+  IconHome,
+  IconRewards,
+  IconSparkle,
+  IconSwap,
+  IconTrophy,
+  IconUser,
+} from "./Icon";
 
-type Item = { href: string; label: string; icon: string };
+type Item = { href: string; label: string; Icon: (p: { size?: number }) => React.ReactElement };
 
 const NAV: Item[] = [
-  { href: "/", label: "Home", icon: "🏠" },
-  { href: "/swap", label: "Swap", icon: "🔁" },
-  { href: "/points", label: "Points", icon: "🎯" },
-  { href: "/leaderboard", label: "Leaderboard", icon: "🏆" },
-  { href: "/profile", label: "Profile", icon: "👤" },
-  { href: "/rewards", label: copy.nav.rewards, icon: "💸" },
-  { href: "/about", label: "About", icon: "✨" },
-  { href: "/docs", label: "How it works", icon: "📖" },
+  { href: "/", label: "Home", Icon: IconHome },
+  { href: "/swap", label: "Swap", Icon: IconSwap },
+  { href: "/leaderboard", label: "Leaderboard", Icon: IconTrophy },
+  { href: "/profile", label: "Profile", Icon: IconUser },
+  { href: "/rewards", label: copy.nav.rewards, Icon: IconRewards },
+  { href: "/about", label: "About", Icon: IconSparkle },
+  { href: "/docs", label: "How it works", Icon: IconBook },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -40,13 +48,20 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               key={item.href}
               href={item.href}
               onClick={onNavigate}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+              className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                 active
-                  ? "bg-venom-500/15 text-venom-400"
-                  : "text-white/60 hover:bg-white/5 hover:text-white"
+                  ? "bg-venom-500/12 text-venom-400"
+                  : "text-white/55 hover:bg-white/[0.04] hover:text-white"
               }`}
             >
-              <span className="w-5 text-center text-base leading-none">{item.icon}</span>
+              {/* Active rail: a single moving marker reads faster than a colour change alone. */}
+              <span
+                aria-hidden
+                className={`absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-venom-500 transition-opacity ${
+                  active ? "opacity-100" : "opacity-0"
+                }`}
+              />
+              <item.Icon size={18} />
               {item.label}
             </Link>
           );

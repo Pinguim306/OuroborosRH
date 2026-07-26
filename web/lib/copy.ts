@@ -17,7 +17,7 @@ export const copy = {
     docs: "How it works",
   },
   hero: {
-    kicker: "Robinhood Chain · Fair-launch protocol",
+    kicker: "Multi-chain · Fair-launch protocol",
     title: "Every trade feeds the loop.",
     subtitle:
       "Launch a token straight into a Uniswap v4 pool — tradable the second the tx confirms, with the entire supply locked as liquidity forever. A native per-swap fee is split on-chain every trade: holders earn a share just by holding, and a slice buys and burns $COIL.",

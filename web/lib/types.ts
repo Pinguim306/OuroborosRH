@@ -7,6 +7,7 @@ export interface TokenMarket {
   pair?: Address; // Uniswap V2 pair, set once the token graduates
   mode?: "curve" | "v3" | "v4"; // launch mode: bonding curve (default), instant V3 pool, or Uniswap v4 hook
   launchpad?: Address; // which launchpad registered this market (multi-launchpad)
+  chainId?: number; // which chain this market lives on; undefined = the default chain
   creatorFees?: boolean; // Creator Rewards mode: the holder-fee share pays the creator
   name: string;
   symbol: string;

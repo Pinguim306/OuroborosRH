@@ -19,7 +19,9 @@ import { RewardsPanel } from "@/components/RewardsPanel";
 import { MarketcapChart } from "@/components/MarketcapChart";
 import { CandleChart } from "@/components/CandleChart";
 import { DexScreenerChart } from "@/components/DexScreenerChart";
-import { dexscreenerEmbedUrl } from "@/lib/chain";
+import { dexscreenerEmbedUrl, explorerUrl } from "@/lib/chain";
+import { useSelectedChainId } from "@/lib/useSelectedChain";
+import { ChainBadge } from "@/components/ChainBadge";
 import { TokenAvatar } from "@/components/TokenAvatar";
 import { HarvestFees } from "@/components/HarvestFees";
 import { SocialLinks } from "@/components/SocialLinks";
@@ -28,8 +30,6 @@ import { useTokenMeta } from "@/lib/useMeta";
 import { useTotalFeesEth } from "@/lib/useFees";
 import { useDexPair } from "@/lib/useDexPair";
 import { ShareModal } from "@/components/ShareModal";
-
-const EXPLORER = "https://robinhoodchain.blockscout.com";
 
 /** Live trade ids are `${txHash}-${logIndex}`; mock ids aren't hashes. */
 function txHashOf(id: string): string | null {
@@ -54,7 +54,10 @@ export default function TokenPage() {
   const isV4 = token?.mode === "v4";
   const [shareOpen, setShareOpen] = useState(false);
 
-  const ethUsd = useEthPrice();
+  // `?chain=` on the URL is what identifies WHICH chain's token this page is (addresses collide
+  // across chains by design — the hook flags are mined into them).
+  const chainId = useSelectedChainId();
+  const ethUsd = useEthPrice(chainId);
   const activity = useTokenActivity(token);
   const holdersData = useTokenHolders(token);
   const meta = useTokenMeta(token?.image);
@@ -104,6 +107,8 @@ export default function TokenPage() {
           <div className="flex items-center gap-2">
             <h1 className="font-display text-2xl font-bold">{token.name}</h1>
             <span className="chip">{token.symbol}</span>
+            {/* A visitor can land here from a shared link with no other chain context. */}
+            <ChainBadge chainId={token.chainId} className="!py-1" />
             {isV4 ? (
               <span className="chip border-venom-500/40 text-venom-400">⚡ v4</span>
             ) : token.mode === "v3" ? (
@@ -179,7 +184,7 @@ export default function TokenPage() {
             // v4 pools have no standalone contract — DexScreener indexes them by PoolId, so we
             // probe its API first and only embed when the pool is actually indexed.
             <DexScreenerChart pair={v4PoolId} />
-          ) : (token.mode === "v3" || token.graduated) && dexscreenerEmbedUrl(token.pair) ? (
+          ) : (token.mode === "v3" || token.graduated) && dexscreenerEmbedUrl(token.pair, token.chainId) ? (
             // V3 launches chart on DexScreener from their very first trade; curve
             // tokens switch to it after graduating.
             <DexScreenerChart pair={token.pair} />
@@ -261,7 +266,7 @@ export default function TokenPage() {
                           <td className={`px-5 py-2 font-semibold ${t.isBuy ? "text-venom-400" : "text-red-400"}`}>
                             {tx ? (
                               <a
-                                href={`${EXPLORER}/tx/${tx}`}
+                                href={explorerUrl("tx", tx, token.chainId ?? chainId)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="hover:underline"

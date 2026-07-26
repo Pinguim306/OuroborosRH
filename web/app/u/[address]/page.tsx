@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { formatEther } from "viem";
 import { useAccount, useReadContracts } from "wagmi";
 import { timeAgo, usdFromEth, compact } from "@/lib/format";
+import { chainParam, explorerUrl, marketKey } from "@/lib/chain";
 import { ipfsToHttp, normalizeSocial } from "@/lib/metadata";
 import { LIVE, tokenAbi } from "@/lib/contracts";
 import { useLiveMarkets } from "@/lib/useMarkets";
@@ -18,8 +19,6 @@ import { SocialLinks } from "@/components/SocialLinks";
 import { StatTile } from "@/components/StatTile";
 import { TokenCard } from "@/components/TokenCard";
 import { TokenAvatar } from "@/components/TokenAvatar";
-
-const EXPLORER = "https://robinhoodchain.blockscout.com";
 
 type Profile = {
   address: string;
@@ -77,7 +76,7 @@ export default function PublicProfilePage() {
     let total = 0;
     tokens.forEach((t, i) => {
       const bal = num(balancesQ.data?.[i]?.result);
-      const c = pnl.get(t.address.toLowerCase());
+      const c = pnl.get(marketKey(t));
       total += bal * t.priceRh + (c ? c.receivedEth - c.investedEth : 0);
     });
     return total;
@@ -120,7 +119,7 @@ export default function PublicProfilePage() {
                 {copied ? <span className="text-venom-400">Copied ✓</span> : <>{address} ⧉</>}
               </button>
               <a
-                href={`${EXPLORER}/address/${address}`}
+                href={explorerUrl("address", address)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="shrink-0 text-xs text-white/35 hover:text-venom-400"
@@ -195,7 +194,7 @@ export default function PublicProfilePage() {
               {activity.trades.map((t) => (
                 <Link
                   key={t.id}
-                  href={`/token/${t.token.address}`}
+                  href={`/token/${t.token.address}${chainParam(t.token.chainId)}`}
                   className="flex items-center gap-3 px-5 py-3 text-sm transition hover:bg-white/[0.03]"
                 >
                   <span className={`w-10 shrink-0 font-semibold ${t.isBuy ? "text-venom-400" : "text-red-400"}`}>

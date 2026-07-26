@@ -6,6 +6,7 @@ import { useGlobalActivity } from "@/lib/useGlobalActivity";
 import { useEthPrice } from "@/lib/usePrice";
 import { usdFromEth, shortAddr, timeAgo } from "@/lib/format";
 import { TokenAvatar } from "./TokenAvatar";
+import { chainParam } from "@/lib/chain";
 
 /**
  * Home-page "live" section: King of the Hill (hottest token of the last hour)
@@ -32,7 +33,7 @@ export function LivePulse({ tokens }: { tokens: TokenMarket[] }) {
         {/* King of the Hill */}
         {hot && (
           <Link
-            href={`/token/${hot.token.address}`}
+            href={`/token/${hot.token.address}${chainParam(hot.token.chainId)}`}
             className="glass-strong group relative overflow-hidden p-5 transition hover:border-venom-500/40"
           >
             <div className="absolute -right-4 -top-6 font-display text-8xl font-black text-white/[0.04]">
@@ -72,7 +73,7 @@ export function LivePulse({ tokens }: { tokens: TokenMarket[] }) {
               {trades.map((t) => (
                 <Link
                   key={t.id}
-                  href={`/token/${t.token.address}`}
+                  href={`/token/${t.token.address}${chainParam(t.token.chainId)}`}
                   className="flex items-center gap-3 px-4 py-2.5 text-xs transition hover:bg-white/[0.03]"
                 >
                   <span

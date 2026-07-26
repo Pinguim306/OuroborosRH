@@ -4,6 +4,9 @@
 
 :root {
   color-scheme: dark;
+  /* One easing for everything that moves. A little overshoot on the way out reads as "responsive"
+     rather than "animated" — the difference between a UI that feels quick and one that feels slow. */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 html,
@@ -15,9 +18,26 @@ body {
 body {
   min-height: 100vh;
   background-image:
-    radial-gradient(60rem 40rem at 80% -10%, rgba(139, 92, 255, 0.12), transparent 60%),
+    radial-gradient(60rem 40rem at 80% -10%, rgba(139, 92, 255, 0.13), transparent 60%),
     radial-gradient(50rem 30rem at 0% 0%, rgba(55, 232, 255, 0.07), transparent 55%);
   background-attachment: fixed;
+}
+
+/* Headings carry the display face; body copy stays on Inter, which is far easier to read small. */
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Money must not shimmy as digits change — every figure gets fixed-width numerals. */
+.tabular,
+.stat-value,
+.font-mono {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
 /* Thin, on-brand scrollbar */
@@ -29,19 +49,53 @@ body {
   background: rgba(139, 92, 255, 0.25);
   border-radius: 999px;
 }
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 255, 0.4);
+}
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 
+/* Keyboard users get a visible ring; pointer users never see it. */
+:focus-visible {
+  outline: 2px solid rgba(139, 92, 255, 0.7);
+  outline-offset: 2px;
+}
+
 @layer components {
   .glass {
-    @apply rounded-2xl border border-white/5 bg-obsidian-850/70 backdrop-blur-md;
+    @apply relative rounded-2xl border border-white/5 bg-obsidian-850/70 backdrop-blur-md;
+  }
+  /* A hairline catching "light" along the top edge — the cheapest way to make a flat dark card
+     read as a physical surface instead of a rectangle. */
+  .glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), transparent 45%);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
   }
   .glass-strong {
     @apply rounded-2xl border border-venom-500/20 bg-obsidian-850/80 backdrop-blur-md shadow-venom;
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed;
+    transition:
+      transform 0.18s var(--ease),
+      background-color 0.18s var(--ease),
+      border-color 0.18s var(--ease),
+      color 0.18s var(--ease),
+      box-shadow 0.18s var(--ease);
+  }
+  .btn:active:not(:disabled) {
+    transform: translateY(1px);
   }
   .btn-primary {
     @apply btn bg-venom-500 text-obsidian-950 hover:bg-venom-400 shadow-glow;
@@ -64,6 +118,16 @@ body {
   .stat-value {
     @apply font-display text-2xl font-bold tracking-tight text-white;
   }
+  /* Cards that are themselves links: lift slightly toward the pointer. */
+  .lift {
+    transition:
+      transform 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease);
+  }
+  .lift:hover {
+    transform: translateY(-2px);
+  }
 }
 
 .text-gradient {
@@ -71,4 +135,19 @@ body {
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+/* Respect the OS setting — every transform/animation above is decoration, not information. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .lift:hover {
+    transform: none;
+  }
 }
