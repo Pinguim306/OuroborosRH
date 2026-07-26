@@ -2,10 +2,15 @@
 
 import { useMemo } from "react";
 import { usd } from "@/lib/format";
+import { palette } from "@/lib/palette";
 
 /**
  * Lightweight single-series marketcap chart (ETH marketcap values in, USD labels).
- * Pure SVG, on-brand venom-green line + area. No external chart lib.
+ * Pure SVG, no external chart lib.
+ *
+ * The line runs the brand gradient rather than a semantic up/down colour: this is one continuous
+ * series over its whole history, not a per-period verdict, so colouring it green would assert a
+ * direction the chart isn't measuring. Direction lives in the candles.
  */
 export function MarketcapChart({
   series,
@@ -40,7 +45,7 @@ export function MarketcapChart({
 
   if (series.length < 2) {
     return (
-      <div className="grid h-44 place-items-center rounded-xl bg-obsidian-900/60 text-sm text-white/35">
+      <div className="grid h-44 place-items-center rounded-xl bg-obsidian-900/60 text-sm text-ink-4">
         Not enough trades yet to chart.
       </div>
     );
@@ -48,21 +53,35 @@ export function MarketcapChart({
 
   return (
     <div className="rounded-xl bg-obsidian-900/60 p-3">
-      <div className="mb-1 flex justify-between text-xs text-white/40">
+      <div className="mb-1 flex justify-between text-xs text-ink-4">
         <span>Marketcap</span>
-        <span className="font-mono text-white/60">{toUsd(series[series.length - 1])}</span>
+        <span className="font-mono text-ink-3">{toUsd(series[series.length - 1])}</span>
       </div>
       <svg viewBox={`0 0 ${w} ${h}`} className="h-44 w-full" preserveAspectRatio="none">
         <defs>
           <linearGradient id="mcapfill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#22e584" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="#22e584" stopOpacity="0" />
+            <stop offset="0%" stopColor={palette.coil500} stopOpacity="0.32" />
+            <stop offset="100%" stopColor={palette.coil500} stopOpacity="0" />
+          </linearGradient>
+          {/* Left-to-right so the most recent value carries the cyan spark. */}
+          <linearGradient id="mcapline" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={palette.coil600} />
+            <stop offset="60%" stopColor={palette.coil400} />
+            <stop offset="100%" stopColor={palette.spark} />
           </linearGradient>
         </defs>
         <path d={area} fill="url(#mcapfill)" />
-        <path d={line} fill="none" stroke="#22e584" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+        <path
+          d={line}
+          fill="none"
+          stroke="url(#mcapline)"
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
       </svg>
-      <div className="mt-1 flex justify-between text-[10px] text-white/30">
+      <div className="mt-1 flex justify-between text-[10px] text-ink-4">
         <span>low {toUsd(min)}</span>
         <span>high {toUsd(max)}</span>
       </div>

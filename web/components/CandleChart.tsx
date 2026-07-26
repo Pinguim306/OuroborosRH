@@ -9,6 +9,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { Candle } from "@/lib/useActivity";
+import { palette } from "@/lib/palette";
 
 /**
  * DexScreener-style candlestick chart of a token's marketcap, built from on-chain
@@ -28,7 +29,7 @@ export function CandleChart({ candles, ethUsd }: { candles: Candle[]; ethUsd: nu
       height: 320,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#8b96a5",
+        textColor: palette.ink3,
         fontFamily: "inherit",
       },
       grid: {
@@ -41,19 +42,27 @@ export function CandleChart({ candles, ethUsd }: { candles: Candle[]; ethUsd: nu
         timeVisible: true,
         secondsVisible: false,
       },
-      crosshair: { horzLine: { labelBackgroundColor: "#12c26a" }, vertLine: { labelBackgroundColor: "#12c26a" } },
+      // The crosshair reads the axes, not the market, so it takes the brand violet — a green
+      // readout would imply a direction the cursor position doesn't have.
+      crosshair: {
+        horzLine: { labelBackgroundColor: palette.coil600 },
+        vertLine: { labelBackgroundColor: palette.coil600 },
+      },
       handleScale: false,
       handleScroll: false,
     });
     chartRef.current = chart;
 
+    // Candles keep the conventional up/down reading — traders parse it pre-attentively and
+    // re-mapping it to brand colours would cost more than it gains. Only the hexes move, onto the
+    // palette's cyan-leaning mint and warm red.
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#22e584",
-      downColor: "#f87171",
-      borderUpColor: "#22e584",
-      borderDownColor: "#f87171",
-      wickUpColor: "#22e584",
-      wickDownColor: "#f87171",
+      upColor: palette.up,
+      downColor: palette.down,
+      borderUpColor: palette.up,
+      borderDownColor: palette.down,
+      wickUpColor: palette.up,
+      wickDownColor: palette.down,
     });
 
     const mult = ethUsd > 0 ? ethUsd : 1;
@@ -79,7 +88,7 @@ export function CandleChart({ candles, ethUsd }: { candles: Candle[]; ethUsd: nu
 
   return (
     <div className="glass p-3">
-      <div className="mb-2 flex items-center justify-between px-1 text-xs text-white/40">
+      <div className="mb-2 flex items-center justify-between px-1 text-xs text-ink-4">
         <span>Marketcap · {ethUsd > 0 ? "USD" : "ETH"}</span>
         <span>on-chain candles</span>
       </div>

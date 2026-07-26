@@ -104,7 +104,7 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
   }
 
   // Creator Rewards launch: the holder fee share pays the creator's wallet, so there is nothing
-  // for holders to claim — the 👑 badge in the token header already says so; render nothing.
+  // for holders to claim — the Creator Rewards badge in the token header already says so; render nothing.
   if (creatorMode) return null;
 
   return (
@@ -113,7 +113,7 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
         <h3 className="font-display text-lg font-bold">Holder rewards</h3>
         {token.aprPct > 0 && <span className="chip">APR ~{token.aprPct}%</span>}
       </div>
-      <p className="mt-1 text-xs text-white/45">
+      <p className="mt-1 text-xs text-ink-3">
         Just hold {token.symbol} — fees accrue to your wallet in{" "}
         {isV4 ? `${NATIVE_SYMBOL} and ${token.symbol}` : NATIVE_SYMBOL} automatically. No staking,
         no lock-ups. Connect and claim anytime.
@@ -134,10 +134,10 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between rounded-xl border border-venom-500/20 bg-venom-500/5 p-4">
+      <div className="mt-3 flex items-center justify-between rounded-xl border border-coil-500/20 bg-coil-500/5 p-4">
         <div>
           <div className="label">Claimable now</div>
-          <div className="mt-0.5 font-mono text-lg font-bold text-venom-400">
+          <div className="mt-0.5 font-mono text-lg font-bold text-coil-400">
             {usdFromEth(claimable, ethUsd, 2)}
           </div>
         </div>
@@ -147,18 +147,18 @@ export function RewardsPanel({ token }: { token: TokenMarket }) {
       </div>
 
       {flash && (
-        <div className="mt-3 rounded-lg border border-venom-500/30 bg-venom-500/10 px-3 py-2 text-center text-xs font-medium text-venom-400">
+        <div className="mt-3 rounded-lg border border-coil-500/30 bg-coil-500/10 px-3 py-2 text-center text-xs font-medium text-coil-400">
           ✓ {flash}
         </div>
       )}
       {LIVE && error && (
-        <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-center text-xs text-red-400">
+        <div className="mt-3 rounded-lg border border-down/30 bg-down/10 px-3 py-2 text-center text-xs text-down">
           {(error as { shortMessage?: string }).shortMessage ?? "Transaction failed."}
         </div>
       )}
 
       {!isConnected && (
-        <p className="mt-3 text-center text-[11px] text-white/30">
+        <p className="mt-3 text-center text-[11px] text-ink-4">
           {LIVE
             ? "Connect your wallet to see and claim your rewards."
             : "Demo mode — rewards accrue automatically to holders; connect + deploy to claim for real."}

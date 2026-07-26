@@ -1,3 +1,5 @@
+import { IconGlobe, IconTelegram } from "./Icon";
+
 /** Small row of social/website links for a token. Renders nothing if none are set. */
 export function SocialLinks({
   website,
@@ -12,8 +14,8 @@ export function SocialLinks({
 }) {
   const links = [
     twitter && { href: twitter, label: "X", icon: <XIcon /> },
-    telegram && { href: telegram, label: "Telegram", icon: <span className="text-sm">✈</span> },
-    website && { href: website, label: "Website", icon: <span className="text-sm">🌐</span> },
+    telegram && { href: telegram, label: "Telegram", icon: <IconTelegram size={14} /> },
+    website && { href: website, label: "Website", icon: <IconGlobe size={14} /> },
   ].filter(Boolean) as { href: string; label: string; icon: React.ReactNode }[];
 
   if (links.length === 0) return null;
@@ -26,7 +28,7 @@ export function SocialLinks({
           href={l.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1 text-xs text-white/70 transition hover:border-venom-500/40 hover:text-venom-400"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1 text-xs text-ink-2 transition hover:border-coil-500/40 hover:text-coil-400"
         >
           {l.icon}
           <span>{l.label}</span>

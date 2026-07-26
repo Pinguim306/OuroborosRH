@@ -1,4 +1,5 @@
 "use client";
+import { IconExternal } from "@/components/Icon";
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -175,9 +176,9 @@ export function LaunchWidget({
 
   if (!launchLive) {
     return (
-      <div className="mt-6 rounded-xl border border-white/10 bg-obsidian-900/60 p-4 text-sm text-white/70">
+      <div className="mt-6 rounded-xl border border-white/10 bg-obsidian-900/60 p-4 text-sm text-ink-2">
         The v4 launch factory isn&apos;t configured yet. Set{" "}
-        <code className="text-venom-400">NEXT_PUBLIC_COIL_LAUNCHPAD</code> once it&apos;s deployed.
+        <code className="text-coil-400">NEXT_PUBLIC_COIL_LAUNCHPAD</code> once it&apos;s deployed.
       </div>
     );
   }
@@ -195,44 +196,44 @@ export function LaunchWidget({
   return (
     <div className="mt-6 space-y-4">
       {phase === "mining" && (
-        <div className="rounded-xl border border-white/5 bg-obsidian-900/60 p-3 text-sm text-white/60">
-          Mining hook address… <span className="text-venom-400">{tried.toLocaleString()}</span> tried
+        <div className="rounded-xl border border-white/5 bg-obsidian-900/60 p-3 text-sm text-ink-3">
+          Mining hook address… <span className="text-coil-400">{tried.toLocaleString()}</span> tried
         </div>
       )}
       {tokenAddr && (
-        <div className="rounded-xl border border-venom-500/20 bg-obsidian-900/60 p-3 text-sm">
+        <div className="rounded-xl border border-coil-500/20 bg-obsidian-900/60 p-3 text-sm">
           <div className="label">Token address</div>
-          <div className="mt-1 break-all font-mono text-venom-400">{tokenAddr}</div>
+          <div className="mt-1 break-all font-mono text-coil-400">{tokenAddr}</div>
           {isSuccess && (
             <>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
-                <Link href={`/token/${tokenAddr}`} className="text-venom-400 hover:underline">
-                  Open your token ↗
+                <Link href={`/token/${tokenAddr}`} className="text-coil-400 hover:underline">
+                  Open your token <IconExternal size={12} />
                 </Link>
                 <a
                   href={explorerUrl("token", tokenAddr, chainId)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-venom-400 hover:underline"
+                  className="text-coil-400 hover:underline"
                 >
-                  Explorer ↗
+                  Explorer <IconExternal size={11} />
                 </a>
               </div>
-              <div className="mt-1 text-xs text-white/50">Live ✓ — tradable on the Swap tab.</div>
+              <div className="mt-1 text-xs text-ink-3">Live ✓ — tradable on the Swap tab.</div>
               {devBuyWei > 0n && (
                 <div className="mt-2 border-t border-white/5 pt-2 text-xs">
                   {buySuccess ? (
-                    <span className="text-venom-400">
+                    <span className="text-coil-400">
                       Dev buy done ✓ — bought {formatEther(devBuyWei)} {nativeSymbol} of ${symbol}.
                     </span>
                   ) : buyConfirming || buyHash ? (
-                    <span className="text-white/50">
+                    <span className="text-ink-3">
                       Confirming your {formatEther(devBuyWei)} {nativeSymbol} dev buy…
                     </span>
                   ) : buyNote ? (
-                    <span className="text-amber-400">{buyNote}</span>
+                    <span className="text-warn">{buyNote}</span>
                   ) : (
-                    <span className="text-white/50">Approve the dev buy in your wallet…</span>
+                    <span className="text-ink-3">Approve the dev buy in your wallet…</span>
                   )}
                 </div>
               )}
@@ -253,8 +254,8 @@ export function LaunchWidget({
         </button>
       )}
 
-      {err && <p className="text-xs text-red-400">{err}</p>}
-      <p className="text-center text-[11px] text-white/30">
+      {err && <p className="text-xs text-down">{err}</p>}
+      <p className="text-center text-[11px] text-ink-4">
         {devBuyWei > 0n
           ? "Two transactions: deploy the token into a live v4 pool (liquidity locked, ownership renounced), then your dev buy through Coil Swap."
           : "One transaction: deploys the token into a live v4 pool, seeds all liquidity, renounces ownership."}

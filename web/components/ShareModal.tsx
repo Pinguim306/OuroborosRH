@@ -40,7 +40,7 @@ export function ShareModal({
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const tweet = `$${token.symbol} — ${token.name}, live on Coil 🐍`;
+  const tweet = `$${token.symbol} — ${token.name}, live on Coil`;
   const xHref = `https://x.com/intent/post?text=${encodeURIComponent(tweet)}&url=${encodeURIComponent(url)}`;
 
   return (
@@ -55,27 +55,27 @@ export function ShareModal({
         <div className="flex items-start justify-between">
           <div>
             <h3 className="font-display text-xl font-bold">Share coin</h3>
-            <p className="mt-0.5 text-xs text-white/45">Copy the link or share straight to X</p>
+            <p className="mt-0.5 text-xs text-ink-3">Copy the link or share straight to X</p>
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-white/50 hover:text-white"
+            className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-ink-3 hover:text-white"
           >
             ✕
           </button>
         </div>
 
         {/* Preview card */}
-        <div className="mt-4 flex items-center gap-4 overflow-hidden rounded-xl border border-venom-500/20 bg-gradient-to-r from-venom-500/10 to-transparent p-4">
+        <div className="mt-4 flex items-center gap-4 overflow-hidden rounded-xl border border-coil-500/20 bg-gradient-to-r from-coil-500/10 to-transparent p-4">
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-venom-400">
-              🐍 Coil
+            <div className="text-[10px] font-bold uppercase tracking-widest text-coil-400">
+              Coil
             </div>
             <div className="mt-1 truncate font-display text-2xl font-extrabold text-white">
               ${token.symbol}
             </div>
-            <div className="truncate text-sm text-white/55">{token.name}</div>
+            <div className="truncate text-sm text-ink-3">{token.name}</div>
           </div>
           <TokenAvatar
             uri={token.image}

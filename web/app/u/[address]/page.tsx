@@ -16,6 +16,7 @@ import { useEthPrice } from "@/lib/usePrice";
 import type { Address } from "@/lib/types";
 import { useAuth } from "@/components/AuthProvider";
 import { SocialLinks } from "@/components/SocialLinks";
+import { IconExternal, IconUser } from "@/components/Icon";
 import { StatTile } from "@/components/StatTile";
 import { TokenCard } from "@/components/TokenCard";
 import { TokenAvatar } from "@/components/TokenAvatar";
@@ -103,7 +104,7 @@ export default function PublicProfilePage() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={ipfsToHttp(profile.avatar_url)} alt="avatar" className="h-full w-full object-cover" />
             ) : (
-              "👤"
+              <IconUser size={26} className="text-ink-4" />
             )}
           </div>
           <div className="min-w-0 flex-1">
@@ -114,17 +115,17 @@ export default function PublicProfilePage() {
               <button
                 onClick={copyAddr}
                 title="Copy address"
-                className="break-all text-left font-mono text-xs text-white/45 hover:text-white"
+                className="break-all text-left font-mono text-xs text-ink-3 hover:text-white"
               >
-                {copied ? <span className="text-venom-400">Copied ✓</span> : <>{address} ⧉</>}
+                {copied ? <span className="text-coil-400">Copied ✓</span> : <>{address} ⧉</>}
               </button>
               <a
                 href={explorerUrl("address", address)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="shrink-0 text-xs text-white/35 hover:text-venom-400"
+                className="shrink-0 text-xs text-ink-4 hover:text-coil-400"
               >
-                Explorer ↗
+                Explorer <IconExternal size={11} />
               </a>
             </div>
           </div>
@@ -135,7 +136,7 @@ export default function PublicProfilePage() {
           )}
         </div>
 
-        {profile?.bio && <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-white/60">{profile.bio}</p>}
+        {profile?.bio && <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-ink-3">{profile.bio}</p>}
 
         {profile && (profile.x || profile.telegram) && (
           <SocialLinks
@@ -146,12 +147,12 @@ export default function PublicProfilePage() {
         )}
 
         {loaded && !profile && (
-          <p className="mt-4 text-sm text-white/40">
+          <p className="mt-4 text-sm text-ink-4">
             This wallet hasn&apos;t set up a profile yet.
             {isSelf && (
               <>
                 {" "}
-                <Link href="/profile" className="text-venom-400 hover:underline">
+                <Link href="/profile" className="text-coil-400 hover:underline">
                   Create yours →
                 </Link>
               </>
@@ -186,9 +187,9 @@ export default function PublicProfilePage() {
         <div className="glass mt-6 overflow-hidden">
           <div className="border-b border-white/5 px-5 py-3 text-sm font-semibold">Last trades</div>
           {activity.isLoading ? (
-            <div className="px-5 py-8 text-center text-xs text-white/35">Reading the chain…</div>
+            <div className="px-5 py-8 text-center text-xs text-ink-4">Reading the chain…</div>
           ) : activity.trades.length === 0 ? (
-            <div className="px-5 py-8 text-center text-xs text-white/35">No trades yet.</div>
+            <div className="px-5 py-8 text-center text-xs text-ink-4">No trades yet.</div>
           ) : (
             <div className="divide-y divide-white/5">
               {activity.trades.map((t) => (
@@ -197,7 +198,7 @@ export default function PublicProfilePage() {
                   href={`/token/${t.token.address}${chainParam(t.token.chainId)}`}
                   className="flex items-center gap-3 px-5 py-3 text-sm transition hover:bg-white/[0.03]"
                 >
-                  <span className={`w-10 shrink-0 font-semibold ${t.isBuy ? "text-venom-400" : "text-red-400"}`}>
+                  <span className={`w-10 shrink-0 font-semibold ${t.isBuy ? "text-coil-400" : "text-down"}`}>
                     {t.isBuy ? "Buy" : "Sell"}
                   </span>
                   <TokenAvatar
@@ -205,13 +206,13 @@ export default function PublicProfilePage() {
                     symbol={t.token.symbol}
                     className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-lg bg-obsidian-800 text-sm"
                   />
-                  <span className="min-w-0 flex-1 truncate text-white/70">
-                    {t.token.name} <span className="text-white/35">({t.token.symbol})</span>
+                  <span className="min-w-0 flex-1 truncate text-ink-2">
+                    {t.token.name} <span className="text-ink-4">({t.token.symbol})</span>
                   </span>
-                  <span className="shrink-0 font-mono text-white/70">
+                  <span className="shrink-0 font-mono text-ink-2">
                     {usdFromEth(t.ethAmount, ethUsd, 2)}
                   </span>
-                  <span className="w-20 shrink-0 text-right text-xs text-white/35">
+                  <span className="w-20 shrink-0 text-right text-xs text-ink-4">
                     {t.time ? timeAgo(t.time) : "—"}
                   </span>
                 </Link>
@@ -225,7 +226,7 @@ export default function PublicProfilePage() {
       {LIVE && devTokens.length > 0 && (
         <div className="mt-8">
           <h2 className="font-display text-lg font-bold">
-            Dev tokens <span className="text-sm font-normal text-white/40">launched by this wallet</span>
+            Dev tokens <span className="text-sm font-normal text-ink-4">launched by this wallet</span>
           </h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {devTokens.map((t) => (

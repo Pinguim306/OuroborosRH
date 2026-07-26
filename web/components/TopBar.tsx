@@ -37,13 +37,13 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
         <button
           onClick={onMenu}
           aria-label="Open menu"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-white/70 transition hover:bg-white/5 lg:hidden"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-ink-2 transition hover:bg-white/5 lg:hidden"
         >
           <IconMenu size={20} />
         </button>
 
         <div className="relative min-w-0 flex-1 lg:max-w-xl">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/30">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-4">
             <IconSearch size={16} />
           </span>
           <input
@@ -57,20 +57,20 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
 
         {/* Official $COIL contract address — full on wide screens, shortened on medium. */}
         {isDeployed(COIL_TOKEN) && (
-          <div className="hidden shrink-0 items-center gap-1.5 rounded-xl border border-venom-500/25 bg-venom-500/5 px-3 py-2 text-xs md:flex">
+          <div className="hidden shrink-0 items-center gap-1.5 rounded-xl border border-coil-500/25 bg-coil-500/5 px-3 py-2 text-xs md:flex">
             <Link
               href={`/token/${COIL_TOKEN}`}
-              className="font-semibold text-venom-400 hover:underline"
+              className="font-semibold text-coil-400 hover:underline"
             >
               Official CA:
             </Link>
             <button
               onClick={copyCA}
               title={`Copy contract address\n${COIL_TOKEN}`}
-              className="font-mono text-white/70 transition hover:text-white"
+              className="font-mono text-ink-2 transition hover:text-white"
             >
               {copied ? (
-                <span className="text-venom-400">Copied ✓</span>
+                <span className="text-coil-400">Copied ✓</span>
               ) : (
                 <>
                   <span className="hidden 2xl:inline">{COIL_TOKEN}</span>

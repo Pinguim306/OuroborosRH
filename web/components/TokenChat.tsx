@@ -28,7 +28,7 @@ function Avatar({ msg }: { msg: Msg }) {
     return <img src={ipfsToHttp(msg.avatar_url)} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />;
   }
   return (
-    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-venom-500/20 text-[10px] font-bold text-venom-300">
+    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-coil-500/20 text-[10px] font-bold text-coil-300">
       {label}
     </span>
   );
@@ -127,12 +127,12 @@ export function TokenChat({ token }: { token: string }) {
     <div className="glass flex max-h-[520px] flex-col overflow-hidden">
       <div className="flex items-center justify-between border-b border-white/5 px-5 py-3">
         <span className="text-sm font-semibold">Chat</span>
-        <span className="text-xs text-white/40">{messages.length > 0 ? `${messages.length} messages` : "Token thread"}</span>
+        <span className="text-xs text-ink-4">{messages.length > 0 ? `${messages.length} messages` : "Token thread"}</span>
       </div>
 
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
         {messages.length === 0 ? (
-          <p className="py-8 text-center text-xs text-white/35">No messages yet. Start the conversation.</p>
+          <p className="py-8 text-center text-xs text-ink-4">No messages yet. Start the conversation.</p>
         ) : (
           messages.map((m) => (
             <div key={m.id} className="flex items-start gap-2.5">
@@ -141,15 +141,15 @@ export function TokenChat({ token }: { token: string }) {
                 <div className="flex items-baseline gap-2">
                   <Link
                     href={`/u/${m.address}`}
-                    className="truncate text-xs font-semibold text-white/80 hover:text-venom-400"
+                    className="truncate text-xs font-semibold text-ink-2 hover:text-coil-400"
                   >
                     {m.username || shortAddr(m.address)}
                   </Link>
-                  <span className="shrink-0 text-[10px] text-white/30">
+                  <span className="shrink-0 text-[10px] text-ink-4">
                     {timeAgo(Math.floor(new Date(m.created_at).getTime() / 1000))}
                   </span>
                 </div>
-                <p className="whitespace-pre-wrap break-words text-sm text-white/70">{m.body}</p>
+                <p className="whitespace-pre-wrap break-words text-sm text-ink-2">{m.body}</p>
               </div>
             </div>
           ))
@@ -158,7 +158,7 @@ export function TokenChat({ token }: { token: string }) {
 
       <div className="border-t border-white/5 p-3">
         {disabled ? (
-          <p className="px-1 text-center text-xs text-white/40">Chat isn&apos;t enabled yet.</p>
+          <p className="px-1 text-center text-xs text-ink-4">Chat isn&apos;t enabled yet.</p>
         ) : !isConnected ? (
           <div className="flex justify-center">
             <WalletButton />
@@ -187,7 +187,7 @@ export function TokenChat({ token }: { token: string }) {
             </button>
           </div>
         )}
-        {notice && <p className="mt-2 px-1 text-center text-[11px] text-amber-400">{notice}</p>}
+        {notice && <p className="mt-2 px-1 text-center text-[11px] text-warn">{notice}</p>}
       </div>
     </div>
   );

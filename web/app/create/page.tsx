@@ -9,6 +9,8 @@ import { CHAIN_ID, NATIVE_SYMBOL, dexscreenerPageUrl, explorerUrl } from "@/lib/
 import { LIVE, CONTRACTS, launchpadAbi, COIL_LAUNCHPAD, LAUNCH_LIVE, coilLaunchpadV4Abi } from "@/lib/contracts";
 import { ProgressBar } from "@/components/ProgressBar";
 import { LaunchWidget } from "@/components/LaunchWidget";
+import { IconCrown, IconImage, IconRewards, IconWarning } from "@/components/Icon";
+import { IconBolt, IconCoin, IconExternal } from "@/components/Icon";
 
 export default function CreatePage() {
   const { isConnected } = useAccount();
@@ -231,13 +233,11 @@ export default function CreatePage() {
     <div className="mx-auto max-w-5xl px-4 py-12">
       <div className="mx-auto max-w-2xl text-center">
         <h1 className="font-display text-4xl font-extrabold tracking-tight">{copy.create.title}</h1>
-        <p className="mt-3 text-white/55">{copy.create.subtitle}</p>
+        <p className="mt-3 text-ink-3">{copy.create.subtitle}</p>
       </div>
 
-      <p className="mx-auto mt-8 max-w-lg text-center text-sm leading-relaxed text-white/50">
-        One transaction deploys your token into a live Uniswap v4 pool — tradable instantly,
-        liquidity locked forever, and every trade winds the coil with a native per-swap fee that
-        also feeds the $COIL buy&amp;burn. No fee-on-transfer, no harvest.
+      <p className="mx-auto mt-4 max-w-lg text-center text-sm leading-relaxed text-ink-3">
+        No presale, no team allocation, no creation fee — you pay network gas and nothing else.
       </p>
 
       <div className="mt-8 grid gap-6 md:grid-cols-[1fr_360px]">
@@ -280,26 +280,30 @@ export default function CreatePage() {
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
-                className="flex w-full items-center gap-4 rounded-xl border border-dashed border-white/15 bg-obsidian-900/60 p-4 text-left transition hover:border-venom-500/40"
+                className="flex w-full items-center gap-4 rounded-xl border border-dashed border-white/15 bg-obsidian-900/60 p-4 text-left transition hover:border-coil-500/40"
               >
                 <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl bg-obsidian-800 text-2xl">
                   {imagePreview ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={imagePreview} alt="preview" className="h-full w-full object-cover" />
                   ) : (
-                    "🖼️"
+                    <IconImage size={26} className="text-ink-4" />
                   )}
                 </div>
                 <div className="min-w-0 text-xs">
-                  <div className="font-semibold text-white/80">
+                  <div className="font-semibold text-ink-2">
                     {imageFile ? imageFile.name : "Choose an image from your device"}
                   </div>
-                  <div className="mt-0.5 text-white/40">Max 4 MB · .jpg, .png or .gif</div>
-                  <div className="text-white/40">Min. 1000×1000px · 1:1 square recommended</div>
+                  <div className="mt-0.5 text-ink-4">Max 4 MB · .jpg, .png or .gif</div>
+                  <div className="text-ink-4">Min. 1000×1000px · 1:1 square recommended</div>
                 </div>
               </button>
-              {imageError && <p className="mt-1.5 text-[11px] text-red-400">{imageError}</p>}
-              {imageWarn && <p className="mt-1.5 text-[11px] text-acid">⚠ {imageWarn}</p>}
+              {imageError && <p className="mt-1.5 text-[11px] text-down">{imageError}</p>}
+              {imageWarn && (
+                <p className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-warn">
+                  <IconWarning size={12} /> {imageWarn}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-3 gap-3">
@@ -324,12 +328,14 @@ export default function CreatePage() {
                     [
                       {
                         key: "loop",
-                        title: "🐍 Loop Rewards",
+                        title: "Loop Rewards",
+                        Icon: IconRewards,
                         desc: "The per-swap fee's holder slice streams to every holder automatically — the classic Coil loop.",
                       },
                       {
                         key: "creator",
-                        title: "👑 Creator Rewards",
+                        title: "Creator Rewards",
+                        Icon: IconCrown,
                         desc: "The per-swap fee's holder slice is paid straight to your wallet instead.",
                       },
                     ] as const
@@ -340,16 +346,19 @@ export default function CreatePage() {
                       onClick={() => setRewards(opt.key)}
                       className={`rounded-xl border p-3 text-left transition ${
                         rewards === opt.key
-                          ? "border-venom-500/60 bg-venom-500/10"
+                          ? "border-coil-500/60 bg-coil-500/10"
                           : "border-white/10 bg-obsidian-900/60 hover:border-white/25"
                       }`}
                     >
                       <div
-                        className={`text-sm font-semibold ${rewards === opt.key ? "text-venom-400" : "text-white/80"}`}
+                        className={`flex items-center gap-1.5 text-sm font-semibold ${
+                          rewards === opt.key ? "text-coil-400" : "text-ink-2"
+                        }`}
                       >
+                        <opt.Icon size={15} />
                         {opt.title}
                       </div>
-                      <p className="mt-1 text-[11px] leading-relaxed text-white/45">{opt.desc}</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-ink-3">{opt.desc}</p>
                     </button>
                   ))}
                 </div>
@@ -372,7 +381,7 @@ export default function CreatePage() {
                 />
                 <span className="chip shrink-0">{NATIVE_SYMBOL}</span>
               </div>
-              <p className="mt-1.5 text-[11px] text-white/40">
+              <p className="mt-1.5 text-[11px] text-ink-4">
                 {mode === "v4"
                   ? "Bought for you in a second transaction right after launch, through Coil Swap."
                   : "Executed as the pool's very first swap, inside the launch transaction — impossible to front-run."}
@@ -380,34 +389,34 @@ export default function CreatePage() {
             </div>
           </div>
 
-          <div className="mt-6 rounded-xl border border-white/5 bg-obsidian-900/50 p-4 text-xs text-white/50">
-            <div className="mb-2 font-semibold text-white/70">Launch parameters</div>
+          <div className="mt-6 rounded-xl border border-white/5 bg-obsidian-900/50 p-4 text-xs text-ink-3">
+            <div className="mb-2 font-semibold text-ink-2">Launch parameters</div>
             <ul className="grid grid-cols-2 gap-y-1">
-              <li>Supply: <span className="text-white/70">1,000,000,000</span></li>
+              <li>Supply: <span className="text-ink-2">1,000,000,000</span></li>
               <li>
                 Pool fee:{" "}
-                <span className="text-white/70">
+                <span className="text-ink-2">
                   {mode === "v4" ? "0% LP + native per-swap fee" : "1% (Uniswap V3)"}
                 </span>
               </li>
-              <li>Liquidity: <span className="text-white/70">locked forever</span></li>
+              <li>Liquidity: <span className="text-ink-2">locked forever</span></li>
               <li>
                 Tradable:{" "}
-                <span className="text-white/70">
+                <span className="text-ink-2">
                   {mode === "v4" ? "instantly on Coil Swap" : "instantly, DexScreener from trade one"}
                 </span>
               </li>
               <li>
                 Rewards:{" "}
-                <span className="text-venom-400">
+                <span className="text-coil-400">
                   {rewards === "creator" ? "pool fees to the creator" : "from pool fees, no staking"}
                 </span>
               </li>
             </ul>
             <div className="mt-3 space-y-1 border-t border-white/5 pt-3">
               <div className="flex items-center justify-between">
-                <span className="text-white/60">One-time creation fee</span>
-                <span className="font-mono font-semibold text-acid">
+                <span className="text-ink-3">One-time creation fee</span>
+                <span className="tabular font-semibold text-ink">
                   {feeEth === undefined
                     ? "…"
                     : feeEth === 0
@@ -418,13 +427,13 @@ export default function CreatePage() {
               {devBuyNum > 0 && (
                 <>
                   <div className="flex items-center justify-between">
-                    <span className="text-white/60">Dev buy</span>
-                    <span className="font-mono text-white/70">
+                    <span className="text-ink-3">Dev buy</span>
+                    <span className="font-mono text-ink-2">
                       {devBuyNum.toFixed(4)} {NATIVE_SYMBOL}
                     </span>
                   </div>
                   <div className="flex items-center justify-between border-t border-white/5 pt-1">
-                    <span className="text-white/70">Total</span>
+                    <span className="text-ink-2">Total</span>
                     <span className="font-mono font-semibold text-white">
                       {((feeEth ?? 0) + devBuyNum).toFixed(4)} {NATIVE_SYMBOL}
                     </span>
@@ -445,9 +454,8 @@ export default function CreatePage() {
           ) : (
             <>
               {done ? (
-                <div className="mt-6 rounded-xl border border-venom-500/30 bg-venom-500/10 p-4 text-center">
-                  <div className="text-2xl">🎉</div>
-                  <p className="mt-1 font-semibold text-venom-400">
+                <div className="mt-6 rounded-xl border border-coil-500/30 bg-coil-500/10 p-4 text-center">
+                  <p className="mt-1 font-semibold text-coil-400">
                     {form.name} (${form.symbol}) is live in the loop!
                   </p>
                   <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
@@ -466,7 +474,7 @@ export default function CreatePage() {
                         type="button"
                         onClick={() => navigator.clipboard?.writeText(newTokenAddress)}
                         title="Copy contract address"
-                        className="mt-2 break-all font-mono text-[11px] text-white/50 underline decoration-dotted hover:text-white"
+                        className="mt-2 break-all font-mono text-[11px] text-ink-3 underline decoration-dotted hover:text-white"
                       >
                         {newTokenAddress} ⧉
                       </button>
@@ -476,18 +484,18 @@ export default function CreatePage() {
                             href={dexUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-venom-400 hover:underline"
+                            className="text-coil-400 hover:underline"
                           >
-                            DexScreener ↗
+                            DexScreener <IconExternal size={10} />
                           </a>
                         )}
                         <a
                           href={explorerUrl("token", newTokenAddress, CHAIN_ID)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-venom-400 hover:underline"
+                          className="text-coil-400 hover:underline"
                         >
-                          Explorer ↗
+                          Explorer <IconExternal size={10} />
                         </a>
                       </div>
                     </>
@@ -509,12 +517,12 @@ export default function CreatePage() {
                 </div>
               )}
               {LIVE && (uploadError || error) && (
-                <p className="mt-3 text-center text-[11px] text-red-400">
+                <p className="mt-3 text-center text-[11px] text-down">
                   {uploadError ?? (error as { shortMessage?: string })?.shortMessage ?? "Transaction failed."}
                 </p>
               )}
               {!isConnected && (
-                <p className="mt-3 text-center text-[11px] text-white/30">
+                <p className="mt-3 text-center text-[11px] text-ink-4">
                   {LIVE ? "Connect a wallet to deploy." : "Demo mode — this simulates the deploy transaction."}
                 </p>
               )}
@@ -532,7 +540,7 @@ export default function CreatePage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={imagePreview} alt="preview" className="h-full w-full object-cover" />
                 ) : (
-                  "🪙"
+                  <IconCoin size={30} className="text-ink-4" />
                 )}
               </div>
               <div className="min-w-0 flex-1">
@@ -548,24 +556,24 @@ export default function CreatePage() {
               </div>
               <div>
                 <div className="label">24h Volume</div>
-                <div className="mt-0.5 text-sm font-semibold text-venom-400">—</div>
+                <div className="mt-0.5 text-sm font-semibold text-coil-400">—</div>
               </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between text-xs text-white/40">
+            <div className="mt-3 flex items-center justify-between text-xs text-ink-4">
               <div className="flex items-center gap-2">
                 <span>⧗ new</span>
                 {(form.x || form.website) && (
                   <span className="flex items-center gap-1">
                     {form.x && (
-                      <span className="grid h-6 w-6 place-items-center rounded-md border border-white/10 text-white/55">
+                      <span className="grid h-6 w-6 place-items-center rounded-md border border-white/10 text-ink-3">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.45-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117l11.966 15.644Z" />
                         </svg>
                       </span>
                     )}
                     {form.website && (
-                      <span className="grid h-6 w-6 place-items-center rounded-md border border-white/10 text-white/55">
+                      <span className="grid h-6 w-6 place-items-center rounded-md border border-white/10 text-ink-3">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                           <circle cx="12" cy="12" r="9" />
                           <path d="M3 12h18M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18" />
@@ -575,12 +583,12 @@ export default function CreatePage() {
                   </span>
                 )}
               </div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-venom-500/10 px-2 py-0.5 text-[10px] font-semibold text-venom-400">
-                ⚡ Uniswap {mode === "v4" ? "v4" : "V3"}
+              <span className="inline-flex items-center gap-1 rounded-full bg-coil-500/10 px-2 py-0.5 text-[10px] font-semibold text-coil-400">
+                <IconBolt size={11} /> Uniswap {mode === "v4" ? "v4" : "V3"}
               </span>
             </div>
           </div>
-          <p className="mt-3 text-xs leading-relaxed text-white/35">
+          <p className="mt-3 text-xs leading-relaxed text-ink-4">
             The moment you launch, the pool is live and its fees start feeding holder rewards — no
             extra setup.
           </p>

@@ -16,7 +16,7 @@ export default function TermsPage() {
       <header className="mb-10">
         <div className="label">Legal</div>
         <h1 className="mt-2 font-display text-4xl font-extrabold tracking-tight">Terms of Use</h1>
-        <p className="mt-3 text-sm text-white/45">Last updated: {LAST_UPDATED}</p>
+        <p className="mt-3 text-sm text-ink-3">Last updated: {LAST_UPDATED}</p>
       </header>
 
       <div className="space-y-8">
@@ -90,7 +90,7 @@ export default function TermsPage() {
         <Clause n={7} title="Fees">
           <p>
             Launching and trading incur fees that are described in the{" "}
-            <Link href="/docs" className="text-venom-400 underline hover:text-venom-300">
+            <Link href="/docs" className="text-coil-400 underline hover:text-coil-300">
               documentation
             </Link>{" "}
             and enforced on-chain, including a one-time creation fee and a per-trade fee. A portion of
@@ -153,7 +153,7 @@ export default function TermsPage() {
         </Clause>
       </div>
 
-      <p className="mt-10 border-t border-white/5 pt-6 text-xs leading-relaxed text-white/40">
+      <p className="mt-10 border-t border-white/5 pt-6 text-xs leading-relaxed text-ink-4">
         {copy.footer.disclaimer}
       </p>
     </div>
@@ -164,10 +164,10 @@ function Clause({ n, title, children }: { n: number; title: string; children: Re
   return (
     <section className="scroll-mt-24">
       <h2 className="font-display text-lg font-bold tracking-tight">
-        <span className="mr-2 text-venom-400/70">{n}.</span>
+        <span className="mr-2 text-coil-400/70">{n}.</span>
         {title}
       </h2>
-      <div className="mt-2 space-y-3 text-sm leading-relaxed text-white/60">{children}</div>
+      <div className="mt-2 space-y-3 text-sm leading-relaxed text-ink-3">{children}</div>
     </section>
   );
 }
@@ -175,7 +175,7 @@ function Clause({ n, title, children }: { n: number; title: string; children: Re
 function Bullet({ children }: { children: React.ReactNode }) {
   return (
     <li className="flex gap-2.5">
-      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-venom-500/60" />
+      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-coil-500/60" />
       <span>{children}</span>
     </li>
   );

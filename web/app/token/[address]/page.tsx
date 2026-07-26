@@ -19,7 +19,7 @@ import { RewardsPanel } from "@/components/RewardsPanel";
 import { MarketcapChart } from "@/components/MarketcapChart";
 import { CandleChart } from "@/components/CandleChart";
 import { DexScreenerChart } from "@/components/DexScreenerChart";
-import { dexscreenerEmbedUrl, explorerUrl } from "@/lib/chain";
+import { chainConfig, dexscreenerEmbedUrl, explorerUrl } from "@/lib/chain";
 import { useSelectedChainId } from "@/lib/useSelectedChain";
 import { ChainBadge } from "@/components/ChainBadge";
 import { TokenAvatar } from "@/components/TokenAvatar";
@@ -30,6 +30,7 @@ import { useTokenMeta } from "@/lib/useMeta";
 import { useTotalFeesEth } from "@/lib/useFees";
 import { useDexPair } from "@/lib/useDexPair";
 import { ShareModal } from "@/components/ShareModal";
+import { IconBolt, IconCopy, IconCrown, IconExternal, IconSearch, IconShare, IconSparkle } from "@/components/Icon";
 
 /** Live trade ids are `${txHash}-${logIndex}`; mock ids aren't hashes. */
 function txHashOf(id: string): string | null {
@@ -67,18 +68,25 @@ export default function TokenPage() {
   const dexHasV4 = useDexPair(v4PoolId);
 
   if (!hidden && LIVE && (live.isLoading || liveV4.isLoading) && !token) {
-    return <div className="mx-auto max-w-md px-4 py-32 text-center text-white/50">Loading token…</div>;
+    return <div className="mx-auto max-w-md px-4 py-32 text-center text-ink-3">Loading token…</div>;
   }
 
   if (!token) {
     return (
-      <div className="mx-auto max-w-md px-4 py-32 text-center">
-        <div className="text-5xl">🕳️</div>
-        <h1 className="mt-4 font-display text-2xl font-bold">Token not found</h1>
-        <p className="mt-2 text-white/50">This market doesn&apos;t exist (or hasn&apos;t been indexed yet).</p>
-        <Link href="/discover" className="btn-primary mt-6 inline-flex">
-          Back to Discover
-        </Link>
+      <div className="mx-auto max-w-md px-4 py-32">
+        <div className="empty">
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-coil-500/10 text-coil-400">
+            <IconSearch size={22} />
+          </span>
+          <h1 className="empty-title !text-lg">Token not found</h1>
+          <p className="empty-body">
+            No market at this address on {chainConfig(chainId).chain.name}. It may live on another
+            network, or it may not be indexed yet.
+          </p>
+          <Link href="/" className="btn-primary mt-1">
+            Explore coins
+          </Link>
+        </div>
       </div>
     );
   }
@@ -101,24 +109,37 @@ export default function TokenPage() {
         <TokenAvatar
           uri={token.image}
           symbol={token.symbol}
-          className="grid h-32 w-32 shrink-0 place-items-center overflow-hidden rounded-2xl bg-obsidian-800 text-6xl"
+          className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-2xl bg-obsidian-800 text-5xl sm:h-32 sm:w-32 sm:text-6xl"
         />
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
+        {/*
+          `basis` + `flex-1` rather than `min-w-0`: this column has to be allowed to WRAP onto its
+          own line, not to shrink. Letting it shrink squeezed the description to about ninety pixels
+          on a phone — one or two words per line — because the avatar and the marketcap block are
+          both fixed-width and took the row.
+        */}
+        <div className="min-w-[16rem] flex-1 basis-64">
+          {/* Wraps: the badge row can carry four chips next to a long token name. */}
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-display text-2xl font-bold">{token.name}</h1>
             <span className="chip">{token.symbol}</span>
             {/* A visitor can land here from a shared link with no other chain context. */}
             <ChainBadge chainId={token.chainId} className="!py-1" />
             {isV4 ? (
-              <span className="chip border-venom-500/40 text-venom-400">⚡ v4</span>
+              <span className="chip border-coil-500/40 text-coil-400">
+                <IconBolt size={12} /> v4
+              </span>
             ) : token.mode === "v3" ? (
-              <span className="chip border-venom-500/40 text-venom-400">⚡ V3</span>
+              <span className="chip border-coil-500/40 text-coil-400">
+                <IconBolt size={12} /> V3
+              </span>
             ) : token.graduated ? (
-              <span className="chip border-venom-500/40 text-venom-400">✦ Graduated</span>
+              <span className="chip border-coil-500/40 text-coil-400">
+                <IconSparkle size={12} /> Graduated
+              </span>
             ) : null}
             {token.creatorFees && (
-              <span className="chip border-acid/40 text-acid" title="Trade fees pay the creator, not holders">
-                👑 Creator Rewards
+              <span className="chip border-spark/40 text-spark" title="Trade fees pay the creator, not holders">
+                <IconCrown size={12} /> Creator Rewards
               </span>
             )}
           </div>
@@ -126,21 +147,21 @@ export default function TokenPage() {
             type="button"
             onClick={() => navigator.clipboard?.writeText(token.address)}
             title={`Copy contract address\n${token.address}`}
-            className="mt-1 font-mono text-[11px] text-white/40 underline decoration-dotted hover:text-white"
+            className="mt-1 inline-flex items-center gap-1.5 font-mono text-[11px] text-ink-4 underline decoration-dotted transition hover:text-ink"
           >
-            {shortAddr(token.address)} ⧉
+            {shortAddr(token.address)} <IconCopy size={12} />
           </button>
-          <p className="mt-1 max-w-xl text-sm text-white/50">
+          <p className="mt-1 max-w-xl text-sm text-ink-3">
             {meta?.description || token.description}
           </p>
-          <p className="mt-1 text-xs text-white/35">
+          <p className="mt-1 text-xs text-ink-4">
             {token.createdAt ? (
               <>Created {fullDateTime(token.createdAt)} · {timeAgo(token.createdAt)} · </>
             ) : null}
             by{" "}
             <Link
               href={`/u/${token.creator.toLowerCase()}`}
-              className="font-mono text-venom-400/80 hover:text-venom-400 hover:underline"
+              className="font-mono text-coil-400/80 hover:text-coil-400 hover:underline"
               title="View the creator's profile"
             >
               {shortAddr(token.creator)}
@@ -153,29 +174,41 @@ export default function TokenPage() {
             className="mt-2"
           />
         </div>
-        <div className="text-right">
+        {/* Left-aligned once it has wrapped onto its own line; right-aligned beside the title. */}
+        <div className="w-full sm:w-auto sm:text-right">
           <div className="label">Marketcap</div>
-          <div className="stat-value text-gradient">{usdFromEth(token.marketCapRh, ethUsd)}</div>
+          <div className="stat-value text-gradient !text-3xl">
+            {usdFromEth(token.marketCapRh, ethUsd)}
+          </div>
           <button
             onClick={() => setShareOpen(true)}
             className="btn-ghost mt-2 !px-3 !py-1.5 text-xs"
             title="Share this coin"
           >
-            ↗ Share
+            <IconShare size={13} /> Share
           </button>
         </div>
       </div>
 
       <ShareModal token={token} open={shareOpen} onClose={() => setShareOpen(false)} />
 
+      {/*
+        Three grid children, not two, so the buy box can sit between the chart and the tables.
+        As a two-column stack the actions column came last in the DOM, which is right on desktop
+        but put the Buy button ~2,600px down the page on a phone — below the chart, the curve, the
+        trade table, the holder table and the chat. Splitting the market column in two lets the
+        natural mobile order be chart → trade → detail, while `lg:row-span-2` keeps the actions
+        column full-height (and sticky) on desktop exactly as before.
+      */}
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_380px]">
-        {/* Left: market data */}
+        {/* Market data — headline numbers and the chart */}
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatTile label="Marketcap" value={usdFromEth(token.marketCapRh, ethUsd)} />
-            <StatTile label="ATH" value={usdFromEth(athEth, ethUsd)} accent />
-            <StatTile label="Rewards pool" value={usdFromEth(totalFeesEth, ethUsd)} />
+            {/* Marketcap is the header's hero number; repeating it here just spent a tile. */}
+            <StatTile label="ATH" value={usdFromEth(athEth, ethUsd)} />
             <StatTile label="24h Volume" value={usdFromEth(vol24, ethUsd)} />
+            <StatTile label="Rewards pool" value={usdFromEth(totalFeesEth, ethUsd)} />
+            <StatTile label="Holders" value={compact(token.holders, 0)} />
           </div>
 
           {/* Chart: DexScreener when it indexes the market (V3/graduated pairs by address, v4
@@ -193,15 +226,33 @@ export default function TokenPage() {
           ) : (
             <MarketcapChart series={series} ethUsd={ethUsd} />
           )}
+        </div>
 
+        {/* Actions — first thing after the chart on a phone, sticky sidebar on desktop */}
+        <div className="space-y-6 lg:row-span-2 lg:sticky lg:top-20 lg:self-start">
+          {isV4 ? (
+            <>
+              <V4TradeWidget token={token} ethUsd={ethUsd} />
+              <RewardsPanel token={token} />
+            </>
+          ) : (
+            <>
+              <TradeWidget token={token} />
+              <RewardsPanel token={token} />
+            </>
+          )}
+        </div>
+
+        {/* Detail — pool status, trades, holders, chat */}
+        <div className="space-y-6">
           {/* Market status: v4 hook pool, V3 pool, graduated, or bonding-curve progress */}
           {isV4 ? (
             <div className="glass p-6">
-              <div className="mb-3 flex items-center justify-between">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <h3 className="font-semibold">Uniswap v4 pool</h3>
-                <span className="text-xs text-white/40">native per-swap fee · liquidity locked</span>
+                <span className="text-xs text-ink-3">native per-swap fee · liquidity locked</span>
               </div>
-              <div className="rounded-xl bg-venom-500/10 p-4 text-center text-sm text-venom-400">
+              <div className="rounded-xl bg-coil-500/10 p-4 text-center text-sm text-coil-400">
                 This token launched straight into a Uniswap v4 pool. Its liquidity is locked forever
                 (the hook owns it and renounced ownership), and every swap pays a native fee split
                 on-chain between holders, the protocol, and the $COIL buy&amp;burn — no harvest step.
@@ -209,11 +260,11 @@ export default function TokenPage() {
             </div>
           ) : token.mode === "v3" ? (
             <div className="glass p-6">
-              <div className="mb-3 flex items-center justify-between">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <h3 className="font-semibold">Uniswap V3 pool</h3>
-                <span className="text-xs text-white/40">1% pool fee · liquidity locked</span>
+                <span className="text-xs text-ink-3">1% pool fee · liquidity locked</span>
               </div>
-              <div className="rounded-xl bg-venom-500/10 p-4 text-center text-sm text-venom-400">
+              <div className="rounded-xl bg-coil-500/10 p-4 text-center text-sm text-coil-400">
                 This token launched straight into a Uniswap V3 pool — no bonding curve. Its
                 liquidity is locked forever; the pool&apos;s 1% swap fee is harvested for the
                 protocol and streamed to holders.
@@ -222,14 +273,14 @@ export default function TokenPage() {
             </div>
           ) : (
             <div className="glass p-6">
-              <div className="mb-4 flex items-center justify-between">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <h3 className="font-semibold">Bonding curve</h3>
-                <span className="text-xs text-white/40">
+                <span className="text-xs text-ink-3">
                   Graduates at 4 {NATIVE_SYMBOL} raised · max buy 2%
                 </span>
               </div>
               {token.graduated ? (
-                <div className="rounded-xl bg-venom-500/10 p-4 text-center text-sm text-venom-400">
+                <div className="rounded-xl bg-coil-500/10 p-4 text-center text-sm text-coil-400">
                   This token filled its curve and graduated to Uniswap V2. The migrated liquidity is
                   permanent — its LP tokens were burned — and trading now happens on the DEX pair.
                 </div>
@@ -243,13 +294,13 @@ export default function TokenPage() {
           <div className="glass overflow-hidden">
             <div className="border-b border-white/5 px-5 py-3 text-sm font-semibold">Recent trades</div>
             {trades.length === 0 ? (
-              <div className="px-5 py-8 text-center text-xs text-white/35">
+              <div className="px-5 py-8 text-center text-xs text-ink-4">
                 {LIVE && activity.isLoading ? "Loading trades…" : "No trades yet. Be the first."}
               </div>
             ) : (
               <div className="max-h-80 overflow-y-auto">
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-obsidian-850/90 text-left text-xs text-white/40">
+                  <thead className="sticky top-0 bg-obsidian-850/90 text-left text-xs text-ink-4">
                     <tr>
                       <th className="px-5 py-2 font-medium">Type</th>
                       <th className="px-5 py-2 font-medium">{NATIVE_SYMBOL}</th>
@@ -263,7 +314,7 @@ export default function TokenPage() {
                       const tx = txHashOf(t.id);
                       return (
                         <tr key={t.id} className="border-t border-white/5">
-                          <td className={`px-5 py-2 font-semibold ${t.isBuy ? "text-venom-400" : "text-red-400"}`}>
+                          <td className={`px-5 py-2 font-semibold ${t.isBuy ? "text-up" : "text-down"}`}>
                             {tx ? (
                               <a
                                 href={explorerUrl("tx", tx, token.chainId ?? chainId)}
@@ -272,7 +323,7 @@ export default function TokenPage() {
                                 className="hover:underline"
                                 title="View transaction on the explorer"
                               >
-                                {t.isBuy ? "Buy" : "Sell"} ↗
+                                {t.isBuy ? "Buy" : "Sell"} <IconExternal size={11} className="inline align-[-1px]" />
                               </a>
                             ) : t.isBuy ? (
                               "Buy"
@@ -280,17 +331,17 @@ export default function TokenPage() {
                               "Sell"
                             )}
                           </td>
-                          <td className="px-5 py-2 font-mono text-white/70">{compact(t.rhAmount, 3)}</td>
-                          <td className="px-5 py-2 font-mono text-white/70">{compact(t.tokenAmount, 0)}</td>
-                          <td className="px-5 py-2 font-mono text-white/40">
+                          <td className="px-5 py-2 font-mono text-ink-2">{compact(t.rhAmount, 3)}</td>
+                          <td className="px-5 py-2 font-mono text-ink-2">{compact(t.tokenAmount, 0)}</td>
+                          <td className="px-5 py-2 font-mono text-ink-4">
                             <Link
                               href={`/u/${t.trader.toLowerCase()}`}
-                              className="hover:text-venom-400 hover:underline"
+                              className="hover:text-coil-400 hover:underline"
                             >
                               {shortAddr(t.trader)}
                             </Link>
                           </td>
-                          <td className="px-5 py-2 text-right text-xs text-white/40">
+                          <td className="px-5 py-2 text-right text-xs text-ink-4">
                             {t.time ? timeAgo(t.time) : "—"}
                           </td>
                         </tr>
@@ -306,27 +357,27 @@ export default function TokenPage() {
           <div className="glass overflow-hidden">
             <div className="flex items-center justify-between border-b border-white/5 px-5 py-3">
               <span className="text-sm font-semibold">Top holders</span>
-              <span className="text-xs text-white/40">{holders.length} shown</span>
+              <span className="text-xs text-ink-4">{holders.length} shown</span>
             </div>
             {holders.length === 0 ? (
-              <div className="px-5 py-8 text-center text-xs text-white/35">
+              <div className="px-5 py-8 text-center text-xs text-ink-4">
                 {LIVE && holdersData.isLoading ? "Loading holders…" : "No holders yet."}
               </div>
             ) : (
               <div className="divide-y divide-white/5">
                 {holders.map((h, i) => (
                   <div key={h.address} className="flex items-center gap-3 px-5 py-3 text-sm">
-                    <span className="w-5 text-white/30">{i + 1}</span>
+                    <span className="w-5 text-ink-4">{i + 1}</span>
                     <Link
                       href={`/u/${h.address.toLowerCase()}`}
-                      className="flex-1 font-mono text-white/60 hover:text-venom-400 hover:underline"
+                      className="flex-1 font-mono text-ink-3 hover:text-coil-400 hover:underline"
                     >
                       {shortAddr(h.address)}
                     </Link>
-                    <span className="w-24 text-right font-mono text-white/50">
+                    <span className="w-24 text-right font-mono text-ink-3">
                       {compact(h.balance, 0)} {token.symbol}
                     </span>
-                    <span className="w-16 text-right font-semibold text-venom-400">
+                    <span className="w-16 text-right font-semibold text-coil-400">
                       {pct(h.sharePct / 100)}
                     </span>
                   </div>
@@ -337,21 +388,6 @@ export default function TokenPage() {
 
           {/* Community chat */}
           <TokenChat token={token.address} />
-        </div>
-
-        {/* Right: actions */}
-        <div className="space-y-6 lg:sticky lg:top-20 lg:self-start">
-          {isV4 ? (
-            <>
-              <V4TradeWidget token={token} ethUsd={ethUsd} />
-              <RewardsPanel token={token} />
-            </>
-          ) : (
-            <>
-              <TradeWidget token={token} />
-              <RewardsPanel token={token} />
-            </>
-          )}
         </div>
       </div>
     </div>

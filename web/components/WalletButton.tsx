@@ -7,6 +7,7 @@ import { useAccount, useConnect, useDisconnect, useSwitchChain, type Connector }
 import { shortAddr } from "@/lib/format";
 import { chainConfig } from "@/lib/chain";
 import { useSelectedChainId } from "@/lib/useSelectedChain";
+import { IconExternal, IconWallet, IconWarning } from "@/components/Icon";
 
 export function WalletButton() {
   const { address, isConnected, chainId } = useAccount();
@@ -97,14 +98,14 @@ export function WalletButton() {
             onClick={() => setPicker(false)}
           >
             <div
-              className="w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-obsidian-850 shadow-venom"
+              className="w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-obsidian-850 shadow-coil"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-white/5 px-5 py-4">
                 <h3 className="font-display text-base font-bold">Connect a wallet</h3>
                 <button
                   onClick={() => setPicker(false)}
-                  className="grid h-7 w-7 place-items-center rounded-lg text-white/40 transition hover:bg-white/5 hover:text-white"
+                  className="grid h-7 w-7 place-items-center rounded-lg text-ink-4 transition hover:bg-white/5 hover:text-white"
                   aria-label="Close"
                 >
                   ✕
@@ -124,14 +125,14 @@ export function WalletButton() {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={c.icon} alt="" className="h-6 w-6" />
                       ) : (
-                        <span className="text-lg">👛</span>
+                        <IconWallet size={18} className="text-ink-3" />
                       )}
                     </span>
                     <span className="flex-1 text-sm font-medium text-white">
                       {c.name === "Injected" ? "Browser wallet" : c.name}
                     </span>
                     {pendingId === c.uid && isPending && (
-                      <span className="text-xs text-white/40">Connecting…</span>
+                      <span className="text-xs text-ink-4">Connecting…</span>
                     )}
                   </button>
                 ))}
@@ -139,7 +140,7 @@ export function WalletButton() {
 
               {missing.length > 0 && (
                 <div className="border-t border-white/5 p-2">
-                  <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+                  <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-ink-4">
                     Not installed
                   </div>
                   {missing.map((s) => (
@@ -150,11 +151,11 @@ export function WalletButton() {
                       rel="noopener noreferrer"
                       className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-white/5"
                     >
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-obsidian-800 text-lg">
-                        👛
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-obsidian-800">
+                        <IconWallet size={18} className="text-ink-4" />
                       </span>
-                      <span className="flex-1 text-sm font-medium text-white/70">{s.name}</span>
-                      <span className="text-xs text-venom-400">Install ↗</span>
+                      <span className="flex-1 text-sm font-medium text-ink-2">{s.name}</span>
+                      <span className="inline-flex items-center gap-1 text-xs text-coil-400">Install <IconExternal size={11} /></span>
                     </a>
                   ))}
                 </div>
@@ -162,11 +163,11 @@ export function WalletButton() {
 
               <div className="border-t border-white/5 px-5 py-3">
                 {error ? (
-                  <p className="text-xs text-red-400">
+                  <p className="text-xs text-down">
                     {(error as { shortMessage?: string }).shortMessage ?? "Connection failed."}
                   </p>
                 ) : (
-                  <p className="text-xs text-white/35">
+                  <p className="text-xs text-ink-4">
                     After installing a wallet, reload the page to see it here.
                   </p>
                 )}
@@ -187,16 +188,16 @@ export function WalletButton() {
         <button
           onClick={() => switchChain({ chainId: selectedChainId })}
           disabled={switching}
-          className="flex items-center gap-1.5 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-300 transition hover:bg-amber-400/20 disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs font-semibold text-warn transition hover:bg-warn/20 disabled:opacity-50"
         >
-          <span aria-hidden>⚠</span>
+          <IconWarning size={13} />
           {switching ? "Switching…" : `Switch to ${selectedChain.name}`}
         </button>
       )}
       <button onClick={toggleMenu} className="btn-ghost">
-        <span className="h-2 w-2 rounded-full bg-venom-400 shadow-glow" />
+        <span className="h-2 w-2 rounded-full bg-coil-400 shadow-glow" />
         <span className="font-mono text-xs">{shortAddr(address)}</span>
-        <span className={`text-white/40 transition ${open ? "rotate-180" : ""}`}>▾</span>
+        <span className={`text-ink-4 transition ${open ? "rotate-180" : ""}`}>▾</span>
       </button>
 
       {/* Portal to <body>: the nav header's backdrop-blur creates a containing
@@ -206,11 +207,11 @@ export function WalletButton() {
         <div
           ref={menuRef}
           style={{ top: menuPos.top, right: menuPos.right }}
-          className="fixed z-[60] w-52 overflow-hidden rounded-xl border border-white/10 bg-obsidian-850 shadow-venom"
+          className="fixed z-[60] w-52 overflow-hidden rounded-xl border border-white/10 bg-obsidian-850 shadow-coil"
         >
           <div className="border-b border-white/5 px-4 py-3">
             <div className="label">Connected</div>
-            <div className="mt-0.5 font-mono text-xs text-white/70">{shortAddr(address)}</div>
+            <div className="mt-0.5 font-mono text-xs text-ink-2">{shortAddr(address)}</div>
           </div>
           <button
             onClick={() => {
@@ -218,14 +219,14 @@ export function WalletButton() {
               setCopied(true);
               setTimeout(() => setCopied(false), 1500);
             }}
-            className="block w-full px-4 py-2.5 text-left text-sm text-white/70 transition hover:bg-white/5"
+            className="block w-full px-4 py-2.5 text-left text-sm text-ink-2 transition hover:bg-white/5"
           >
             {copied ? "✓ Copied" : "Copy address"}
           </button>
           <Link
             href="/profile"
             onClick={() => setOpen(false)}
-            className="block w-full px-4 py-2.5 text-left text-sm text-white/70 transition hover:bg-white/5"
+            className="block w-full px-4 py-2.5 text-left text-sm text-ink-2 transition hover:bg-white/5"
           >
             My profile
           </Link>
@@ -234,7 +235,7 @@ export function WalletButton() {
               disconnect();
               setOpen(false);
             }}
-            className="block w-full px-4 py-2.5 text-left text-sm text-red-400 transition hover:bg-red-500/10"
+            className="block w-full px-4 py-2.5 text-left text-sm text-down transition hover:bg-down/10"
           >
             Disconnect
           </button>

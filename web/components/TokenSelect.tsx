@@ -39,7 +39,7 @@ function Row({
       onClick={onClick}
       className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-white/5"
     >
-      <span className="grid h-9 w-9 place-items-center rounded-full bg-venom-500/15 text-sm font-bold text-venom-400">
+      <span className="grid h-9 w-9 place-items-center rounded-full bg-coil-500/15 text-sm font-bold text-coil-400">
         {symbol.slice(0, 3).toUpperCase()}
       </span>
       <span className="min-w-0 flex-1">
@@ -48,7 +48,7 @@ function Row({
           {v4 && <span className="chip !py-0.5 text-[10px]">v4</span>}
         </span>
         {(name || addr) && (
-          <span className="block truncate text-xs text-white/40">{name ?? (addr ? shortAddr(addr) : "")}</span>
+          <span className="block truncate text-xs text-ink-4">{name ?? (addr ? shortAddr(addr) : "")}</span>
         )}
       </span>
     </button>
@@ -103,7 +103,7 @@ export function TokenSelect({
       <div className="glass-strong w-full max-w-sm p-4" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
           <h3 className="font-display text-lg font-bold">Select a token</h3>
-          <button onClick={onClose} className="text-xl leading-none text-white/40 hover:text-white">
+          <button onClick={onClose} className="text-xl leading-none text-ink-4 hover:text-white">
             ×
           </button>
         </div>
@@ -141,7 +141,7 @@ export function TokenSelect({
           )}
 
           {filtered.length === 0 && !showEth && !pasted && (
-            <p className="py-6 text-center text-sm text-white/40">No match. Paste a token address to import.</p>
+            <p className="py-6 text-center text-sm text-ink-4">No match. Paste a token address to import.</p>
           )}
         </div>
       </div>

@@ -48,7 +48,7 @@ export function ChainSwitcher() {
         aria-haspopup="listbox"
         aria-expanded={open}
         title={`Network: ${cur.chain.name}`}
-        className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-sm font-semibold text-white/80 transition hover:border-venom-500/40 hover:text-white"
+        className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-sm font-semibold text-ink-2 transition hover:border-coil-500/40 hover:text-white"
       >
         <span
           aria-hidden
@@ -56,7 +56,7 @@ export function ChainSwitcher() {
           style={{ backgroundColor: cur.accent }}
         />
         <span className="hidden sm:inline">{cur.shortName}</span>
-        <span aria-hidden className="text-[10px] text-white/40">
+        <span aria-hidden className="text-[10px] text-ink-4">
           ▾
         </span>
       </button>
@@ -77,7 +77,7 @@ export function ChainSwitcher() {
                 aria-selected={active}
                 onClick={() => pick(c.id)}
                 className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-                  active ? "bg-white/10 text-white" : "text-white/70 hover:bg-white/5 hover:text-white"
+                  active ? "bg-white/10 text-white" : "text-ink-2 hover:bg-white/5 hover:text-white"
                 }`}
               >
                 <span
@@ -87,11 +87,11 @@ export function ChainSwitcher() {
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-semibold">{cfg.chain.name}</span>
-                  <span className="block text-[11px] text-white/40">
+                  <span className="block text-[11px] text-ink-4">
                     {deployed ? `Gas in ${cfg.nativeSymbol}` : "Not launched here yet"}
                   </span>
                 </span>
-                {active && <span className="text-xs text-venom-400">✓</span>}
+                {active && <span className="text-xs text-coil-400">✓</span>}
               </button>
             );
           })}
