@@ -2,6 +2,7 @@
 
 import { useTokenMeta } from "@/lib/useMeta";
 import { ipfsToHttp } from "@/lib/metadata";
+import { IconCoin } from "./Icon";
 
 /**
  * Token avatar that resolves the metadataURI (JSON metadata or a direct image) to
@@ -29,7 +30,7 @@ export function TokenAvatar({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={image} alt={symbol ?? ""} className={imgClassName} />
       ) : (
-        image || "🪙"
+        image || <IconCoin size={22} className="text-ink-4" />
       )}
     </div>
   );

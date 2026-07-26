@@ -24,7 +24,7 @@ const sections = [
 export default function DocsPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">
-      <div className="grid gap-10 lg:grid-cols-[220px_1fr]">
+      <div className="grid gap-10 lg:grid-cols-[220px_minmax(0,1fr)]">
         {/* Sidebar */}
         <aside className="hidden lg:block">
           <div className="sticky top-24">
@@ -34,7 +34,7 @@ export default function DocsPage() {
                 <a
                   key={s.id}
                   href={`#${s.id}`}
-                  className="rounded-lg px-3 py-1.5 text-white/55 transition hover:bg-white/5 hover:text-white"
+                  className="rounded-lg px-3 py-1.5 text-ink-3 transition hover:bg-white/5 hover:text-white"
                 >
                   {s.label}
                 </a>
@@ -44,13 +44,13 @@ export default function DocsPage() {
         </aside>
 
         {/* Content */}
-        <article className="min-w-0 max-w-3xl">
+        <article className="mx-auto min-w-0 max-w-3xl lg:mx-0 xl:mx-auto">
           <header className="mb-10">
             <div className="label">Docs</div>
             <h1 className="mt-2 font-display text-4xl font-extrabold tracking-tight">
               How Coil works
             </h1>
-            <p className="mt-3 text-white/55">
+            <p className="mt-3 text-ink-3">
               A fair-launch protocol where every token is born on a live Uniswap v4 pool with its
               liquidity locked forever. A native per-swap fee flows back to holders and buys &amp;
               burns $COIL. Everything below is enforced on-chain.
@@ -167,8 +167,8 @@ export default function DocsPage() {
             </p>
             <KeyVals
               rows={[
-                ["🐍 Loop Rewards", "the fee share streams to every holder — the classic loop"],
-                ["👑 Creator Rewards", "the same fee share is paid to the creator's wallet instead"],
+                ["Loop Rewards", "the fee share streams to every holder — the classic loop"],
+                ["Creator Rewards", "the same fee share is paid to the creator's wallet instead"],
               ]}
             />
             <p>
@@ -244,7 +244,7 @@ function Section({ id, title, children }: { id: string; title: string; children:
   return (
     <section id={id} className="scroll-mt-24 border-t border-white/5 py-8 first:border-0 first:pt-0">
       <h2 className="font-display text-2xl font-bold tracking-tight">{title}</h2>
-      <div className="mt-4 space-y-4 leading-relaxed text-white/65 [&_a.lnk]:text-venom-400 [&_a.lnk]:underline [&_a.lnk:hover]:text-venom-300 [&_strong]:font-semibold [&_strong]:text-white/85">
+      <div className="mt-4 space-y-4 leading-relaxed text-ink-2 [&_a.lnk]:text-coil-400 [&_a.lnk]:underline [&_a.lnk:hover]:text-coil-300 [&_strong]:font-semibold [&_strong]:text-ink">
         {children}
       </div>
     </section>
@@ -254,11 +254,11 @@ function Section({ id, title, children }: { id: string; title: string; children:
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
     <li className="flex gap-3">
-      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-venom-500/15 text-xs font-bold text-venom-400">
+      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-coil-500/15 text-xs font-bold text-coil-400">
         {n}
       </span>
       <span>
-        <strong className="font-semibold text-white/85">{title}.</strong> {children}
+        <strong className="font-semibold text-ink">{title}.</strong> {children}
       </span>
     </li>
   );
@@ -267,7 +267,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 function Bullet({ children }: { children: React.ReactNode }) {
   return (
     <li className="flex gap-2.5">
-      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-venom-500/60" />
+      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-coil-500/60" />
       <span>{children}</span>
     </li>
   );
@@ -283,8 +283,8 @@ function KeyVals({ rows }: { rows: [string, string][] }) {
             i % 2 ? "bg-white/0" : "bg-white/[0.02]"
           }`}
         >
-          <span className="text-white/50">{k}</span>
-          <span className="font-medium text-white/80">{v}</span>
+          <span className="text-ink-3">{k}</span>
+          <span className="font-medium text-ink-2">{v}</span>
         </div>
       ))}
     </div>
@@ -294,8 +294,8 @@ function KeyVals({ rows }: { rows: [string, string][] }) {
 function Faq({ q, children }: { q: string; children: React.ReactNode }) {
   return (
     <div className="mt-4 rounded-xl border border-white/5 bg-white/[0.02] p-4">
-      <div className="font-semibold text-white/85">{q}</div>
-      <div className="mt-1.5 text-sm text-white/60">{children}</div>
+      <div className="font-semibold text-ink">{q}</div>
+      <div className="mt-1.5 text-sm text-ink-3">{children}</div>
     </div>
   );
 }

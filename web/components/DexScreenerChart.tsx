@@ -1,4 +1,5 @@
 "use client";
+import { IconExternal } from "@/components/Icon";
 
 import { dexscreenerEmbedUrl, dexscreenerPageUrl } from "@/lib/chain";
 
@@ -14,7 +15,7 @@ export function DexScreenerChart({ pair, height = 460 }: { pair?: string; height
 
   if (!src) {
     return (
-      <div className="grid h-44 place-items-center rounded-xl bg-obsidian-900/60 text-sm text-white/35">
+      <div className="grid h-44 place-items-center rounded-xl bg-obsidian-900/60 text-sm text-ink-4">
         DexScreener chart is available once this token graduates to the DEX.
       </div>
     );
@@ -22,11 +23,11 @@ export function DexScreenerChart({ pair, height = 460 }: { pair?: string; height
 
   return (
     <div className="overflow-hidden rounded-xl bg-obsidian-900/60">
-      <div className="flex items-center justify-between px-3 pt-3 text-xs text-white/40">
+      <div className="flex items-center justify-between px-3 pt-3 text-xs text-ink-4">
         <span>DexScreener · live DEX chart</span>
         {page && (
-          <a href={page} target="_blank" rel="noopener noreferrer" className="text-venom-400 hover:underline">
-            Open on DexScreener ↗
+          <a href={page} target="_blank" rel="noopener noreferrer" className="text-coil-400 hover:underline">
+            Open on DexScreener <IconExternal size={11} />
           </a>
         )}
       </div>

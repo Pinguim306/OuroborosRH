@@ -90,12 +90,12 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
   return (
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-obsidian-900/50 p-3">
       <div className="min-w-0 flex-1">
-        <p className="text-xs leading-relaxed text-white/45">
+        <p className="text-xs leading-relaxed text-ink-3">
           The pool&apos;s 1% swap fee accrues inside the locked position. Anyone can harvest it —
           rewards stream to holders and the protocol on collection.
         </p>
         {pending && (
-          <p className="mt-1 text-xs font-medium text-venom-400">
+          <p className="mt-1 text-xs font-medium text-coil-400">
             Uncollected: {usdFromEth(pending.eth, ethUsd, 2)}
           </p>
         )}
@@ -110,7 +110,7 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
         {busy ? "Harvesting…" : isSuccess ? "✓ Harvested" : "Harvest fees"}
       </button>
       {error && (
-        <p className="w-full text-[11px] text-red-400">
+        <p className="w-full text-[11px] text-down">
           {(error as { shortMessage?: string }).shortMessage ?? "Harvest failed."}
         </p>
       )}

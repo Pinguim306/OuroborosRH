@@ -7,6 +7,7 @@ import { shortAddr } from "@/lib/format";
 import { ipfsToHttp } from "@/lib/metadata";
 import { useAuth } from "@/components/AuthProvider";
 import { WalletButton } from "@/components/WalletButton";
+import { IconUser } from "@/components/Icon";
 
 export default function ProfilePage() {
   const { isConnected } = useAccount();
@@ -103,7 +104,7 @@ export default function ProfilePage() {
   return (
     <div className="mx-auto max-w-lg px-4 py-12">
       <h1 className="font-display text-3xl font-bold tracking-tight">Your profile</h1>
-      <p className="mt-2 text-sm text-white/50">
+      <p className="mt-2 text-sm text-ink-3">
         A public profile linked to your wallet — a name and avatar that show up on your trades and in
         token chats.
       </p>
@@ -111,19 +112,19 @@ export default function ProfilePage() {
       <div className="glass mt-6 p-6">
         {!isConnected ? (
           <div className="flex flex-col items-center gap-3 py-6">
-            <p className="text-sm text-white/60">Connect a wallet to set up your profile.</p>
+            <p className="text-sm text-ink-3">Connect a wallet to set up your profile.</p>
             <WalletButton />
           </div>
         ) : !sessionAddress ? (
           <div className="flex flex-col items-center gap-3 py-6">
-            <p className="text-sm text-white/60">Sign a message to prove this wallet is yours.</p>
+            <p className="text-sm text-ink-3">Sign a message to prove this wallet is yours.</p>
             <button className="btn-primary" disabled={signingIn} onClick={() => signIn()}>
               {signingIn ? "Check your wallet…" : "Sign in"}
             </button>
-            {authError && <p className="text-[11px] text-red-400">{authError}</p>}
+            {authError && <p className="text-[11px] text-down">{authError}</p>}
           </div>
         ) : !loaded ? (
-          <p className="py-6 text-center text-sm text-white/40">Loading…</p>
+          <p className="py-6 text-center text-sm text-ink-4">Loading…</p>
         ) : (
           <div className="space-y-4">
             <div className="flex items-center gap-4">
@@ -132,7 +133,7 @@ export default function ProfilePage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={ipfsToHttp(avatarUrl)} alt="avatar" className="h-full w-full object-cover" />
                 ) : (
-                  "👤"
+                  <IconUser size={26} className="text-ink-4" />
                 )}
               </div>
               <div>
@@ -146,7 +147,7 @@ export default function ProfilePage() {
                 <button className="btn-ghost" onClick={() => fileRef.current?.click()} disabled={uploading}>
                   {uploading ? "Uploading…" : avatarUrl ? "Change avatar" : "Upload avatar"}
                 </button>
-                <p className="mt-1 font-mono text-[11px] text-white/35">{shortAddr(sessionAddress)}</p>
+                <p className="mt-1 font-mono text-[11px] text-ink-4">{shortAddr(sessionAddress)}</p>
               </div>
             </div>
 
@@ -159,7 +160,7 @@ export default function ProfilePage() {
                 placeholder="satoshi"
                 maxLength={20}
               />
-              <p className="mt-1 text-[11px] text-white/35">3–20 letters, numbers or underscores.</p>
+              <p className="mt-1 text-[11px] text-ink-4">3–20 letters, numbers or underscores.</p>
             </div>
 
             <div>
@@ -170,14 +171,14 @@ export default function ProfilePage() {
                 onChange={(e) => setBio(e.target.value.slice(0, 280))}
                 placeholder="gm. degen since block zero."
               />
-              <p className="mt-1 text-right text-[11px] text-white/35">{bio.length}/280</p>
+              <p className="mt-1 text-right text-[11px] text-ink-4">{bio.length}/280</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label mb-1.5 block">X (Twitter)</label>
                 <div className="flex items-center gap-2">
-                  <span className="text-white/40">@</span>
+                  <span className="text-ink-4">@</span>
                   <input
                     className="field"
                     value={x}
@@ -190,7 +191,7 @@ export default function ProfilePage() {
               <div>
                 <label className="label mb-1.5 block">Telegram</label>
                 <div className="flex items-center gap-2">
-                  <span className="text-white/40">@</span>
+                  <span className="text-ink-4">@</span>
                   <input
                     className="field"
                     value={telegram}
@@ -211,7 +212,7 @@ export default function ProfilePage() {
               </Link>
             </div>
             {msg && (
-              <p className={`text-xs ${msg.ok ? "text-venom-400" : "text-red-400"}`}>{msg.text}</p>
+              <p className={`text-xs ${msg.ok ? "text-coil-400" : "text-down"}`}>{msg.text}</p>
             )}
           </div>
         )}

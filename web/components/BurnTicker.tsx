@@ -1,4 +1,5 @@
 "use client";
+import { IconBurn } from "@/components/Icon";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -33,7 +34,7 @@ const DEAD = "0x000000000000000000000000000000000000dEaD" as const;
  * Live $COIL buyback & burn stats, read straight from the CoilBuybackBurner: total $COIL burned,
  * ETH spent, and the ETH sitting in the burner waiting to be used. `buybackAndBurn` is
  * permissionless — the burned tokens can only ever go to the dead address — so anyone connected
- * can crank the 🔥 button when there's pending ETH.
+ * can crank the burn button when there's pending ETH.
  */
 export function BurnTicker() {
   const { isConnected } = useAccount();
@@ -86,7 +87,7 @@ export function BurnTicker() {
 
   useEffect(() => {
     if (isSuccess) {
-      setFlash(action === "collect" ? "Collected ✓" : "Burned 🔥");
+      setFlash(action === "collect" ? "Collected" : "Burned");
       statsQ.refetch();
       pendingQ.refetch();
       accruedQ.refetch();
@@ -134,33 +135,33 @@ export function BurnTicker() {
   }
 
   const coilLabel = isDeployed(COIL_TOKEN) ? (
-    <Link href={`/token/${COIL_TOKEN}`} className="font-bold text-venom-400 hover:underline">
+    <Link href={`/token/${COIL_TOKEN}`} className="font-bold text-coil-400 hover:underline">
       $COIL
     </Link>
   ) : (
-    <span className="font-bold text-venom-400">$COIL</span>
+    <span className="font-bold text-coil-400">$COIL</span>
   );
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-orange-500/20 bg-gradient-to-r from-orange-500/10 to-transparent px-5 py-3.5">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
         <span className="flex items-center gap-2">
-          <span className="text-xl">🔥</span>
+          <span className="text-coil-400"><IconBurn size={20} /></span>
           <span className="font-bold text-white">{compact(burnedN, burnedN >= 1000 ? 1 : 2)}</span>
-          <span className="text-white/60">{coilLabel} burned forever</span>
+          <span className="text-ink-3">{coilLabel} burned forever</span>
         </span>
-        <span className="text-xs text-white/40">
+        <span className="text-xs text-ink-4">
           {Number(formatEther(ethSpent)).toLocaleString(undefined, { maximumFractionDigits: 4 })}{" "}
           {NATIVE_SYMBOL} spent ({usdFromEth(Number(formatEther(ethSpent)), ethUsd, 0)})
         </span>
         {pending > 0n && (
-          <span className="text-xs text-acid">
+          <span className="text-xs text-spark">
             {Number(formatEther(pending)).toLocaleString(undefined, { maximumFractionDigits: 5 })}{" "}
             {NATIVE_SYMBOL} ready to burn
           </span>
         )}
         {accruedTotal > 0n && (
-          <span className="text-xs text-white/40">
+          <span className="text-xs text-ink-4">
             +{Number(formatEther(accruedTotal)).toLocaleString(undefined, { maximumFractionDigits: 5 })}{" "}
             {NATIVE_SYMBOL} accruing in token fees
           </span>
@@ -176,13 +177,13 @@ export function BurnTicker() {
                 ? "Push the accrued burn-slice fees from the token into the burner. Permissionless."
                 : "Connect a wallet to trigger the sweep (anyone can)."
             }
-            className="rounded-xl border border-white/15 px-3 py-1.5 text-xs font-bold text-white/60 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-xl border border-white/15 px-3 py-1.5 text-xs font-bold text-ink-3 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy && action === "collect" ? "Collecting…" : "Collect"}
           </button>
         )}
         {error && (
-          <span className="text-[11px] text-red-400">
+          <span className="text-[11px] text-down">
             {(error as { shortMessage?: string }).shortMessage ?? "Burn failed."}
           </span>
         )}
@@ -203,7 +204,7 @@ export function BurnTicker() {
             }
             className="rounded-xl border border-orange-500/40 px-3.5 py-1.5 text-xs font-bold text-orange-400 transition hover:bg-orange-500/10 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {busy ? "Burning…" : "Burn now 🔥"}
+            {busy ? "Burning…" : "Burn now"}
           </button>
         )}
       </div>

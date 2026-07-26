@@ -1,4 +1,5 @@
 "use client";
+import { IconBolt } from "@/components/Icon";
 
 import { useEffect, useMemo, useState } from "react";
 import { encodeFunctionData, formatEther, maxUint256, parseEther } from "viem";
@@ -318,13 +319,13 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
   return (
     <div className="glass-strong p-5">
       {graduated && (
-        <div className="mb-3 rounded-lg border border-venom-500/20 bg-venom-500/5 px-3 py-2 text-[11px] text-venom-400/90">
+        <div className="mb-3 rounded-lg border border-coil-500/20 bg-coil-500/5 px-3 py-2 text-[11px] text-coil-400/90">
           ✦ Graduated — trades route through the Uniswap pair (1% fee-on-transfer applies).
         </div>
       )}
       {isV3 && (
-        <div className="mb-3 rounded-lg border border-venom-500/20 bg-venom-500/5 px-3 py-2 text-[11px] text-venom-400/90">
-          ⚡ Trades route through the Uniswap V3 pool (1% pool fee).
+        <div className="mb-3 rounded-lg border border-coil-500/20 bg-coil-500/5 px-3 py-2 text-[11px] text-coil-400/90">
+          <IconBolt size={12} className="inline align-[-2px]" /> Trades route through the Uniswap V3 pool (1% pool fee).
         </div>
       )}
       <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-obsidian-900 p-1">
@@ -335,9 +336,9 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
             className={`rounded-lg py-2 text-sm font-semibold capitalize transition ${
               mode === m
                 ? m === "buy"
-                  ? "bg-venom-500 text-obsidian-950"
-                  : "bg-red-500 text-white"
-                : "text-white/50 hover:text-white"
+                  ? "bg-coil-500 text-obsidian-950"
+                  : "bg-down text-white"
+                : "text-ink-3 hover:text-white"
             }`}
           >
             {m === "buy" ? copy.token.buy : copy.token.sell}
@@ -372,7 +373,7 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
                     : String((simBalance * v) / 100),
               )
             }
-            className="flex-1 rounded-lg border border-white/10 py-1 text-xs text-white/50 hover:border-venom-500/40 hover:text-white"
+            className="flex-1 rounded-lg border border-white/10 py-1 text-xs text-ink-3 hover:border-coil-500/40 hover:text-white"
           >
             {mode === "buy" ? `${v}` : `${v}%`}
           </button>
@@ -392,24 +393,24 @@ export function TradeWidget({ token }: { token: TokenMarket }) {
       </button>
 
       {flash && (
-        <div className="mt-3 rounded-lg border border-venom-500/30 bg-venom-500/10 px-3 py-2 text-center text-xs font-medium text-venom-400">
+        <div className="mt-3 rounded-lg border border-coil-500/30 bg-coil-500/10 px-3 py-2 text-center text-xs font-medium text-coil-400">
           ✓ {flash}
         </div>
       )}
       {LIVE && error && (
-        <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-center text-xs text-red-400">
+        <div className="mt-3 rounded-lg border border-down/30 bg-down/10 px-3 py-2 text-center text-xs text-down">
           {(error as { shortMessage?: string }).shortMessage ?? "Transaction failed."}
         </div>
       )}
 
-      <div className="mt-3 flex justify-between text-xs text-white/40">
+      <div className="mt-3 flex justify-between text-xs text-ink-4">
         <span>Your balance</span>
         <span className="font-mono">
           {compact(liveBalance, 2)} {token.symbol}
         </span>
       </div>
       {!isConnected && (
-        <p className="mt-2 text-center text-[11px] text-white/30">
+        <p className="mt-2 text-center text-[11px] text-ink-4">
           {LIVE
             ? "Connect a wallet to trade on-chain."
             : "Demo mode — connect a wallet and deploy contracts to trade for real."}
@@ -430,8 +431,8 @@ function Row({
 }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-white/45">{label}</span>
-      <span className={`font-mono ${strong ? "text-sm font-semibold text-white" : "text-white/70"}`}>
+      <span className="text-ink-3">{label}</span>
+      <span className={`font-mono ${strong ? "text-sm font-semibold text-white" : "text-ink-2"}`}>
         {value}
       </span>
     </div>

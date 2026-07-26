@@ -1,4 +1,5 @@
 "use client";
+import { IconExternal, IconSettings } from "@/components/Icon";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -165,9 +166,9 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
 
   if (!SWAP_LIVE) {
     return (
-      <div className="glass p-6 text-center text-sm text-white/50">
+      <div className="glass p-6 text-center text-sm text-ink-3">
         Coil Swap isn&apos;t configured yet — set{" "}
-        <code className="text-venom-400">NEXT_PUBLIC_COIL_SWAP_ROUTER</code>.
+        <code className="text-coil-400">NEXT_PUBLIC_COIL_SWAP_ROUTER</code>.
       </div>
     );
   }
@@ -187,9 +188,9 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
               className={`flex-1 rounded-lg px-3 py-2 capitalize transition ${
                 dir === d
                   ? d === "buy"
-                    ? "bg-venom-500 text-obsidian-950"
-                    : "bg-red-500/90 text-white"
-                  : "text-white/50 hover:text-white"
+                    ? "bg-coil-500 text-obsidian-950"
+                    : "bg-down/90 text-white"
+                  : "text-ink-3 hover:text-white"
               }`}
             >
               {d}
@@ -200,17 +201,17 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
           onClick={() => setSlipOpen((o) => !o)}
           title="Slippage settings"
           className={`grid h-9 w-9 place-items-center rounded-xl border text-sm transition ${
-            slipOpen ? "border-venom-500/50 text-venom-400" : "border-white/10 text-white/50 hover:text-white"
+            slipOpen ? "border-coil-500/50 text-coil-400" : "border-white/10 text-ink-3 hover:text-white"
           }`}
         >
-          ⚙
+          <IconSettings size={14} />
         </button>
       </div>
 
       {/* Slippage panel */}
       {slipOpen && (
         <div className="mt-3 flex items-center gap-1.5 rounded-xl border border-white/5 bg-obsidian-900/60 p-2 text-xs">
-          <span className="px-1 text-white/40">Slippage</span>
+          <span className="px-1 text-ink-4">Slippage</span>
           {SLIPPAGE_OPTIONS.map((o) => (
             <button
               key={o.label}
@@ -220,8 +221,8 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
               }}
               className={`rounded-lg px-2 py-1 font-semibold transition ${
                 slippage === o.bps && customSlip === ""
-                  ? "bg-venom-500/15 text-venom-400"
-                  : "text-white/50 hover:text-white"
+                  ? "bg-coil-500/15 text-coil-400"
+                  : "text-ink-3 hover:text-white"
               }`}
             >
               {o.label}
@@ -229,13 +230,13 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
           ))}
           <div className="flex items-center gap-1 rounded-lg bg-obsidian-950 px-2 py-1">
             <input
-              className="w-10 bg-transparent text-right font-mono text-white outline-none placeholder:text-white/25"
+              className="w-10 bg-transparent text-right font-mono text-white outline-none placeholder:text-ink-4"
               placeholder="0.5"
               inputMode="decimal"
               value={customSlip}
               onChange={(e) => onCustomSlip(e.target.value)}
             />
-            <span className="text-white/40">%</span>
+            <span className="text-ink-4">%</span>
           </div>
         </div>
       )}
@@ -244,7 +245,7 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
       <div className="mt-3 rounded-2xl border border-white/10 bg-obsidian-900/60 p-4">
         <div className="flex items-center gap-3">
           <input
-            className="min-w-0 flex-1 bg-transparent text-3xl font-semibold text-white outline-none placeholder:text-white/20"
+            className="min-w-0 flex-1 bg-transparent text-3xl font-semibold text-white outline-none placeholder:text-ink-4"
             placeholder="0"
             inputMode="decimal"
             value={amount}
@@ -252,10 +253,10 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
           />
           <span className="chip shrink-0">{isBuy ? NATIVE_SYMBOL : token.symbol}</span>
         </div>
-        <div className="mt-1 flex items-center justify-between text-xs text-white/40">
+        <div className="mt-1 flex items-center justify-between text-xs text-ink-4">
           <span>{isBuy && usdIn > 0 ? `≈ $${usdIn.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : ""}</span>
           {!isBuy && address && (
-            <button className="hover:text-venom-400" onClick={() => pickPct(100)}>
+            <button className="hover:text-coil-400" onClick={() => pickPct(100)}>
               Balance: {fmt(balance)} — max
             </button>
           )}
@@ -270,7 +271,7 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
                 <button
                   key={u}
                   onClick={() => pickUsd(u)}
-                  className="rounded-xl border border-white/10 py-1.5 text-xs font-semibold text-white/60 transition hover:border-venom-500/40 hover:text-venom-400"
+                  className="rounded-xl border border-white/10 py-1.5 text-xs font-semibold text-ink-3 transition hover:border-coil-500/40 hover:text-coil-400"
                 >
                   ${u}
                 </button>
@@ -279,7 +280,7 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
                 <button
                   key={e}
                   onClick={() => setAmount(e)}
-                  className="rounded-xl border border-white/10 py-1.5 text-xs font-semibold text-white/60 transition hover:border-venom-500/40 hover:text-venom-400"
+                  className="rounded-xl border border-white/10 py-1.5 text-xs font-semibold text-ink-3 transition hover:border-coil-500/40 hover:text-coil-400"
                 >
                   {e} {NATIVE_SYMBOL}
                 </button>
@@ -288,7 +289,7 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
               <button
                 key={p}
                 onClick={() => pickPct(p)}
-                className="rounded-xl border border-white/10 py-1.5 text-xs font-semibold text-white/60 transition hover:border-venom-500/40 hover:text-venom-400"
+                className="rounded-xl border border-white/10 py-1.5 text-xs font-semibold text-ink-3 transition hover:border-coil-500/40 hover:text-coil-400"
               >
                 {p}%
               </button>
@@ -298,7 +299,7 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
       {/* Quote */}
       {amountWei > 0n && isConnected && (
         <div className="mt-3 flex items-center justify-between rounded-xl border border-white/5 bg-obsidian-900/50 px-3 py-2 text-xs">
-          <span className="text-white/40">You receive (est.)</span>
+          <span className="text-ink-4">You receive (est.)</span>
           <span className="font-mono font-semibold text-white">
             {quotedOut > 0n ? fmt(quotedOut) : simError ? "—" : "…"}{" "}
             {isBuy ? token.symbol : NATIVE_SYMBOL}
@@ -320,8 +321,8 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
           <button
             className={`w-full justify-center rounded-xl px-4 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${
               isBuy
-                ? "bg-venom-500 text-obsidian-950 hover:bg-venom-400"
-                : "bg-red-500/90 text-white hover:bg-red-500"
+                ? "bg-coil-500 text-obsidian-950 hover:bg-coil-400"
+                : "bg-down/90 text-white hover:bg-down"
             }`}
             disabled={busy || amountWei === 0n || quotedOut === 0n}
             onClick={swap}
@@ -334,16 +335,16 @@ export function V4TradeWidget({ token, ethUsd = 0 }: { token: TokenMarket; ethUs
       </div>
 
       {(writeError || (simError && amountWei > 0n)) && (
-        <p className="mt-2 text-center text-[11px] text-red-400">
+        <p className="mt-2 text-center text-[11px] text-down">
           {(writeError as { shortMessage?: string })?.shortMessage ??
             (simError ? "Couldn't quote this trade — check the amount." : "Transaction failed.")}
         </p>
       )}
 
-      <p className="mt-3 text-center text-[11px] text-white/30">
+      <p className="mt-3 text-center text-[11px] text-ink-4">
         Routed through the Uniswap v4 pool via Coil Swap ·{" "}
-        <Link href={`/swap?token=${token.address}`} className="text-venom-400 hover:underline">
-          open full swap ↗
+        <Link href={`/swap?token=${token.address}`} className="text-coil-400 hover:underline">
+          open full swap <IconExternal size={11} />
         </Link>
       </p>
     </div>

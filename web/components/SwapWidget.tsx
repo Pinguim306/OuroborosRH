@@ -65,7 +65,7 @@ function Pill({ symbol, onClick }: { symbol: string | null; onClick?: () => void
   if (!onClick) {
     return (
       <div className={`${base} bg-white/5 text-white`}>
-        <span className="grid h-5 w-5 place-items-center rounded-full bg-venom-500/20 text-[10px] text-venom-400">
+        <span className="grid h-5 w-5 place-items-center rounded-full bg-coil-500/20 text-[10px] text-coil-400">
           {(symbol ?? "?").slice(0, 1)}
         </span>
         {symbol}
@@ -75,10 +75,10 @@ function Pill({ symbol, onClick }: { symbol: string | null; onClick?: () => void
   return (
     <button
       onClick={onClick}
-      className={`${base} ${symbol ? "bg-white/5 text-white hover:bg-white/10" : "bg-venom-500 text-obsidian-950"}`}
+      className={`${base} ${symbol ? "bg-white/5 text-white hover:bg-white/10" : "bg-coil-500 text-obsidian-950"}`}
     >
       {symbol ? (
-        <span className="grid h-5 w-5 place-items-center rounded-full bg-venom-500/20 text-[10px] text-venom-400">
+        <span className="grid h-5 w-5 place-items-center rounded-full bg-coil-500/20 text-[10px] text-coil-400">
           {symbol.slice(0, 1)}
         </span>
       ) : null}
@@ -441,7 +441,7 @@ export function SwapWidget() {
         <div className="label">Sell</div>
         <div className="mt-2 flex items-center gap-3">
           <input
-            className="min-w-0 flex-1 bg-transparent text-3xl font-semibold text-white outline-none placeholder:text-white/20"
+            className="min-w-0 flex-1 bg-transparent text-3xl font-semibold text-white outline-none placeholder:text-ink-4"
             placeholder="0"
             inputMode="decimal"
             value={amount}
@@ -451,7 +451,7 @@ export function SwapWidget() {
         </div>
         {!isBuy && tokenBal !== undefined && (
           <button
-            className="mt-1 text-xs text-white/40 hover:text-venom-400"
+            className="mt-1 text-xs text-ink-4 hover:text-coil-400"
             onClick={() => setAmount(formatEther(tokenBal as bigint))}
           >
             Balance: {fmt(tokenBal as bigint)} — max
@@ -463,7 +463,7 @@ export function SwapWidget() {
       <div className="relative z-10 -my-3.5 flex justify-center">
         <button
           onClick={() => setDir(isBuy ? "sell" : "buy")}
-          className="grid h-8 w-8 place-items-center rounded-xl border border-white/10 bg-obsidian-850 text-white/70 transition hover:text-venom-400"
+          className="grid h-8 w-8 place-items-center rounded-xl border border-white/10 bg-obsidian-850 text-ink-2 transition hover:text-coil-400"
           aria-label="Flip"
         >
           ↓
@@ -474,7 +474,7 @@ export function SwapWidget() {
       <div className="rounded-2xl border border-white/10 bg-obsidian-900/60 p-4">
         <div className="label">Buy</div>
         <div className="mt-2 flex items-center gap-3">
-          <div className="min-w-0 flex-1 truncate text-3xl font-semibold text-white/90">
+          <div className="min-w-0 flex-1 truncate text-3xl font-semibold text-ink">
             {quotedOut > 0n ? fmt(quotedOut) : "0"}
           </div>
           {receivePill}
@@ -483,14 +483,14 @@ export function SwapWidget() {
           <div className="mt-1 flex items-center justify-between text-xs">
             <span>
               {isV4 ? (
-                <span className="text-venom-400">Coil v4 · interface fee</span>
+                <span className="text-coil-400">Coil v4 · interface fee</span>
               ) : useV3Fee ? (
-                <span className="text-venom-400">Uniswap v3 · {feeTierLabel} · interface fee</span>
+                <span className="text-coil-400">Uniswap v3 · {feeTierLabel} · interface fee</span>
               ) : (
-                <span className="text-white/40">Uniswap v3 · {feeTierLabel}</span>
+                <span className="text-ink-4">Uniswap v3 · {feeTierLabel}</span>
               )}
             </span>
-            {minOut > 0n && <span className="text-white/40">min {fmt(minOut)}</span>}
+            {minOut > 0n && <span className="text-ink-4">min {fmt(minOut)}</span>}
           </div>
         )}
       </div>
@@ -502,45 +502,45 @@ export function SwapWidget() {
           <button
             key={o.label}
             onClick={() => pickPreset(o.bps)}
-            className={`chip ${slippage === o.bps && !customSlip ? "border-venom-500/60 text-white" : ""}`}
+            className={`chip ${slippage === o.bps && !customSlip ? "border-coil-500/60 text-white" : ""}`}
           >
             {o.label}
           </button>
         ))}
         <span
-          className={`chip flex items-center gap-1 !py-0 ${customSlip ? "border-venom-500/60 text-white" : ""}`}
+          className={`chip flex items-center gap-1 !py-0 ${customSlip ? "border-coil-500/60 text-white" : ""}`}
         >
           <input
             inputMode="decimal"
             placeholder="Custom"
             value={customSlip}
             onChange={(e) => onCustomSlip(e.target.value)}
-            className="w-16 bg-transparent py-1.5 text-center outline-none placeholder:text-white/30"
+            className="w-16 bg-transparent py-1.5 text-center outline-none placeholder:text-ink-4"
           />
-          <span className="text-white/40">%</span>
+          <span className="text-ink-4">%</span>
         </span>
       </div>
       {highSlippage && (
-        <p className="px-1 text-[11px] text-amber-400">
+        <p className="px-1 text-[11px] text-warn">
           High slippage ({(Number(slippage) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%) —
           you may receive far less. Max {MAX_SLIPPAGE_PCT}%.
         </p>
       )}
 
       {token && isV4 && !SWAP_LIVE && (
-        <p className="px-1 text-xs text-amber-400">
+        <p className="px-1 text-xs text-warn">
           v4 router not configured — set <code>NEXT_PUBLIC_COIL_SWAP_ROUTER</code>.
         </p>
       )}
       {noPool ? (
-        <p className="px-1 text-xs text-amber-400">
+        <p className="px-1 text-xs text-warn">
           No Uniswap v3 pool found for this token in any fee tier on Robinhood Chain.
         </p>
       ) : (
         simError &&
         amountWei > 0n &&
         !needsApproval && (
-          <p className="px-1 text-xs text-amber-400">No route for this token, or amount exceeds its liquidity.</p>
+          <p className="px-1 text-xs text-warn">No route for this token, or amount exceeds its liquidity.</p>
         )
       )}
 
@@ -564,12 +564,12 @@ export function SwapWidget() {
       </div>
 
       {writeError && (
-        <p className="px-1 text-xs text-red-400">
+        <p className="px-1 text-xs text-down">
           {(writeError as { shortMessage?: string }).shortMessage ?? "Transaction failed."}
         </p>
       )}
 
-      <p className="pt-1 text-center text-[11px] text-white/30">
+      <p className="pt-1 text-center text-[11px] text-ink-4">
         {feeCharged
           ? "Routed through Coil · a small interface fee supports the protocol."
           : "Routed on Robinhood Chain."}

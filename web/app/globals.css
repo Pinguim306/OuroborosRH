@@ -32,7 +32,20 @@ h4 {
   letter-spacing: -0.02em;
 }
 
-/* Money must not shimmy as digits change — every figure gets fixed-width numerals. */
+/**
+ * Figures.
+ *
+ * Money must not shimmy as digits change, so every figure gets fixed-width numerals — but the
+ * display face (Space Grotesk) must never be the one rendering them. Its *tabular* "1" is drawn
+ * with a flag spanning almost the whole fixed advance, so under `tnum` it runs into the next digit
+ * and "18K", "$176.37K" and "1,124" all come out looking struck through. Inter's tabular figures
+ * are clean, so these classes pin the face as well as the feature: anything numeric is body or
+ * mono, never display.
+ */
+.tabular,
+.stat-value {
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+}
 .tabular,
 .stat-value,
 .font-mono {
@@ -83,7 +96,7 @@ h4 {
     pointer-events: none;
   }
   .glass-strong {
-    @apply rounded-2xl border border-venom-500/20 bg-obsidian-850/80 backdrop-blur-md shadow-venom;
+    @apply rounded-2xl border border-coil-500/20 bg-obsidian-850/80 backdrop-blur-md shadow-coil;
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed;
@@ -98,25 +111,26 @@ h4 {
     transform: translateY(1px);
   }
   .btn-primary {
-    @apply btn bg-venom-500 text-obsidian-950 hover:bg-venom-400 shadow-glow;
+    @apply btn bg-coil-500 text-obsidian-950 hover:bg-coil-400 shadow-glow;
   }
   .btn-ghost {
-    @apply btn border border-white/10 text-white/80 hover:border-venom-500/40 hover:text-white;
+    @apply btn border border-white/10 text-ink-2 hover:border-coil-500/40 hover:text-ink;
   }
   .btn-danger {
-    @apply btn bg-red-500/90 text-white hover:bg-red-400;
+    @apply btn bg-down/90 text-white hover:bg-down;
   }
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/70;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-ink-2;
   }
+  /* A label names the value under it, so it has to stay legible: `ink-3` is 7.3:1 on a card. */
   .label {
-    @apply text-xs font-medium uppercase tracking-wider text-white/40;
+    @apply text-xs font-medium uppercase tracking-wider text-ink-3;
   }
   .field {
-    @apply w-full rounded-xl border border-white/10 bg-obsidian-900/80 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-venom-500/60 focus:ring-2 focus:ring-venom-500/20;
+    @apply w-full rounded-xl border border-white/10 bg-obsidian-900/80 px-4 py-3 text-sm text-ink placeholder:text-ink-4 outline-none transition focus:border-coil-500/60 focus:ring-2 focus:ring-coil-500/20;
   }
   .stat-value {
-    @apply font-display text-2xl font-bold tracking-tight text-white;
+    @apply text-2xl font-bold tracking-tight text-ink;
   }
   /* Cards that are themselves links: lift slightly toward the pointer. */
   .lift {
@@ -128,10 +142,21 @@ h4 {
   .lift:hover {
     transform: translateY(-2px);
   }
+  /* An empty list is still a screen: it keeps the padding of a full one, says what would be here,
+     and offers the action that fills it — instead of collapsing into one grey line. */
+  .empty {
+    @apply glass flex flex-col items-center gap-3 px-6 py-14 text-center;
+  }
+  .empty-title {
+    @apply font-display text-base font-semibold text-ink-2;
+  }
+  .empty-body {
+    @apply max-w-sm text-sm leading-relaxed text-ink-3;
+  }
 }
 
 .text-gradient {
-  background: linear-gradient(120deg, #b7a6ff 0%, #8b5cff 40%, #37e8ff 100%);
+  background: linear-gradient(120deg, #cabfff 0%, #8b5cff 42%, #37e8ff 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

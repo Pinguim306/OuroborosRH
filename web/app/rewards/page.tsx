@@ -29,7 +29,7 @@ export default function RewardsPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-4xl font-extrabold tracking-tight">{copy.rewards.title}</h1>
-          <p className="mt-2 max-w-xl text-white/55">{copy.rewards.subtitle}</p>
+          <p className="mt-2 max-w-xl text-ink-3">{copy.rewards.subtitle}</p>
         </div>
         {!LIVE && (
           <button onClick={claimAll} disabled={totalClaimable <= 0} className="btn-primary text-base">
@@ -39,7 +39,7 @@ export default function RewardsPage() {
       </div>
 
       {flash && (
-        <div className="mt-6 rounded-xl border border-venom-500/30 bg-venom-500/10 px-4 py-3 text-center text-sm font-medium text-venom-400">
+        <div className="mt-6 rounded-xl border border-coil-500/30 bg-coil-500/10 px-4 py-3 text-center text-sm font-medium text-coil-400">
           ✓ {flash}
         </div>
       )}
@@ -55,7 +55,7 @@ export default function RewardsPage() {
       </div>
 
       {positions.length === 0 ? (
-        <div className="glass mt-8 p-10 text-center text-white/50">{copy.rewards.empty}</div>
+        <div className="glass mt-8 p-10 text-center text-ink-3">{copy.rewards.empty}</div>
       ) : (
         <div className="mt-8 space-y-3">
           {positions.map((p) => (
@@ -69,7 +69,7 @@ export default function RewardsPage() {
                 </div>
                 <div className="min-w-0">
                   <div className="truncate font-semibold text-white">{p.token.name}</div>
-                  <div className="text-xs text-white/40">
+                  <div className="text-xs text-ink-4">
                     {compact(p.balance, 0)} {p.token.symbol} held
                   </div>
                 </div>
@@ -77,7 +77,7 @@ export default function RewardsPage() {
 
               <div className="text-center">
                 <div className="label">Claimable</div>
-                <div className="font-mono text-sm font-semibold text-venom-400">
+                <div className="font-mono text-sm font-semibold text-coil-400">
                   {rh(p.claimableRh, 4)}
                 </div>
               </div>
@@ -102,12 +102,12 @@ export default function RewardsPage() {
       </>
       )}
 
-      <div className="glass mt-10 p-6 text-sm text-white/55">
+      <div className="glass mt-10 p-6 text-sm text-ink-3">
         <h3 className="font-semibold text-white">How your rewards are calculated</h3>
         <p className="mt-2 leading-relaxed">
-          Every trade sends <span className="text-venom-400">a share of its fee</span> into the
+          Every trade sends <span className="text-ink">a share of its fee</span> into the
           token&apos;s reward pool. Your slice of each inflow is simply your{" "}
-          <span className="text-venom-400">share of the supply</span> at that moment — credited
+          <span className="text-ink">share of the supply</span> at that moment — credited
           on-chain by a dividend accumulator. <span className="text-white">No staking, no lock-ups:</span>{" "}
           rewards accrue to your wallet just for holding, and you claim them in {" "}
           {"ETH"} whenever you connect. Hold longer and you&apos;re simply present for more inflows.

@@ -1,4 +1,5 @@
 "use client";
+import { IconCrown } from "@/components/Icon";
 
 import { useEffect } from "react";
 import Link from "next/link";
@@ -121,7 +122,7 @@ export function LivePortfolio() {
 
   if (!isConnected) {
     return (
-      <div className="glass mt-8 p-10 text-center text-white/50">
+      <div className="glass mt-8 p-10 text-center text-ink-3">
         Connect your wallet to see your holdings and claimable fees.
       </div>
     );
@@ -141,9 +142,9 @@ export function LivePortfolio() {
       </div>
 
       {isLoading || q.isLoading ? (
-        <div className="glass mt-8 p-10 text-center text-white/50">Loading your positions…</div>
+        <div className="glass mt-8 p-10 text-center text-ink-3">Loading your positions…</div>
       ) : positions.length === 0 ? (
-        <div className="glass mt-8 p-10 text-center text-white/50">{copy.rewards.empty}</div>
+        <div className="glass mt-8 p-10 text-center text-ink-3">{copy.rewards.empty}</div>
       ) : (
         <div className="mt-8 space-y-3">
           {positions.map((p) => (
@@ -159,8 +160,10 @@ export function LivePortfolio() {
 
       {creatorRows.length > 0 && (
         <div className="mt-10">
-          <h2 className="font-display text-lg font-bold">👑 Creator earnings</h2>
-          <p className="mt-1 text-xs text-white/45">
+          <h2 className="flex items-center gap-2 font-display text-lg font-bold">
+            <IconCrown size={16} className="text-spark" /> Creator earnings
+          </h2>
+          <p className="mt-1 text-xs text-ink-3">
             Your Creator Rewards tokens pay the holder fee slice straight to your wallet.
             &ldquo;Collect&rdquo; pushes anything accrued — it always pays the creator, whoever
             clicks it.
@@ -205,13 +208,15 @@ function CreatorRow({
         />
         <div className="min-w-0">
           <div className="truncate font-semibold text-white">{row.token.name}</div>
-          <div className="text-xs text-acid">👑 Creator Rewards</div>
+          <div className="inline-flex items-center gap-1 text-xs text-spark">
+            <IconCrown size={12} /> Creator Rewards
+          </div>
         </div>
       </Link>
 
       <div className="text-center">
         <div className="label">Accrued</div>
-        <div className="font-mono text-sm font-semibold text-venom-400">
+        <div className="font-mono text-sm font-semibold text-coil-400">
           {usdFromEth(totalEth, ethUsd, 2)}
         </div>
       </div>
@@ -262,7 +267,7 @@ function PositionRow({
         />
         <div className="min-w-0">
           <div className="truncate font-semibold text-white">{p.token.name}</div>
-          <div className="text-xs text-white/40">
+          <div className="text-xs text-ink-4">
             {compact(p.balance, 0)} {p.token.symbol} held
           </div>
         </div>
@@ -270,7 +275,7 @@ function PositionRow({
 
       <div className="text-center">
         <div className="label">Value</div>
-        <div className="font-mono text-sm font-semibold text-white/80">
+        <div className="font-mono text-sm font-semibold text-ink-2">
           {usdFromEth(valueEth, ethUsd, 2)}
         </div>
       </div>
@@ -279,7 +284,7 @@ function PositionRow({
         <div className="text-center">
           <div className="label">PnL</div>
           <div
-            className={`font-mono text-sm font-semibold ${netEth >= 0 ? "text-venom-400" : "text-red-400"}`}
+            className={`font-mono text-sm font-semibold ${netEth >= 0 ? "text-coil-400" : "text-down"}`}
           >
             {netEth >= 0 ? "+" : "−"}
             {usdFromEth(Math.abs(netEth), ethUsd, 2)}
@@ -289,7 +294,7 @@ function PositionRow({
 
       <div className="text-center">
         <div className="label">Claimable</div>
-        <div className="font-mono text-sm font-semibold text-venom-400">
+        <div className="font-mono text-sm font-semibold text-coil-400">
           {usdFromEth(p.claimableRh, ethUsd, 2)}
         </div>
       </div>

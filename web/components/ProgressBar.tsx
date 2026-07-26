@@ -4,13 +4,13 @@ export function ProgressBar({ value, label }: { value: number; label?: string })
     <div>
       {label && (
         <div className="mb-1.5 flex justify-between text-xs">
-          <span className="text-white/50">{label}</span>
-          <span className="font-mono text-venom-400">{pct.toFixed(0)}%</span>
+          <span className="text-ink-3">{label}</span>
+          <span className="font-mono text-coil-400">{pct.toFixed(0)}%</span>
         </div>
       )}
       <div className="h-2 overflow-hidden rounded-full bg-white/5">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-venom-600 via-venom-400 to-acid transition-all duration-500"
+          className="h-full rounded-full bg-gradient-to-r from-coil-600 via-coil-400 to-spark transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>

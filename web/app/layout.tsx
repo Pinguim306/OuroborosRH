@@ -19,13 +19,17 @@ export const metadata: Metadata = {
     url: "https://coil.trading",
     siteName: "Coil",
     type: "website",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Coil — every trade winds the coil" }],
   },
   twitter: {
-    card: "summary",
+    // Was `summary`, with no image at all: every Coil link posted anywhere unfurled as a bare line
+    // of text. The large card is the whole point of having artwork.
+    card: "summary_large_image",
     site: "@coiltrading",
     title: "Coil — Multi-chain Token Launchpad",
     description:
       "Launch tokens on Robinhood Chain and Arc. Every trade winds the coil: fees become permanent liquidity and holders earn a share just by holding.",
+    images: ["/og.png"],
   },
 };
 

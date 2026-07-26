@@ -17,16 +17,19 @@ import { useSearch } from "@/components/SearchProvider";
 import { useSelectedChainId } from "@/lib/useSelectedChain";
 import { chainConfig } from "@/lib/chain";
 import { chainParam, marketKey } from "@/lib/chain";
+import { ChainBadge } from "@/components/ChainBadge";
+import { IconBolt, IconClock, IconCoins, IconFlame, IconPlus, IconSparkle, IconVolume } from "@/components/Icon";
 
 type Mode = "trending" | "newest" | "highmcap" | "volume" | "oldest" | "lasttrade";
 
-const MODES: [Mode, string][] = [
-  ["trending", "🔥 Movers"],
-  ["newest", "✨ New"],
-  ["highmcap", "💰 Market cap"],
-  ["volume", "🔊 Volume"],
-  ["oldest", "🕰️ Oldest"],
-  ["lasttrade", "⚡ Last trade"],
+/** Sort tabs. Icons rather than emoji so the active tab can tint the glyph along with its label. */
+const MODES: [Mode, string, (p: { size?: number }) => React.ReactElement][] = [
+  ["trending", "Movers", IconFlame],
+  ["newest", "New", IconSparkle],
+  ["highmcap", "Market cap", IconCoins],
+  ["volume", "Volume", IconVolume],
+  ["oldest", "Oldest", IconClock],
+  ["lasttrade", "Last trade", IconBolt],
 ];
 
 type Enriched = TokenMarket & { _volumeTotal: number; _lastBlock: number };
@@ -141,7 +144,7 @@ export default function HomePage() {
                 key={v}
                 onClick={() => setView(v)}
                 className={`rounded-lg px-3 py-1.5 capitalize transition ${
-                  view === v ? "bg-venom-500 text-obsidian-950" : "text-white/50 hover:text-white"
+                  view === v ? "bg-coil-500 text-obsidian-950" : "text-ink-3 hover:text-white"
                 }`}
               >
                 {v}
@@ -151,17 +154,20 @@ export default function HomePage() {
         </div>
 
         {/* Filter tabs */}
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {MODES.map(([key, label]) => (
+        <div className="mt-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Sort coins">
+          {MODES.map(([key, label, Icon]) => (
             <button
               key={key}
+              role="tab"
+              aria-selected={mode === key}
               onClick={() => setMode(key)}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                 mode === key
-                  ? "bg-venom-500/15 text-venom-400"
-                  : "text-white/50 hover:bg-white/5 hover:text-white"
+                  ? "bg-coil-500/15 text-coil-400"
+                  : "text-ink-3 hover:bg-white/5 hover:text-ink"
               }`}
             >
+              <Icon size={13} />
               {label}
             </button>
           ))}
@@ -182,23 +188,50 @@ export default function HomePage() {
 
         {/* Content */}
         {ANY_LIVE && isLoading && filtered.length === 0 ? (
-          <div className="glass mt-6 p-10 text-center text-white/50">Loading markets…</div>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {/* Skeletons at the shape of the real cards: the grid keeps its height, so the page
+                doesn't jump when markets land. A centred "Loading…" line did the opposite. */}
+            {Array.from({ length: 8 }, (_, i) => (
+              <div key={i} className="glass h-[214px] animate-pulse p-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-24 w-24 shrink-0 rounded-xl bg-white/[0.04]" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="h-4 w-3/4 rounded bg-white/[0.04]" />
+                    <div className="h-4 w-12 rounded-full bg-white/[0.04]" />
+                  </div>
+                </div>
+                <div className="mt-6 h-8 rounded bg-white/[0.03]" />
+              </div>
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="glass mt-6 p-10 text-center text-white/50">
+          <div className="empty mt-6">
             {query ? (
-              "No coins match your search."
+              <>
+                <p className="empty-title">No coins match “{query}”</p>
+                <p className="empty-body">
+                  Search matches a coin&apos;s name, ticker or contract address. Try a shorter term.
+                </p>
+              </>
             ) : !chainLive ? (
               // The picker lets you visit a chain Coil isn't deployed on — say so plainly instead
               // of showing an empty grid that reads as a loading failure.
               <>
-                Coil isn&apos;t live on {chainConfig(chainId).chain.name} yet. Pick another network
-                from the switcher up top.
+                <p className="empty-title">Coil isn&apos;t live on {chainConfig(chainId).chain.name} yet</p>
+                <p className="empty-body">
+                  Every chain has its own pools and its own liquidity. Pick another network from the
+                  switcher at the top to see the coins trading there.
+                </p>
               </>
             ) : (
               <>
-                No coins on {chainConfig(chainId).chain.name} yet —{" "}
-                <Link href="/create" className="text-venom-400 hover:underline">
-                  be the first to launch →
+                <p className="empty-title">No coins on {chainConfig(chainId).chain.name} yet</p>
+                <p className="empty-body">
+                  One transaction puts a token into a live Uniswap v4 pool with its liquidity locked
+                  forever. Nothing has launched on this network so far.
+                </p>
+                <Link href="/create" className="btn-primary mt-1">
+                  <IconPlus size={15} /> Be the first to launch
                 </Link>
               </>
             )}
@@ -214,7 +247,7 @@ export default function HomePage() {
         )}
 
         {ANY_LIVE && (
-          <p className="mt-6 text-center text-[11px] text-white/25">
+          <p className="mt-6 text-center text-[11px] text-ink-4">
             Volume, holders &amp; last-trade read live from on-chain events.
           </p>
         )}
@@ -228,7 +261,7 @@ function TrendingCard({ token, ethUsd }: { token: Enriched; ethUsd: number }) {
   return (
     <Link
       href={`/token/${token.address}${chainParam(token.chainId)}`}
-      className="group relative block h-36 overflow-hidden rounded-2xl border border-white/10 transition hover:border-venom-500/40"
+      className="group relative block h-36 overflow-hidden rounded-2xl border border-white/10 transition hover:border-coil-500/40"
     >
       <TokenAvatar
         uri={token.image}
@@ -236,14 +269,21 @@ function TrendingCard({ token, ethUsd }: { token: Enriched; ethUsd: number }) {
         className="absolute inset-0 grid place-items-center bg-obsidian-800 text-4xl"
         imgClassName="h-full w-full object-cover transition duration-300 group-hover:scale-105"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+      {/* Which network's liquidity this is — the grid is single-chain, but a trending row is the
+          first thing a visitor reads and shouldn't be ambiguous about it. */}
+      <div className="absolute right-2 top-2">
+        <ChainBadge chainId={token.chainId} />
+      </div>
       <div className="absolute inset-x-0 bottom-0 p-3">
-        <div className="inline-flex rounded-md bg-black/50 px-1.5 py-0.5 text-sm font-bold text-white backdrop-blur-sm">
+        <div className="tabular text-base font-bold text-white drop-shadow">
           {usdFromEth(token.marketCapRh, ethUsd, 0)}
         </div>
-        <div className="mt-1 flex items-center gap-1.5">
-          <span className="truncate font-semibold text-white">{token.name}</span>
-          <span className="chip !border-white/20 !px-1.5 !py-0 text-[10px]">{token.symbol}</span>
+        <div className="mt-0.5 flex items-center gap-1.5">
+          <span className="min-w-0 truncate text-sm font-semibold text-white/95">{token.name}</span>
+          <span className="chip shrink-0 !border-white/20 !bg-black/40 !px-1.5 !py-0 text-[10px]">
+            {token.symbol}
+          </span>
         </div>
       </div>
     </Link>
@@ -256,7 +296,7 @@ function CoinTable({ tokens, ethUsd }: { tokens: Enriched[]; ethUsd: number }) {
     <div className="mt-5 overflow-x-auto">
       <table className="w-full min-w-[560px] text-left text-sm">
         <thead>
-          <tr className="border-b border-white/10 text-[11px] uppercase tracking-wide text-white/40">
+          <tr className="border-b border-white/10 text-[11px] uppercase tracking-wide text-ink-4">
             <th className="py-2 pl-2 font-medium">Coin</th>
             <th className="py-2 font-medium">Market cap</th>
             <th className="py-2 font-medium">24h vol</th>
@@ -276,14 +316,14 @@ function CoinTable({ tokens, ethUsd }: { tokens: Enriched[]; ethUsd: number }) {
                   />
                   <span className="min-w-0">
                     <span className="block truncate font-semibold text-white">{t.name}</span>
-                    <span className="block text-xs text-white/40">{t.symbol}</span>
+                    <span className="block text-xs text-ink-4">{t.symbol}</span>
                   </span>
                 </Link>
               </td>
-              <td className="py-2.5 font-semibold text-white">{usdFromEth(t.marketCapRh, ethUsd, 0)}</td>
-              <td className="py-2.5 font-semibold text-venom-400">{usdFromEth(t.volume24hRh, ethUsd, 0)}</td>
-              <td className="py-2.5 text-white/70">{compact(t.holders, 0)}</td>
-              <td className="py-2.5 pr-2 text-white/40">{t.createdAt ? timeAgo(t.createdAt) : "—"}</td>
+              <td className="tabular py-2.5 font-semibold text-ink">{usdFromEth(t.marketCapRh, ethUsd, 0)}</td>
+              <td className="tabular py-2.5 font-semibold text-coil-400">{usdFromEth(t.volume24hRh, ethUsd, 0)}</td>
+              <td className="tabular py-2.5 text-ink-2">{compact(t.holders, 0)}</td>
+              <td className="py-2.5 pr-2 text-ink-3">{t.createdAt ? timeAgo(t.createdAt) : "—"}</td>
             </tr>
           ))}
         </tbody>
