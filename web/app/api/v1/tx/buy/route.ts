@@ -1,4 +1,4 @@
-import { checkAuth, fail, ok, parseBig } from "@/lib/server/api";
+import { checkAuth, fail, ok, parseBig, parseChain } from "@/lib/server/api";
 import {
   applySlippage,
   buildBuyTx,
@@ -8,27 +8,39 @@ import {
   quoteBuy,
   quoteV4,
 } from "@/lib/server/launchpad";
-import { COIL_SWAP_ROUTER, LIVE } from "@/lib/contracts";
+import { coilContracts } from "@/lib/contracts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/v1/tx/buy
- * Body: { token, amount (native wei in), slippageBps?=500, minTokensOut? }
+ * Body: { token, amount (native wei in), chain?, slippageBps?=500, minTokensOut? }
  * Returns an unsigned buy transaction for the bot to sign and broadcast, plus the
  * quote used to derive minTokensOut.
  */
 export async function POST(req: Request) {
   const denied = checkAuth(req);
   if (denied) return denied;
-  if (!LIVE) return fail(503, "contracts not deployed — tx building unavailable");
 
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
   } catch {
     return fail(400, "invalid JSON body");
+  }
+
+  // The chain has to be resolved before the deployment check — gating on the DEFAULT chain's
+  // contracts would refuse to build transactions for a chain that IS deployed.
+  let chainId;
+  try {
+    chainId = parseChain(body.chain);
+  } catch (e) {
+    return fail(400, (e as Error).message);
+  }
+  const { coilSwapRouter: COIL_SWAP_ROUTER, anyLive } = coilContracts(chainId);
+  if (!anyLive) {
+    return fail(503, "contracts not deployed on this chain — tx building unavailable", { chainId });
   }
 
   const token = normalizeAddress(body.token as string);
@@ -44,8 +56,8 @@ export async function POST(req: Request) {
 
   const slippageBps = Number(body.slippageBps ?? 500);
 
-  const market = await fetchMarket(token);
-  if (!market) return fail(404, "market not found");
+  const market = await fetchMarket(token, chainId);
+  if (!market) return fail(404, "market not found", { chainId });
   if (market.graduated) {
     return fail(409, "token has graduated — trade on the DEX pair", { pair: market.pair });
   }
@@ -61,15 +73,16 @@ export async function POST(req: Request) {
       if (body.minTokensOut != null) {
         minTokensOut = parseBig(body.minTokensOut, "minTokensOut");
       } else {
-        quoted = await quoteV4(token, true, amount, from);
+        quoted = await quoteV4(token, true, amount, from, chainId);
         minTokensOut = applySlippage(quoted, slippageBps);
       }
       return ok({
+        chainId,
         mode: "v4",
         router: COIL_SWAP_ROUTER,
         quote: quoted != null ? { tokensOut: quoted.toString() } : null,
         minTokensOut: minTokensOut.toString(),
-        transaction: buildV4BuyTx(token, amount, minTokensOut, from),
+        transaction: buildV4BuyTx(token, amount, minTokensOut, from, chainId),
       });
     } catch (e) {
       return fail(502, "failed to build v4 buy tx", { detail: (e as Error).message });
@@ -77,7 +90,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { tokensOut, totalFee } = await quoteBuy(market.curve, amount);
+    const { tokensOut, totalFee } = await quoteBuy(market.curve, amount, chainId);
     let minTokensOut: bigint;
     if (body.minTokensOut != null) {
       minTokensOut = parseBig(body.minTokensOut, "minTokensOut");
@@ -85,9 +98,10 @@ export async function POST(req: Request) {
       minTokensOut = applySlippage(tokensOut, slippageBps);
     }
     return ok({
+      chainId,
       quote: { tokensOut: tokensOut.toString(), fee: totalFee.toString() },
       minTokensOut: minTokensOut.toString(),
-      transaction: buildBuyTx(market.curve, amount, minTokensOut),
+      transaction: buildBuyTx(market.curve, amount, minTokensOut, chainId),
     });
   } catch (e) {
     return fail(502, "failed to build buy tx", { detail: (e as Error).message });

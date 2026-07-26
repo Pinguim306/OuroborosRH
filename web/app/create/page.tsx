@@ -115,9 +115,11 @@ export default function CreatePage() {
     fetch("/api/announce", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: newTokenAddress }),
+      body: JSON.stringify({ token: newTokenAddress, chain: chainId }),
     }).catch(() => {});
-  }, [isSuccess, newTokenAddress]);
+    // `chainId` is in the deps so the announcement can't be sent with a stale network; the ref
+    // guard is what keeps it firing exactly once.
+  }, [isSuccess, newTokenAddress, chainId]);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
