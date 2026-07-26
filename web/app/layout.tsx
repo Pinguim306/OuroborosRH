@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     url: "https://coil.trading",
     siteName: "Coil",
     type: "website",
-    images: [{ url: "/og.png", width: 2400, height: 1260, alt: "Coil — every trade winds the coil" }],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Coil — every trade winds the coil" }],
   },
   twitter: {
     // Was `summary`, with no image at all: every Coil link posted anywhere unfurled as a bare line
