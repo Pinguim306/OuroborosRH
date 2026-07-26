@@ -9,12 +9,10 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { CHAIN_ID, NATIVE_SYMBOL, explorerUrl } from "@/lib/chain";
+import { chainConfig, explorerUrl } from "@/lib/chain";
+import { useSelectedChainId } from "@/lib/useSelectedChain";
 import {
-  COIL_LAUNCHPAD,
-  COIL_SWAP_ROUTER,
-  LAUNCH_LIVE,
-  SWAP_LIVE,
+  coilContracts,
   coilLaunchpadV4Abi,
   coilPoolKey,
   coilSwapRouterAbi,
@@ -50,7 +48,12 @@ export function LaunchWidget({
   buildMetadataURI: () => Promise<string>;
 }) {
   const { address, isConnected } = useAccount();
-  const publicClient = usePublicClient();
+  // Everything here targets the chain the UI is pointed at — the launchpad address, the mined
+  // salt's hook flags and the tx's chain must all agree, or createTokenV4 reverts.
+  const chainId = useSelectedChainId();
+  const { coilLaunchpad, coilSwapRouter, swapLive, launchLive } = coilContracts(chainId);
+  const nativeSymbol = chainConfig(chainId).nativeSymbol;
+  const publicClient = usePublicClient({ chainId });
   const { writeContractAsync } = useWriteContract();
 
   const [phase, setPhase] = useState<Phase>("idle");
@@ -88,7 +91,7 @@ export function LaunchWidget({
     if (!isSuccess || buyStartedRef.current) return;
     if (devBuyWei <= 0n || !tokenAddr || !address) return;
     buyStartedRef.current = true;
-    if (!SWAP_LIVE) {
+    if (!swapLive) {
       setBuyNote("Dev buy skipped — swap router not configured. Buy manually on the Swap tab.");
       return;
     }
@@ -96,8 +99,8 @@ export function LaunchWidget({
       try {
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
         const bh = await writeContractAsync({
-          chainId: CHAIN_ID,
-          address: COIL_SWAP_ROUTER,
+          chainId,
+          address: coilSwapRouter,
           abi: coilSwapRouterAbi,
           functionName: "swapExactInSingle",
           args: [coilPoolKey(tokenAddr), true, devBuyWei, 0n, address, deadline],
@@ -111,7 +114,7 @@ export function LaunchWidget({
         );
       }
     })();
-  }, [isSuccess, tokenAddr, address, devBuyWei, writeContractAsync]);
+  }, [isSuccess, tokenAddr, address, devBuyWei, writeContractAsync, chainId, coilSwapRouter, swapLive]);
 
   async function launch() {
     if (!publicClient || !isConnected || !address) return;
@@ -130,7 +133,7 @@ export function LaunchWidget({
 
       // 1. Exact init-code hash for THIS launch (name/symbol/creator baked in).
       const initCodeHash = (await publicClient.readContract({
-        address: COIL_LAUNCHPAD,
+        address: coilLaunchpad,
         abi: coilLaunchpadV4Abi,
         functionName: "hookInitCodeHash",
         args: [name, symbol, creator],
@@ -139,20 +142,20 @@ export function LaunchWidget({
       // 2. Mine the salt so the hook address carries the flags THIS chain's launchpad demands.
       setPhase("mining");
       setTried(0);
-      const { salt, address: mined } = await mineSalt(COIL_LAUNCHPAD, initCodeHash, CHAIN_ID, setTried);
+      const { salt, address: mined } = await mineSalt(coilLaunchpad, initCodeHash, chainId, setTried);
       setTokenAddr(mined);
 
       // 3. Fetch the creation fee and launch.
       const creationFee = (await publicClient.readContract({
-        address: COIL_LAUNCHPAD,
+        address: coilLaunchpad,
         abi: coilLaunchpadV4Abi,
         functionName: "creationFee",
       })) as bigint;
 
       setPhase("submitting");
       const txHash = await writeContractAsync({
-        chainId: CHAIN_ID,
-        address: COIL_LAUNCHPAD,
+        chainId,
+        address: coilLaunchpad,
         abi: coilLaunchpadV4Abi,
         functionName: "createTokenV4",
         args: [name, symbol, metadataURI, salt, creatorRewards],
@@ -170,7 +173,7 @@ export function LaunchWidget({
     }
   }
 
-  if (!LAUNCH_LIVE) {
+  if (!launchLive) {
     return (
       <div className="mt-6 rounded-xl border border-white/10 bg-obsidian-900/60 p-4 text-sm text-white/70">
         The v4 launch factory isn&apos;t configured yet. Set{" "}
@@ -207,7 +210,7 @@ export function LaunchWidget({
                   Open your token ↗
                 </Link>
                 <a
-                  href={explorerUrl("token", tokenAddr, CHAIN_ID)}
+                  href={explorerUrl("token", tokenAddr, chainId)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-venom-400 hover:underline"
@@ -220,11 +223,11 @@ export function LaunchWidget({
                 <div className="mt-2 border-t border-white/5 pt-2 text-xs">
                   {buySuccess ? (
                     <span className="text-venom-400">
-                      Dev buy done ✓ — bought {formatEther(devBuyWei)} {NATIVE_SYMBOL} of ${symbol}.
+                      Dev buy done ✓ — bought {formatEther(devBuyWei)} {nativeSymbol} of ${symbol}.
                     </span>
                   ) : buyConfirming || buyHash ? (
                     <span className="text-white/50">
-                      Confirming your {formatEther(devBuyWei)} {NATIVE_SYMBOL} dev buy…
+                      Confirming your {formatEther(devBuyWei)} {nativeSymbol} dev buy…
                     </span>
                   ) : buyNote ? (
                     <span className="text-amber-400">{buyNote}</span>

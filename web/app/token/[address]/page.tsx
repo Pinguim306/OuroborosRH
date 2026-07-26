@@ -21,6 +21,7 @@ import { CandleChart } from "@/components/CandleChart";
 import { DexScreenerChart } from "@/components/DexScreenerChart";
 import { dexscreenerEmbedUrl, explorerUrl } from "@/lib/chain";
 import { useSelectedChainId } from "@/lib/useSelectedChain";
+import { ChainBadge } from "@/components/ChainBadge";
 import { TokenAvatar } from "@/components/TokenAvatar";
 import { HarvestFees } from "@/components/HarvestFees";
 import { SocialLinks } from "@/components/SocialLinks";
@@ -106,6 +107,8 @@ export default function TokenPage() {
           <div className="flex items-center gap-2">
             <h1 className="font-display text-2xl font-bold">{token.name}</h1>
             <span className="chip">{token.symbol}</span>
+            {/* A visitor can land here from a shared link with no other chain context. */}
+            <ChainBadge chainId={token.chainId} className="!py-1" />
             {isV4 ? (
               <span className="chip border-venom-500/40 text-venom-400">⚡ v4</span>
             ) : token.mode === "v3" ? (

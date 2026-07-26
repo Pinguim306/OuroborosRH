@@ -16,7 +16,7 @@ const sections = [
   { id: "dev-buy", label: "Dev buy" },
   { id: "fees", label: "Fees & the split" },
   { id: "rewards", label: "Holder rewards" },
-  { id: "points", label: "Coil Points" },
+  { id: "chains", label: "Chains" },
   { id: "safety", label: "Safety" },
   { id: "faq", label: "FAQ" },
 ] as const;
@@ -177,25 +177,17 @@ export default function DocsPage() {
             </p>
           </Section>
 
-          <Section id="points" title="Coil Points">
+          <Section id="chains" title="Chains">
             <p>
-              <strong>Season 1 is live.</strong> Points are a reputation score computed entirely
-              from public on-chain events — no signup, no snapshot, nothing to opt into. Using the
-              loop is earning:
+              Coil runs the same engine on every chain it supports — the launchpad, the hook and the
+              fee waterfall are identical, only the addresses differ. Each chain has its own pools,
+              its own liquidity and its own native currency, so a coin lives on exactly one chain
+              and trades only there.
             </p>
-            <KeyVals
-              rows={[
-                ["Trade", "1,000 pts per ETH of buy/sell volume"],
-                ["Launch", "500 pts per token launched"],
-                ["Build volume", "100 pts per ETH of volume your tokens generate"],
-                ["Ape early", "250 pts for being one of a token's first 10 buyers"],
-              ]}
-            />
             <p>
-              Anti-wash rule: volume only counts on tokens at least 3 distinct wallets have traded.
-              See the live board on the <Link href="/points" className="lnk">Points</Link> page.
-              Points are a reputation metric only — they carry no guaranteed monetary value, yield,
-              or future entitlement of any kind.
+              Pick the network when you launch, and switch networks from the wallet button to browse
+              another chain&apos;s coins. Fees and prices are always denominated in that chain&apos;s
+              native currency — {NATIVE_SYMBOL} here, a stablecoin on chains that use one for gas.
             </p>
           </Section>
 

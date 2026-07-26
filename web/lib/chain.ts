@@ -147,6 +147,11 @@ export type NativeUsdSource =
 /** Everything that varies per chain but is NOT a Coil deployment (those live in contracts.ts). */
 export type ChainConfig = {
   chain: Chain;
+  /** Compact label for chips/badges, where `chain.name` is too long next to a ticker. */
+  shortName: string;
+  /** Brand hex for this chain's dot/tint. A raw colour rather than a Tailwind token because it is
+   *  per-chain data, not part of the app palette — badges tint it down at low alpha. */
+  accent: string;
   /** Ticker + long name of the gas token, as rendered in the UI ("ETH"/"Ether", "USDC"/"USD Coin").
    *  Decimals live on `chain.nativeCurrency` — 18 on every chain here, Arc included. */
   nativeSymbol: string;
@@ -162,6 +167,8 @@ export type ChainConfig = {
 export const CHAINS: Record<number, ChainConfig> = {
   [robinhoodChain.id]: {
     chain: robinhoodChain,
+    shortName: "Robinhood",
+    accent: "#00c805",
     nativeSymbol: robinhoodChain.nativeCurrency.symbol,
     nativeName: robinhoodChain.nativeCurrency.name,
     nativeUsd: { kind: "oracle", coingeckoId: "ethereum", coinbasePair: "ETH-USD" },
@@ -173,6 +180,8 @@ export const CHAINS: Record<number, ChainConfig> = {
   // chain up must not need a code change once the deployments land.
   [arcChain.id]: {
     chain: arcChain,
+    shortName: "Arc",
+    accent: "#2775ca",
     nativeSymbol: arcChain.nativeCurrency.symbol,
     nativeName: "USD Coin",
     nativeUsd: { kind: "stable" },
@@ -188,6 +197,8 @@ export const CHAINS: Record<number, ChainConfig> = {
   },
   [arcTestnet.id]: {
     chain: arcTestnet,
+    shortName: "Arc Testnet",
+    accent: "#f5a524",
     nativeSymbol: arcTestnet.nativeCurrency.symbol,
     nativeName: "USD Coin",
     nativeUsd: { kind: "stable" },

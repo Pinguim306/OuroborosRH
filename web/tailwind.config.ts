@@ -28,8 +28,10 @@ const config: Config = {
         acid: "#37e8ff",
       },
       fontFamily: {
+        // Display for headings/numerals, body for prose/UI, mono for hex + amounts.
         display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        body: ["var(--font-body)", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       boxShadow: {
         venom: "0 0 0 1px rgba(139,92,255,0.25), 0 8px 40px -12px rgba(139,92,255,0.35)",

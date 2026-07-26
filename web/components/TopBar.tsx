@@ -8,9 +8,12 @@ import { COIL_TOKEN, isDeployed } from "@/lib/contracts";
 import { shortAddr } from "@/lib/format";
 import { useSearch } from "./SearchProvider";
 import { WalletButton } from "./WalletButton";
+import { ChainSwitcher } from "./ChainSwitcher";
+import { IconMenu, IconSearch } from "./Icon";
 
 /** The sticky top bar: mobile menu button, global coin search, the official $COIL contract
- *  address (click to copy), launch + wallet. Typing in the search jumps to the home grid. */
+ *  address (click to copy), launch, network picker + wallet. Typing in the search jumps to the
+ *  home grid. */
 export function TopBar({ onMenu }: { onMenu: () => void }) {
   const { query, setQuery } = useSearch();
   const pathname = usePathname();
@@ -34,14 +37,14 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
         <button
           onClick={onMenu}
           aria-label="Open menu"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-white/70 hover:bg-white/5 lg:hidden"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-white/70 transition hover:bg-white/5 lg:hidden"
         >
-          <span className="text-xl leading-none">☰</span>
+          <IconMenu size={20} />
         </button>
 
         <div className="relative min-w-0 flex-1 lg:max-w-xl">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/30">
-            🔍
+            <IconSearch size={16} />
           </span>
           <input
             value={query}
@@ -81,6 +84,9 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
         <Link href="/create" className="btn-primary hidden shrink-0 sm:inline-flex">
           {copy.nav.create}
         </Link>
+        <div className="shrink-0">
+          <ChainSwitcher />
+        </div>
         <div className="shrink-0">
           <WalletButton />
         </div>
