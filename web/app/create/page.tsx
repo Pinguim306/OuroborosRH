@@ -7,7 +7,7 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { copy } from "@/lib/copy";
 import { chainConfig, dexscreenerPageUrl, explorerUrl } from "@/lib/chain";
 import { useSelectedChainId } from "@/lib/useSelectedChain";
-import { LIVE, CONTRACTS, launchpadAbi, COIL_LAUNCHPAD, LAUNCH_LIVE, coilLaunchpadV4Abi } from "@/lib/contracts";
+import { coilContracts, launchpadAbi, coilLaunchpadV4Abi } from "@/lib/contracts";
 import { ProgressBar } from "@/components/ProgressBar";
 import { LaunchWidget } from "@/components/LaunchWidget";
 import { IconCrown, IconImage, IconRewards, IconWarning } from "@/components/Icon";
@@ -50,8 +50,20 @@ export default function CreatePage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // Creation fees differ per network (e.g. 2 USDC on Arc vs 0.001 ETH on Robinhood Chain), so
+  // these reads must follow the selected chain — LaunchWidget already sends the per-chain fee as
+  // the transaction's `value`, and a display sourced from the default chain would quote a number
+  // the user is not actually about to pay.
+  const {
+    launchpad: curveLaunchpad,
+    coilLaunchpad: v4Launchpad,
+    live: LIVE,
+    launchLive: LAUNCH_LIVE,
+  } = coilContracts(chainId);
+
   const { data: creationFee } = useReadContract({
-    address: CONTRACTS.launchpad,
+    chainId,
+    address: curveLaunchpad,
     abi: launchpadAbi,
     functionName: "creationFee",
     query: { enabled: LIVE },
@@ -59,7 +71,8 @@ export default function CreatePage() {
   // v1 launchpads don't have the rewards-mode flag (or this getter) — the read
   // fails there, the selector stays hidden and the 4-arg create signature is used.
   const { data: lpVersion } = useReadContract({
-    address: CONTRACTS.launchpad,
+    chainId,
+    address: curveLaunchpad,
     abi: launchpadAbi,
     functionName: "LAUNCHPAD_VERSION",
     query: { enabled: LIVE },
@@ -69,7 +82,8 @@ export default function CreatePage() {
 
   // v4 launchpad creation fee (separate contract from the V3 launchpad).
   const { data: creationFeeV4 } = useReadContract({
-    address: COIL_LAUNCHPAD,
+    chainId,
+    address: v4Launchpad,
     abi: coilLaunchpadV4Abi,
     functionName: "creationFee",
     query: { enabled: LAUNCH_LIVE },
@@ -232,7 +246,7 @@ export default function CreatePage() {
 
     writeContract({
       chainId: chainId,
-      address: CONTRACTS.launchpad,
+      address: curveLaunchpad,
       abi: launchpadAbi,
       functionName: "createTokenV3",
       args,

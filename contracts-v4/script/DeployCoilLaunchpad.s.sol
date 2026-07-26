@@ -17,7 +17,10 @@ import {CoilLaunchpad} from "../src/CoilLaunchpad.sol";
 ///     LAUNCHPAD_OWNER   — admin (can update fee recipient/treasury/fees; not per-token power)
 ///     FEE_RECIPIENT     — protocol wallet (protocol fee cut + creation fee)
 ///     PLATFORM_TREASURY — COIL buy&burn treasury (burn cut)
-///     CREATION_FEE      — native fee per launch (wei), default 0
+///     CREATION_FEE      — native fee per launch (wei), default 0. Denominated in the CHAIN'S
+///                         gas coin, always 18 decimals here: Robinhood Chain 0.001 ETH = 1e15;
+///                         Arc 2 USDC = 2e18, because Arc's native USDC is scaled to 18 decimals
+///                         by the EVM (NOT the ERC-20's 6) — using 2e6 would charge 0.000000000002.
 ///     TOKEN_SUPPLY      — supply per launch (wei)
 ///     TICK_LOWER, TICK_UPPER — one-sided range (defaults -6000 / 0)
 ///     PROTOCOL_FEE_BPS / HOLDER_FEE_BPS / BURN_FEE_BPS — default 50 / 30 / 20
