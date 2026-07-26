@@ -7,7 +7,7 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { copy } from "@/lib/copy";
 import { chainConfig, dexscreenerPageUrl, explorerUrl } from "@/lib/chain";
 import { useSelectedChainId } from "@/lib/useSelectedChain";
-import { LIVE, CONTRACTS, launchpadAbi, COIL_LAUNCHPAD, LAUNCH_LIVE, coilLaunchpadV4Abi } from "@/lib/contracts";
+import { coilContracts, launchpadAbi, coilLaunchpadV4Abi } from "@/lib/contracts";
 import { ProgressBar } from "@/components/ProgressBar";
 import { LaunchWidget } from "@/components/LaunchWidget";
 import { IconCrown, IconImage, IconRewards, IconWarning } from "@/components/Icon";
@@ -34,7 +34,12 @@ export default function CreatePage() {
   const [devBuy, setDevBuy] = useState("");
   // Rewards mode: Loop Rewards streams the fee share to all holders (classic);
   // Creator Rewards pays it to the creator's wallet. Fixed forever at launch.
-  const [rewards, setRewards] = useState<"loop" | "creator">("loop");
+  const [rewardsChoice, setRewards] = useState<"loop" | "creator">("loop");
+  // Some chains offer only Creator Rewards. Deriving the effective value (rather than syncing
+  // state on a chain change) means the picker can never leave a stale "loop" behind on a chain
+  // that doesn't offer it — the launch would then be sent with the wrong immutable flag.
+  const loopRewardsAvailable = chainConfig(chainId).loopRewards;
+  const rewards = loopRewardsAvailable ? rewardsChoice : "creator";
 
   // Image upload state
   const fileRef = useRef<HTMLInputElement>(null);
@@ -45,8 +50,20 @@ export default function CreatePage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // Creation fees differ per network (e.g. 2 USDC on Arc vs 0.001 ETH on Robinhood Chain), so
+  // these reads must follow the selected chain — LaunchWidget already sends the per-chain fee as
+  // the transaction's `value`, and a display sourced from the default chain would quote a number
+  // the user is not actually about to pay.
+  const {
+    launchpad: curveLaunchpad,
+    coilLaunchpad: v4Launchpad,
+    live: LIVE,
+    launchLive: LAUNCH_LIVE,
+  } = coilContracts(chainId);
+
   const { data: creationFee } = useReadContract({
-    address: CONTRACTS.launchpad,
+    chainId,
+    address: curveLaunchpad,
     abi: launchpadAbi,
     functionName: "creationFee",
     query: { enabled: LIVE },
@@ -54,7 +71,8 @@ export default function CreatePage() {
   // v1 launchpads don't have the rewards-mode flag (or this getter) — the read
   // fails there, the selector stays hidden and the 4-arg create signature is used.
   const { data: lpVersion } = useReadContract({
-    address: CONTRACTS.launchpad,
+    chainId,
+    address: curveLaunchpad,
     abi: launchpadAbi,
     functionName: "LAUNCHPAD_VERSION",
     query: { enabled: LIVE },
@@ -64,7 +82,8 @@ export default function CreatePage() {
 
   // v4 launchpad creation fee (separate contract from the V3 launchpad).
   const { data: creationFeeV4 } = useReadContract({
-    address: COIL_LAUNCHPAD,
+    chainId,
+    address: v4Launchpad,
     abi: coilLaunchpadV4Abi,
     functionName: "creationFee",
     query: { enabled: LAUNCH_LIVE },
@@ -227,7 +246,7 @@ export default function CreatePage() {
 
     writeContract({
       chainId: chainId,
-      address: CONTRACTS.launchpad,
+      address: curveLaunchpad,
       abi: launchpadAbi,
       functionName: "createTokenV3",
       args,
@@ -329,45 +348,60 @@ export default function CreatePage() {
             {supportsRewardsMode && (
               <div>
                 <span className="label mb-1.5 block">Rewards mode</span>
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      {
-                        key: "loop",
-                        title: "Loop Rewards",
-                        Icon: IconRewards,
-                        desc: "The per-swap fee's holder slice streams to every holder automatically — the classic Coil loop.",
-                      },
-                      {
-                        key: "creator",
-                        title: "Creator Rewards",
-                        Icon: IconCrown,
-                        desc: "The per-swap fee's holder slice is paid straight to your wallet instead.",
-                      },
-                    ] as const
-                  ).map((opt) => (
-                    <button
-                      key={opt.key}
-                      type="button"
-                      onClick={() => setRewards(opt.key)}
-                      className={`rounded-xl border p-3 text-left transition ${
-                        rewards === opt.key
-                          ? "border-coil-500/60 bg-coil-500/10"
-                          : "border-white/10 bg-obsidian-900/60 hover:border-white/25"
-                      }`}
-                    >
-                      <div
-                        className={`flex items-center gap-1.5 text-sm font-semibold ${
-                          rewards === opt.key ? "text-coil-400" : "text-ink-2"
+                {loopRewardsAvailable ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        {
+                          key: "loop",
+                          title: "Loop Rewards",
+                          Icon: IconRewards,
+                          desc: "The per-swap fee's holder slice streams to every holder automatically — the classic Coil loop.",
+                        },
+                        {
+                          key: "creator",
+                          title: "Creator Rewards",
+                          Icon: IconCrown,
+                          desc: "The per-swap fee's holder slice is paid straight to your wallet instead.",
+                        },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setRewards(opt.key)}
+                        className={`rounded-xl border p-3 text-left transition ${
+                          rewards === opt.key
+                            ? "border-coil-500/60 bg-coil-500/10"
+                            : "border-white/10 bg-obsidian-900/60 hover:border-white/25"
                         }`}
                       >
-                        <opt.Icon size={15} />
-                        {opt.title}
-                      </div>
-                      <p className="mt-1 text-[11px] leading-relaxed text-ink-3">{opt.desc}</p>
-                    </button>
-                  ))}
-                </div>
+                        <div
+                          className={`flex items-center gap-1.5 text-sm font-semibold ${
+                            rewards === opt.key ? "text-coil-400" : "text-ink-2"
+                          }`}
+                        >
+                          <opt.Icon size={15} />
+                          {opt.title}
+                        </div>
+                        <p className="mt-1 text-[11px] leading-relaxed text-ink-3">{opt.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  /* Creator-Rewards-only chain: state it rather than showing a picker with one
+                     disabled half, which reads as something being broken. */
+                  <div className="rounded-xl border border-coil-500/40 bg-coil-500/10 p-3">
+                    <div className="flex items-center gap-1.5 text-sm font-semibold text-coil-400">
+                      <IconCrown size={15} />
+                      Creator Rewards
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-ink-3">
+                      Every launch on {chainConfig(chainId).chain.name} pays the per-swap fee&apos;s
+                      holder slice straight to your wallet. Fixed at launch, like everywhere else.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

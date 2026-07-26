@@ -23,6 +23,7 @@ import {CoilLaunchpad} from "../src/CoilLaunchpad.sol";
 ///   Run:
 ///     FOUNDRY_PROFILE=e2e forge script script/LaunchCoilToken.s.sol:LaunchCoilToken \
 ///       --rpc-url $RPC_URL --broadcast --private-key $PK
+///   Env: TOTAL_FEE_BPS — the launch's per-swap rate in bps (100..500), default 100 (1%).
 contract LaunchCoilToken is Script {
     function run() external returns (address token) {
         address padAddr = vm.envAddress("COIL_LAUNCHPAD");
@@ -31,13 +32,15 @@ contract LaunchCoilToken is Script {
         string memory symbol = vm.envString("TOKEN_SYMBOL");
         string memory uri = vm.envOr("TOKEN_METADATA_URI", string(""));
         bool creatorRewards = vm.envOr("CREATOR_REWARDS", false);
+        // The creator's chosen per-swap rate, in bps of the swap (100 = 1%, 500 = 5%).
+        uint256 totalFeeBps = vm.envOr("TOTAL_FEE_BPS", uint256(100));
 
         CoilLaunchpad pad = CoilLaunchpad(payable(padAddr));
         address creator = creatorRewards ? launcher : address(0);
 
         // Reproduce the launchpad's exact constructor args so the mined salt lands the hook on the
         // same address `createTokenV4` will deploy it to.
-        bytes memory ctorArgs = _ctorArgs(pad, padAddr, name, symbol, creator);
+        bytes memory ctorArgs = _ctorArgs(pad, padAddr, name, symbol, creator, totalFeeBps);
         uint160 flags = uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG);
         (address predicted, bytes32 salt) =
             HookMiner.find(padAddr, flags, type(CoilHook).creationCode, ctorArgs);
@@ -46,7 +49,7 @@ contract LaunchCoilToken is Script {
 
         uint256 fee = pad.creationFee();
         vm.startBroadcast();
-        (token,) = pad.createTokenV4{value: fee}(name, symbol, uri, salt, creatorRewards);
+        (token,) = pad.createTokenV4{value: fee}(name, symbol, uri, salt, creatorRewards, totalFeeBps);
         vm.stopBroadcast();
 
         require(token == predicted, "launched address != mined address");
@@ -59,9 +62,10 @@ contract LaunchCoilToken is Script {
         address padAddr,
         string memory name,
         string memory symbol,
-        address creator
+        address creator,
+        uint256 totalFeeBps
     ) internal view returns (bytes memory) {
-        (uint256 p, uint256 h, uint256 b) = pad.fees();
+        CoilHook.FeeConfig memory f = pad.resolveFees(totalFeeBps);
         return abi.encode(
             pad.poolManager(),
             padAddr, // owner = the launchpad (matches CoilLaunchpad._ctorArgs)
@@ -73,7 +77,7 @@ contract LaunchCoilToken is Script {
             pad.tokenSupply(),
             name,
             symbol,
-            CoilHook.FeeConfig({protocolBps: p, holderBps: h, burnBps: b})
+            f
         );
     }
 }
