@@ -1,4 +1,4 @@
-import { checkAuth, fail, ok, parseBig } from "@/lib/server/api";
+import { checkAuth, fail, ok, parseBig, parseChain } from "@/lib/server/api";
 import {
   allowanceOf,
   applySlippage,
@@ -10,14 +10,14 @@ import {
   quoteSell,
   quoteV4,
 } from "@/lib/server/launchpad";
-import { COIL_SWAP_ROUTER, LIVE } from "@/lib/contracts";
+import { coilContracts } from "@/lib/contracts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/v1/tx/sell
- * Body: { token, amount (token wei in), from?, slippageBps?=500, minNativeOut? }
+ * Body: { token, amount (token wei in), chain?, from?, slippageBps?=500, minNativeOut? }
  * Selling requires the curve to hold an allowance for the seller's tokens. When
  * `from` is supplied we check it and, if needed, return an `approval` transaction
  * that must be signed and mined before the `transaction`.
@@ -25,13 +25,23 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const denied = checkAuth(req);
   if (denied) return denied;
-  if (!LIVE) return fail(503, "contracts not deployed — tx building unavailable");
 
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
   } catch {
     return fail(400, "invalid JSON body");
+  }
+
+  let chainId;
+  try {
+    chainId = parseChain(body.chain);
+  } catch (e) {
+    return fail(400, (e as Error).message);
+  }
+  const { coilSwapRouter: COIL_SWAP_ROUTER, anyLive } = coilContracts(chainId);
+  if (!anyLive) {
+    return fail(503, "contracts not deployed on this chain — tx building unavailable", { chainId });
   }
 
   const token = normalizeAddress(body.token as string);
@@ -49,8 +59,8 @@ export async function POST(req: Request) {
   if (body.from != null && !from) return fail(400, "invalid from address");
   const slippageBps = Number(body.slippageBps ?? 500);
 
-  const market = await fetchMarket(token);
-  if (!market) return fail(404, "market not found");
+  const market = await fetchMarket(token, chainId);
+  if (!market) return fail(404, "market not found", { chainId });
   if (market.graduated) {
     return fail(409, "token has graduated — trade on the DEX pair", { pair: market.pair });
   }
@@ -60,9 +70,11 @@ export async function POST(req: Request) {
   if (market.mode === "v4") {
     if (!from) return fail(400, "v4 sells require from=<your address>");
     try {
-      const allowance = await allowanceOf(token, from, COIL_SWAP_ROUTER);
+      const allowance = await allowanceOf(token, from, COIL_SWAP_ROUTER, chainId);
       const needsApproval = allowance < amount;
-      const approval = needsApproval ? buildApproveTx(token, COIL_SWAP_ROUTER) : null;
+      const approval = needsApproval
+        ? buildApproveTx(token, COIL_SWAP_ROUTER, undefined, chainId)
+        : null;
 
       let minNativeOut: bigint | null = null;
       let quoted: bigint | null = null;
@@ -70,11 +82,12 @@ export async function POST(req: Request) {
         minNativeOut = parseBig(body.minNativeOut, "minNativeOut");
       } else if (!needsApproval) {
         // Simulating the sell needs the allowance in place; with it, quote then apply slippage.
-        quoted = await quoteV4(token, false, amount, from);
+        quoted = await quoteV4(token, false, amount, from, chainId);
         minNativeOut = applySlippage(quoted, slippageBps);
       }
 
       return ok({
+        chainId,
         mode: "v4",
         router: COIL_SWAP_ROUTER,
         needsApproval,
@@ -84,7 +97,7 @@ export async function POST(req: Request) {
         // Without an allowance the quote can't simulate — approve first, then call again
         // (or pass minNativeOut explicitly to get the swap tx in the same call).
         transaction:
-          minNativeOut != null ? buildV4SellTx(token, amount, minNativeOut, from) : null,
+          minNativeOut != null ? buildV4SellTx(token, amount, minNativeOut, from, chainId) : null,
       });
     } catch (e) {
       return fail(502, "failed to build v4 sell tx", { detail: (e as Error).message });
@@ -92,7 +105,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { nativeOut, totalFee } = await quoteSell(market.curve, amount);
+    const { nativeOut, totalFee } = await quoteSell(market.curve, amount, chainId);
     let minNativeOut: bigint;
     if (body.minNativeOut != null) {
       minNativeOut = parseBig(body.minNativeOut, "minNativeOut");
@@ -103,19 +116,20 @@ export async function POST(req: Request) {
     let approval = null;
     let needsApproval = false;
     if (from) {
-      const allowance = await allowanceOf(token, from, market.curve);
+      const allowance = await allowanceOf(token, from, market.curve, chainId);
       if (allowance < amount) {
         needsApproval = true;
-        approval = buildApproveTx(token, market.curve);
+        approval = buildApproveTx(token, market.curve, undefined, chainId);
       }
     }
 
     return ok({
+      chainId,
       quote: { nativeOut: nativeOut.toString(), fee: totalFee.toString() },
       minNativeOut: minNativeOut.toString(),
       needsApproval,
       approval, // sign + mine this first when needsApproval is true
-      transaction: buildSellTx(market.curve, amount, minNativeOut),
+      transaction: buildSellTx(market.curve, amount, minNativeOut, chainId),
     });
   } catch (e) {
     return fail(502, "failed to build sell tx", { detail: (e as Error).message });

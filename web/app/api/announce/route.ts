@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { publicClient, normalizeAddress } from "@/lib/server/launchpad";
-import { CHAIN_ID, chainParam, explorerUrl } from "@/lib/chain";
-import {
-  CONTRACTS,
-  LIVE,
-  launchpadAbi,
-  COIL_LAUNCHPAD,
-  LAUNCH_LIVE,
-  coilLaunchpadV4Abi,
-  isCoilToken,
-} from "@/lib/contracts";
+import { normalizeAddress } from "@/lib/server/launchpad";
+import { publicClientFor } from "@/lib/server/rpc";
+import { chainParam, chainConfig, explorerUrl } from "@/lib/chain";
+import { parseChain } from "@/lib/server/api";
+import { coilContracts, launchpadAbi, coilLaunchpadV4Abi, isCoilToken } from "@/lib/contracts";
 
 /**
  * Announce a freshly launched token in the project's Telegram channel. Called by
@@ -40,18 +34,25 @@ export async function POST(req: NextRequest) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!botToken || !chatId) return NextResponse.json({ skipped: true });
-  if (!LIVE) return NextResponse.json({ skipped: true });
 
   let token: ReturnType<typeof normalizeAddress> = null;
+  let chainId;
   try {
     const body = await req.json();
     token = normalizeAddress(body?.token);
-  } catch {
-    /* fall through to the 400 below */
+    // Launches go to whichever chain the creator picked, so the announcement has to verify the
+    // token on THAT chain — checking the default one would silently drop every Arc launch.
+    chainId = parseChain(body?.chain);
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message ?? "invalid body" }, { status: 400 });
   }
   if (!token) return NextResponse.json({ error: "invalid token address" }, { status: 400 });
 
-  const key = `${CHAIN_ID}:${token.toLowerCase()}`;
+  const { launchpad, coilLaunchpad, live: LIVE, launchLive: LAUNCH_LIVE } = coilContracts(chainId);
+  if (!LIVE && !LAUNCH_LIVE) return NextResponse.json({ skipped: true });
+  const publicClient = publicClientFor(chainId);
+
+  const key = `${chainId}:${token.toLowerCase()}`;
   if (announced.has(key)) return NextResponse.json({ skipped: true });
 
   // Verify on-chain: the token must be registered on a launchpad (v4 hooks are recognizable from
@@ -63,16 +64,16 @@ export async function POST(req: NextRequest) {
     let createdAt: bigint;
     let flavor: string;
 
-    if (isCoilToken(token, CHAIN_ID) && LAUNCH_LIVE) {
+    if (isCoilToken(token, chainId) && LAUNCH_LIVE) {
       const idx = (await publicClient.readContract({
-        address: COIL_LAUNCHPAD,
+        address: coilLaunchpad,
         abi: coilLaunchpadV4Abi,
         functionName: "marketIndexByToken",
         args: [token],
       })) as bigint;
       if (idx === 0n) return NextResponse.json({ error: "unknown token" }, { status: 404 });
       const m = (await publicClient.readContract({
-        address: COIL_LAUNCHPAD,
+        address: coilLaunchpad,
         abi: coilLaunchpadV4Abi,
         functionName: "markets",
         args: [idx - 1n],
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
       flavor = "⚡ Uniswap v4 pool";
     } else {
       const idx = (await publicClient.readContract({
-        address: CONTRACTS.launchpad,
+        address: launchpad,
         abi: launchpadAbi,
         functionName: "marketIndexByToken",
         args: [token],
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest) {
       if (idx === 0n) return NextResponse.json({ error: "unknown token" }, { status: 404 });
 
       const market = (await publicClient.readContract({
-        address: CONTRACTS.launchpad,
+        address: launchpad,
         abi: launchpadAbi,
         functionName: "markets",
         args: [idx - 1n],
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
 
       const isV3 = await publicClient
         .readContract({
-          address: CONTRACTS.launchpad,
+          address: launchpad,
           abi: launchpadAbi,
           functionName: "isV3Token",
           args: [token],
@@ -123,8 +124,8 @@ export async function POST(req: NextRequest) {
       `<b>${esc(name)}</b> ($${esc(symbol)}) — ${flavor}`,
       `CA: <code>${token}</code>`,
       ``,
-      `<a href="${SITE_URL}/token/${token}${chainParam(CHAIN_ID)}">Trade on Coil</a>` +
-        ` · <a href="${explorerUrl("token", token, CHAIN_ID)}">Explorer</a>`,
+      `<a href="${SITE_URL}/token/${token}${chainParam(chainId)}">Trade on Coil</a>` +
+        ` · <a href="${explorerUrl("token", token, chainId)}">Explorer</a>`,
     ];
 
     const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {

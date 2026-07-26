@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { CHAINS, DEFAULT_CHAIN_ID, type SupportedChainId } from "@/lib/chain";
 
 /**
  * Shared helpers for the public trade API (`/api/v1/*`).
@@ -26,6 +27,33 @@ export function checkAuth(req: Request): NextResponse | null {
   const key = bearer || req.headers.get("x-api-key") || undefined;
   if (key !== required) return fail(401, "unauthorized — provide a valid API key");
   return null;
+}
+
+/**
+ * Which chain a request targets.
+ *
+ * The parameter is OPTIONAL and defaults to the default chain, which is what every v1 client sent
+ * before Coil was multi-chain — so existing bots keep working byte-for-byte without knowing this
+ * exists. An UNKNOWN id is rejected rather than silently defaulted: a bot asking for a chain this
+ * deployment doesn't serve has a bug, and quietly answering with another chain's prices is the
+ * worst possible response to it.
+ *
+ * Throws with a client-facing message; routes turn that into a 400.
+ */
+export function parseChain(raw: unknown): SupportedChainId {
+  if (raw == null || raw === "") return DEFAULT_CHAIN_ID;
+  const id = Number(raw);
+  if (!Number.isInteger(id) || !CHAINS[id]) {
+    throw new Error(
+      `unknown chain "${String(raw)}" — supported: ${Object.keys(CHAINS).join(", ")}`,
+    );
+  }
+  return id as SupportedChainId;
+}
+
+/** `?chain=<id>` on a GET. */
+export function chainFromQuery(req: Request): SupportedChainId {
+  return parseChain(new URL(req.url).searchParams.get("chain"));
 }
 
 /** Parse a decimal or hex string into a non-negative bigint, or throw. */

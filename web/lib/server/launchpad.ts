@@ -1,15 +1,17 @@
 import { encodeFunctionData, formatEther, isAddress, maxUint256, type Address } from "viem";
-import { robinhoodChain, v4PoolManagerOf } from "@/lib/chain";
+import {
+  chainConfig,
+  DEFAULT_CHAIN_ID,
+  robinhoodChain,
+  v4PoolManagerOf,
+  type SupportedChainId,
+} from "@/lib/chain";
 import { publicClientFor } from "@/lib/server/rpc";
 import {
-  CONTRACTS,
-  LIVE,
+  coilContracts,
   launchpadAbi,
   curveAbi,
   tokenAbi,
-  COIL_LAUNCHPAD,
-  LAUNCH_LIVE,
-  COIL_SWAP_ROUTER,
   coilLaunchpadV4Abi,
   coilSwapRouterAbi,
   coilPoolKey,
@@ -26,13 +28,21 @@ import { MOCK_TOKENS } from "@/lib/mock/data";
  * (`/api/v1/*`) that Telegram trade bots integrate against: bots read markets and
  * quotes, ask this API to *build* unsigned buy/sell/approve transactions, then sign
  * and broadcast them with their own keys. We never hold keys or sign anything.
+ *
+ * MULTI-CHAIN: every function here takes an optional `chainId` and defaults to the default chain,
+ * so an existing integration that never passes one keeps its exact behaviour. Addresses, the read
+ * client and the `chainId` stamped on returned transactions all follow that argument — a bot must
+ * never be handed a transaction built from one chain's router and told to broadcast it on another.
  */
 
-/** This module reads the DEFAULT chain; `publicClientFor(id)` is the seam for any other. */
+/** Read client for the DEFAULT chain. Chain-aware callers use `publicClientFor(id)` instead. */
 export const publicClient = publicClientFor(robinhoodChain.id);
 
 export const CHAIN_ID = robinhoodChain.id;
 export const NATIVE_SYMBOL = robinhoodChain.nativeCurrency.symbol;
+
+/** The API's chain argument. Absent = the default chain, which is what every v1 client sent. */
+export type ApiChainId = SupportedChainId;
 
 export function normalizeAddress(a: string | undefined | null): Address | null {
   if (!a || !isAddress(a)) return null;
@@ -85,13 +95,14 @@ function curveStatsCalls(m: RawMarket) {
   ] as const;
 }
 
-function toApiMarket(m: RawMarket, r: readonly { result?: unknown }[]): ApiMarket {
+function toApiMarket(m: RawMarket, r: readonly { result?: unknown }[], chainId: ApiChainId): ApiMarket {
   const price = (r[0]?.result as bigint) ?? 0n;
   const supply = (r[4]?.result as bigint) ?? 0n;
   const priceEth = Number(formatEther(price));
   const supplyNum = Number(formatEther(supply));
   const pairRaw = r[5]?.result as Address | undefined;
   return {
+    chainId,
     token: m.token,
     curve: m.curve,
     creator: m.creator,
@@ -109,17 +120,22 @@ function toApiMarket(m: RawMarket, r: readonly { result?: unknown }[]): ApiMarke
   };
 }
 
-const V4_POOL_MANAGER = v4PoolManagerOf(CHAIN_ID);
 const V4_DEADLINE_SECONDS = 20 * 60;
 
 function v4Deadline(): bigint {
   return BigInt(Math.floor(Date.now() / 1000) + V4_DEADLINE_SECONDS);
 }
 
-function v4ToApiMarket(m: CoilMarket, supply: bigint, priceEth: number): ApiMarket {
+function v4ToApiMarket(
+  m: CoilMarket,
+  supply: bigint,
+  priceEth: number,
+  chainId: ApiChainId,
+): ApiMarket {
   const supplyNum = Number(formatEther(supply));
   return {
     mode: "v4",
+    chainId,
     token: m.token,
     curve: m.token, // the token IS the pool/hook — kept for shape-compat with curve markets
     creator: m.creator,
@@ -138,10 +154,13 @@ function v4ToApiMarket(m: CoilMarket, supply: bigint, priceEth: number): ApiMark
 }
 
 /** Uniswap-v4 (CoilLaunchpad) markets, priced from the PoolManager's slot0 via extsload. */
-async function fetchV4Markets(limit = 50): Promise<ApiMarket[]> {
-  if (!LAUNCH_LIVE) return [];
-  const raw = (await publicClient.readContract({
-    address: COIL_LAUNCHPAD,
+async function fetchV4Markets(limit: number, chainId: ApiChainId): Promise<ApiMarket[]> {
+  const { coilLaunchpad, launchLive } = coilContracts(chainId);
+  if (!launchLive) return [];
+  const client = publicClientFor(chainId);
+  const poolManager = v4PoolManagerOf(chainId);
+  const raw = (await client.readContract({
+    address: coilLaunchpad,
     abi: coilLaunchpadV4Abi,
     functionName: "getMarkets",
     args: [0n, BigInt(limit)],
@@ -150,31 +169,39 @@ async function fetchV4Markets(limit = 50): Promise<ApiMarket[]> {
   const calls = raw.flatMap((m) => [
     { address: m.token, abi: tokenAbi, functionName: "totalSupply" },
     {
-      address: V4_POOL_MANAGER,
+      address: poolManager,
       abi: v4PoolManagerAbi,
       functionName: "extsload",
       args: [coilSlot0Slot(m.token)],
     },
   ]);
-  const res = (await publicClient.multicall({ contracts: calls as never })) as {
+  const res = (await client.multicall({ contracts: calls as never })) as {
     result?: unknown;
   }[];
   return raw.map((m, i) =>
-    v4ToApiMarket(m, (res[i * 2]?.result as bigint) ?? 0n, v4PriceFromPackedSlot0(res[i * 2 + 1]?.result)),
+    v4ToApiMarket(
+      m,
+      (res[i * 2]?.result as bigint) ?? 0n,
+      v4PriceFromPackedSlot0(res[i * 2 + 1]?.result),
+      chainId,
+    ),
   );
 }
 
-async function fetchV4Market(token: Address): Promise<ApiMarket | null> {
-  if (!LAUNCH_LIVE) return null;
-  const idx = (await publicClient.readContract({
-    address: COIL_LAUNCHPAD,
+async function fetchV4Market(token: Address, chainId: ApiChainId): Promise<ApiMarket | null> {
+  const { coilLaunchpad, launchLive } = coilContracts(chainId);
+  if (!launchLive) return null;
+  const client = publicClientFor(chainId);
+  const poolManager = v4PoolManagerOf(chainId);
+  const idx = (await client.readContract({
+    address: coilLaunchpad,
     abi: coilLaunchpadV4Abi,
     functionName: "marketIndexByToken",
     args: [token],
   })) as bigint;
   if (idx === 0n) return null;
-  const m = (await publicClient.readContract({
-    address: COIL_LAUNCHPAD,
+  const m = (await client.readContract({
+    address: coilLaunchpad,
     abi: coilLaunchpadV4Abi,
     functionName: "markets",
     args: [idx - 1n],
@@ -188,18 +215,23 @@ async function fetchV4Market(token: Address): Promise<ApiMarket | null> {
     metadataURI: m[5],
     createdAt: m[6],
   };
-  const res = (await publicClient.multicall({
+  const res = (await client.multicall({
     contracts: [
       { address: token, abi: tokenAbi, functionName: "totalSupply" },
       {
-        address: V4_POOL_MANAGER,
+        address: poolManager,
         abi: v4PoolManagerAbi,
         functionName: "extsload",
         args: [coilSlot0Slot(token)],
       },
     ] as never,
   })) as { result?: unknown }[];
-  return v4ToApiMarket(market, (res[0]?.result as bigint) ?? 0n, v4PriceFromPackedSlot0(res[1]?.result));
+  return v4ToApiMarket(
+    market,
+    (res[0]?.result as bigint) ?? 0n,
+    v4PriceFromPackedSlot0(res[1]?.result),
+    chainId,
+  );
 }
 
 /**
@@ -212,9 +244,10 @@ export async function quoteV4(
   isBuy: boolean,
   amountIn: bigint,
   from: Address,
+  chainId: ApiChainId = DEFAULT_CHAIN_ID,
 ): Promise<bigint> {
-  const { result } = await publicClient.simulateContract({
-    address: COIL_SWAP_ROUTER,
+  const { result } = await publicClientFor(chainId).simulateContract({
+    address: coilContracts(chainId).coilSwapRouter,
     abi: coilSwapRouterAbi,
     functionName: "swapExactInSingle",
     args: [coilPoolKey(token), isBuy, amountIn, 0n, from, v4Deadline()],
@@ -229,10 +262,11 @@ export function buildV4BuyTx(
   nativeInWei: bigint,
   minTokensOut: bigint,
   recipient: Address,
+  chainId: ApiChainId = DEFAULT_CHAIN_ID,
 ): TxRequest {
   return {
-    chainId: CHAIN_ID,
-    to: COIL_SWAP_ROUTER,
+    chainId,
+    to: coilContracts(chainId).coilSwapRouter,
     data: encodeFunctionData({
       abi: coilSwapRouterAbi,
       functionName: "swapExactInSingle",
@@ -247,10 +281,11 @@ export function buildV4SellTx(
   tokenInWei: bigint,
   minNativeOut: bigint,
   recipient: Address,
+  chainId: ApiChainId = DEFAULT_CHAIN_ID,
 ): TxRequest {
   return {
-    chainId: CHAIN_ID,
-    to: COIL_SWAP_ROUTER,
+    chainId,
+    to: coilContracts(chainId).coilSwapRouter,
     data: encodeFunctionData({
       abi: coilSwapRouterAbi,
       functionName: "swapExactInSingle",
@@ -261,8 +296,9 @@ export function buildV4SellTx(
 }
 
 /** Demo fallback so bots can integrate before contracts are deployed. */
-function mockMarket(t: (typeof MOCK_TOKENS)[number]): ApiMarket {
+function mockMarket(t: (typeof MOCK_TOKENS)[number], chainId: ApiChainId): ApiMarket {
   return {
+    chainId,
     token: t.address,
     curve: t.curve,
     creator: t.creator,
@@ -280,27 +316,39 @@ function mockMarket(t: (typeof MOCK_TOKENS)[number]): ApiMarket {
   };
 }
 
-export async function fetchMarkets(limit = 50): Promise<{ markets: ApiMarket[]; demo: boolean }> {
-  if (!LIVE) return { markets: MOCK_TOKENS.slice(0, limit).map(mockMarket), demo: true };
+export async function fetchMarkets(
+  limit = 50,
+  chainId: ApiChainId = DEFAULT_CHAIN_ID,
+): Promise<{ markets: ApiMarket[]; demo: boolean }> {
+  const { launchpad, live, anyLive } = coilContracts(chainId);
+  // `anyLive`, not `live`: `live` means the CURVE launchpad specifically, which only exists on
+  // Robinhood Chain. Gating on it would have made a v4-only chain (Arc) serve mock data to bots
+  // even with its launchpad deployed.
+  if (!anyLive) {
+    return { markets: MOCK_TOKENS.slice(0, limit).map((t) => mockMarket(t, chainId)), demo: true };
+  }
 
+  const client = publicClientFor(chainId);
   const [raw, v4Markets] = await Promise.all([
-    publicClient.readContract({
-      address: CONTRACTS.launchpad,
-      abi: launchpadAbi,
-      functionName: "getMarkets",
-      args: [0n, BigInt(limit)],
-    }) as Promise<readonly RawMarket[]>,
-    fetchV4Markets(limit).catch(() => [] as ApiMarket[]),
+    live
+      ? (client.readContract({
+          address: launchpad,
+          abi: launchpadAbi,
+          functionName: "getMarkets",
+          args: [0n, BigInt(limit)],
+        }) as Promise<readonly RawMarket[]>)
+      : Promise.resolve([] as readonly RawMarket[]),
+    fetchV4Markets(limit, chainId).catch(() => [] as ApiMarket[]),
   ]);
 
   let markets: ApiMarket[] = [];
   if (raw.length > 0) {
     const calls = raw.flatMap(curveStatsCalls);
-    const results = (await publicClient.multicall({
+    const results = (await client.multicall({
       contracts: calls as never,
     })) as { result?: unknown }[];
     const per = 6;
-    markets = raw.map((m, i) => toApiMarket(m, results.slice(i * per, i * per + per)));
+    markets = raw.map((m, i) => toApiMarket(m, results.slice(i * per, i * per + per), chainId));
   }
 
   const merged = [...markets, ...v4Markets]
@@ -309,28 +357,34 @@ export async function fetchMarkets(limit = 50): Promise<{ markets: ApiMarket[]; 
   return { markets: merged, demo: false };
 }
 
-export async function fetchMarket(token: Address): Promise<ApiMarket | null> {
-  if (!LIVE) {
+export async function fetchMarket(
+  token: Address,
+  chainId: ApiChainId = DEFAULT_CHAIN_ID,
+): Promise<ApiMarket | null> {
+  const { launchpad, live, anyLive } = coilContracts(chainId);
+  if (!anyLive) {
     const t = MOCK_TOKENS.find((x) => x.address.toLowerCase() === token.toLowerCase());
-    return t ? mockMarket(t) : null;
+    return t ? mockMarket(t, chainId) : null;
   }
 
   // v4 hook tokens are recognizable from their flag-encoded address alone.
-  if (isCoilToken(token, CHAIN_ID)) {
-    const v4 = await fetchV4Market(token).catch(() => null);
+  if (isCoilToken(token, chainId)) {
+    const v4 = await fetchV4Market(token, chainId).catch(() => null);
     if (v4) return v4;
   }
+  if (!live) return null; // v4-only chain: no curve launchpad to fall back to
 
-  const idx = (await publicClient.readContract({
-    address: CONTRACTS.launchpad,
+  const client = publicClientFor(chainId);
+  const idx = (await client.readContract({
+    address: launchpad,
     abi: launchpadAbi,
     functionName: "marketIndexByToken",
     args: [token],
   })) as bigint;
   if (idx === 0n) return null;
 
-  const m = (await publicClient.readContract({
-    address: CONTRACTS.launchpad,
+  const m = (await client.readContract({
+    address: launchpad,
     abi: launchpadAbi,
     functionName: "markets",
     args: [idx - 1n],
@@ -345,14 +399,18 @@ export async function fetchMarket(token: Address): Promise<ApiMarket | null> {
     metadataURI: m[5],
     createdAt: m[6],
   };
-  const results = (await publicClient.multicall({
+  const results = (await client.multicall({
     contracts: curveStatsCalls(raw) as never,
   })) as { result?: unknown }[];
-  return toApiMarket(raw, results);
+  return toApiMarket(raw, results, chainId);
 }
 
-export async function quoteBuy(curve: Address, nativeInWei: bigint) {
-  const [tokensOut, totalFee] = (await publicClient.readContract({
+export async function quoteBuy(
+  curve: Address,
+  nativeInWei: bigint,
+  chainId: ApiChainId = DEFAULT_CHAIN_ID,
+) {
+  const [tokensOut, totalFee] = (await publicClientFor(chainId).readContract({
     address: curve,
     abi: curveAbi,
     functionName: "quoteBuy",
@@ -361,8 +419,12 @@ export async function quoteBuy(curve: Address, nativeInWei: bigint) {
   return { tokensOut, totalFee };
 }
 
-export async function quoteSell(curve: Address, tokenInWei: bigint) {
-  const [nativeOut, totalFee] = (await publicClient.readContract({
+export async function quoteSell(
+  curve: Address,
+  tokenInWei: bigint,
+  chainId: ApiChainId = DEFAULT_CHAIN_ID,
+) {
+  const [nativeOut, totalFee] = (await publicClientFor(chainId).readContract({
     address: curve,
     abi: curveAbi,
     functionName: "quoteSell",
@@ -379,18 +441,28 @@ export interface TxRequest {
   value: string; // decimal wei string
 }
 
-export function buildBuyTx(curve: Address, nativeInWei: bigint, minTokensOut: bigint): TxRequest {
+export function buildBuyTx(
+  curve: Address,
+  nativeInWei: bigint,
+  minTokensOut: bigint,
+  chainId: ApiChainId = DEFAULT_CHAIN_ID,
+): TxRequest {
   return {
-    chainId: CHAIN_ID,
+    chainId,
     to: curve,
     data: encodeFunctionData({ abi: curveAbi, functionName: "buy", args: [minTokensOut] }),
     value: nativeInWei.toString(),
   };
 }
 
-export function buildSellTx(curve: Address, tokenInWei: bigint, minNativeOut: bigint): TxRequest {
+export function buildSellTx(
+  curve: Address,
+  tokenInWei: bigint,
+  minNativeOut: bigint,
+  chainId: ApiChainId = DEFAULT_CHAIN_ID,
+): TxRequest {
   return {
-    chainId: CHAIN_ID,
+    chainId,
     to: curve,
     data: encodeFunctionData({
       abi: curveAbi,
@@ -401,17 +473,27 @@ export function buildSellTx(curve: Address, tokenInWei: bigint, minNativeOut: bi
   };
 }
 
-export function buildApproveTx(token: Address, spender: Address, amount = maxUint256): TxRequest {
+export function buildApproveTx(
+  token: Address,
+  spender: Address,
+  amount = maxUint256,
+  chainId: ApiChainId = DEFAULT_CHAIN_ID,
+): TxRequest {
   return {
-    chainId: CHAIN_ID,
+    chainId,
     to: token,
     data: encodeFunctionData({ abi: tokenAbi, functionName: "approve", args: [spender, amount] }),
     value: "0",
   };
 }
 
-export async function allowanceOf(token: Address, owner: Address, spender: Address): Promise<bigint> {
-  return (await publicClient.readContract({
+export async function allowanceOf(
+  token: Address,
+  owner: Address,
+  spender: Address,
+  chainId: ApiChainId = DEFAULT_CHAIN_ID,
+): Promise<bigint> {
+  return (await publicClientFor(chainId).readContract({
     address: token,
     abi: tokenAbi,
     functionName: "allowance",

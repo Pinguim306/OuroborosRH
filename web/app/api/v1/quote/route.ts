@@ -1,6 +1,6 @@
-import { checkAuth, fail, ok, parseBig } from "@/lib/server/api";
+import { chainFromQuery, checkAuth, fail, ok, parseBig } from "@/lib/server/api";
 import { fetchMarket, normalizeAddress, quoteBuy, quoteSell, quoteV4 } from "@/lib/server/launchpad";
-import { COIL_SWAP_ROUTER, LIVE } from "@/lib/contracts";
+import { coilContracts } from "@/lib/contracts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ function intStr(x: number): string {
 }
 
 /**
- * GET /api/v1/quote?token=0x..&side=buy|sell&amount=<wei>
+ * GET /api/v1/quote?token=0x..&side=buy|sell&amount=<wei>&chain=<id>
  *   - side=buy:  amount is native (wei) in  → returns tokensOut + fee
  *   - side=sell: amount is token  (wei) in  → returns nativeOut + fee
  */
@@ -20,6 +20,13 @@ export async function GET(req: Request) {
   if (denied) return denied;
 
   const { searchParams } = new URL(req.url);
+  let chainId;
+  try {
+    chainId = chainFromQuery(req);
+  } catch (e) {
+    return fail(400, (e as Error).message);
+  }
+  const { coilSwapRouter: COIL_SWAP_ROUTER, anyLive } = coilContracts(chainId);
   const token = normalizeAddress(searchParams.get("token"));
   const side = searchParams.get("side");
   if (!token) return fail(400, "invalid or missing token address");
@@ -33,24 +40,24 @@ export async function GET(req: Request) {
   }
   if (amount === 0n) return fail(400, "amount must be greater than 0");
 
-  const market = await fetchMarket(token);
-  if (!market) return fail(404, "market not found");
+  const market = await fetchMarket(token, chainId);
+  if (!market) return fail(404, "market not found", { chainId });
   if (market.graduated) {
     return fail(409, "token has graduated — trade on the DEX pair", { pair: market.pair });
   }
 
   // Demo mode: contracts aren't deployed, so return a first-order estimate from the
   // mock price rather than an on-chain quote. Formatted as a plain wei integer.
-  if (!LIVE) {
+  if (!anyLive) {
     const price = Number(market.priceEth) || 0;
     const fee = 0.015;
     if (side === "buy") {
       const net = Number(amount) * (1 - fee);
       const tokensOut = price > 0 ? net / price : 0;
-      return ok({ demo: true, estimate: true, side, tokensOut: intStr(tokensOut) });
+      return ok({ chainId, demo: true, estimate: true, side, tokensOut: intStr(tokensOut) });
     }
     const gross = Number(amount) * price;
-    return ok({ demo: true, estimate: true, side, nativeOut: intStr(gross * (1 - fee)) });
+    return ok({ chainId, demo: true, estimate: true, side, nativeOut: intStr(gross * (1 - fee)) });
   }
 
   // v4 hook tokens: the router has no view quoter, so the quote is a simulation of the real
@@ -63,11 +70,11 @@ export async function GET(req: Request) {
       });
     }
     try {
-      const out = await quoteV4(token, side === "buy", amount, from);
+      const out = await quoteV4(token, side === "buy", amount, from, chainId);
       return ok(
         side === "buy"
-          ? { side, mode: "v4", router: COIL_SWAP_ROUTER, tokensOut: out.toString() }
-          : { side, mode: "v4", router: COIL_SWAP_ROUTER, nativeOut: out.toString() },
+          ? { chainId, side, mode: "v4", router: COIL_SWAP_ROUTER, tokensOut: out.toString() }
+          : { chainId, side, mode: "v4", router: COIL_SWAP_ROUTER, nativeOut: out.toString() },
       );
     } catch (e) {
       return fail(502, "failed to quote v4 swap (does `from` hold the input amount?)", {
@@ -78,11 +85,11 @@ export async function GET(req: Request) {
 
   try {
     if (side === "buy") {
-      const { tokensOut, totalFee } = await quoteBuy(market.curve, amount);
-      return ok({ side, tokensOut: tokensOut.toString(), fee: totalFee.toString() });
+      const { tokensOut, totalFee } = await quoteBuy(market.curve, amount, chainId);
+      return ok({ chainId, side, tokensOut: tokensOut.toString(), fee: totalFee.toString() });
     }
-    const { nativeOut, totalFee } = await quoteSell(market.curve, amount);
-    return ok({ side, nativeOut: nativeOut.toString(), fee: totalFee.toString() });
+    const { nativeOut, totalFee } = await quoteSell(market.curve, amount, chainId);
+    return ok({ chainId, side, nativeOut: nativeOut.toString(), fee: totalFee.toString() });
   } catch (e) {
     return fail(502, "failed to quote", { detail: (e as Error).message });
   }

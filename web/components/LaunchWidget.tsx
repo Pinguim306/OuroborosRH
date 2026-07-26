@@ -82,9 +82,9 @@ export function LaunchWidget({
     fetch("/api/announce", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: tokenAddr }),
+      body: JSON.stringify({ token: tokenAddr, chain: chainId }),
     }).catch(() => {});
-  }, [isSuccess, tokenAddr]);
+  }, [isSuccess, tokenAddr, chainId]);
 
   // Once the launch is mined, fire the optional dev buy as a second tx (v4 can't do it atomically).
   // The launch already succeeded, so a failed/declined dev buy is a soft note, never a hard error.
