@@ -64,6 +64,9 @@ contract DeployCoilLaunchpad is Script {
             tickLower: tickLower, tickUpper: tickUpper, sqrtPriceX96: sqrtUpper, liquidity: liquidity
         });
 
+        // Refuse before spending anything if this chain can't actually run a launch.
+        _assertV4Infra(poolManager, posm, permit2);
+
         vm.startBroadcast();
         pad = new CoilLaunchpad(
             owner, IPoolManager(poolManager), posm, permit2, feeRecipient, treasury, creationFee,
@@ -75,5 +78,43 @@ contract DeployCoilLaunchpad is Script {
         console2.log("  supply / creationFee:", supply, creationFee);
         console2.log("  protocol share at 1% / at 5% (bps):", feeCurve.protocolShareAtMinBps, feeCurve.protocolShareAtMaxBps);
         console2.log("  burn share of remainder (bps):", feeCurve.burnShareOfRemainderBps);
+    }
+
+    /// @dev The launchpad's constructor only rejects the zero address, which is not the mistake that
+    ///   actually happens. Uniswap deploys v4 per chain and NOT at matching addresses, so the real
+    ///   failure mode is copying a sibling chain's addresses into the env and deploying against
+    ///   something that isn't there — Arc, for instance, has the PoolManager (and StateView/Quoter)
+    ///   at Robinhood Chain's addresses but no PositionManager at all. That deploy SUCCEEDS and then
+    ///   every single launch reverts inside `CoilHook.seed()`, which mints the locked position
+    ///   through `IPositionManager(POSM).multicall(...)`.
+    ///
+    ///   So: prove each address is the thing it claims to be, and prove the POSM is bound to THIS
+    ///   PoolManager. Cheap, read-only, and it converts a silent bad deploy into a refusal.
+    function _assertV4Infra(address poolManager, address posm, address permit2) internal view {
+        _requireCode(poolManager, "POOL_MANAGER");
+        _requireCode(posm, "POSITION_MANAGER");
+        _requireCode(permit2, "PERMIT2");
+
+        // Shape check: only a PoolManager answers this.
+        (bool okPm,) = poolManager.staticcall(abi.encodeWithSignature("protocolFeeController()"));
+        require(okPm, "POOL_MANAGER is not a v4 PoolManager (protocolFeeController() failed)");
+
+        // Pairing check: a POSM bound to a different PoolManager would deploy fine and mint into
+        // the wrong singleton, so compare rather than merely probe.
+        (bool okPosm, bytes memory ret) = posm.staticcall(abi.encodeWithSignature("poolManager()"));
+        require(okPosm && ret.length == 32, "POSITION_MANAGER is not a v4 PositionManager");
+        address bound = abi.decode(ret, (address));
+        if (bound != poolManager) {
+            console2.log("POSITION_MANAGER is bound to", bound);
+            console2.log("but POOL_MANAGER is        ", poolManager);
+            revert("POSITION_MANAGER belongs to a different PoolManager");
+        }
+    }
+
+    function _requireCode(address a, string memory name) internal view {
+        if (a.code.length == 0) {
+            console2.log("No contract deployed at", name, a);
+            revert(string.concat(name, " has no code on this chain"));
+        }
     }
 }
