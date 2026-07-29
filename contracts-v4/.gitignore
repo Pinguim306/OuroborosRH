@@ -1,6 +1,7 @@
 # Foundry build output
 out/
 out-e2e/
+out-v4local/
 cache/
 broadcast/
 

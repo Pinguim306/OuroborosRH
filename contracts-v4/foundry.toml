@@ -35,12 +35,39 @@ optimizer_runs = 800
 via_ir = true
 ffi = false
 gas_limit = "3000000000"
-# Clear the skip inherited from [profile.default] so test/e2e IS compiled here.
-skip = []
+# Clear the skip inherited from [profile.default] so test/e2e IS compiled here — except the one
+# test that deploys its own PoolManager, which needs [profile.v4local]'s optimizer runs to compile
+# Pool.sol's swap path at all.
+skip = ["test/e2e/ArcSelfHostedPosm.t.sol"]
 fs_permissions = [{ access = "read", path = "./" }]
 
 [profile.e2e.fuzz]
 runs = 256
+
+# Local-v4 profile — for the one test that DEPLOYS a v4 PoolManager instead of pointing at a real
+# one on a fork (test/e2e/ArcSelfHostedPosm.t.sol, which proves Coil can launch on a chain whose
+# only v4 contract is the PoolManager). `new PoolManager(...)` forces solc to actually compile
+# Pool.sol's swap path, and under via-IR that path only fits the stack at upstream v4-core's own
+# optimizer_runs — at this project's 800 it fails with "memPtr_1 is 1 too deep". Kept as its own
+# profile because 44444444 runs is slow and changes our contracts' sizes, neither of which should
+# leak into the normal suites. Run with:
+#   FOUNDRY_PROFILE=v4local forge test --match-contract ArcSelfHostedPosmTest -vv
+[profile.v4local]
+src = "src"
+out = "out-v4local"
+libs = ["lib"]
+solc = "0.8.26"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 44444444
+via_ir = true
+ffi = false
+gas_limit = "3000000000"
+skip = []
+fs_permissions = [{ access = "read", path = "./" }]
+
+[profile.v4local.fuzz]
+runs = 64
 
 # Sandbox profile — used where only the solc-js WASM compiler is reachable (no native solc).
 # solc-js cannot compile the very large e2e compilation unit, so it is skipped here; the

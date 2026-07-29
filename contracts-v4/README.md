@@ -92,6 +92,10 @@ Suítes:
 - `test/DeployPreflight.t.sol` — o preflight de infra v4 do script de deploy (ver a seção de infra
   por chain acima).
 - `test/e2e/*` — contra PoolManager/POSM reais e fork da Robinhood Chain (`FOUNDRY_PROFILE=e2e`).
+- `test/e2e/ArcSelfHostedPosm.t.sol` — o lançamento completo contra um PositionManager que nós mesmos
+  deployamos, com WETH9 zero. Não faz fork, mas precisa do perfil próprio:
+  `FOUNDRY_PROFILE=v4local` (ver o comentário do perfil no `foundry.toml` — `new PoolManager(...)` só
+  compila nos optimizer runs do upstream).
 
 > Ambiente sem acesso ao host do solc? Use o shim WASM: `forge test --use ./solc-wrapper.js`.
 > O `CoilLaunchpad` exige via-IR (perfil default), então não roda no perfil `sandbox` legacy.
@@ -127,6 +131,44 @@ coisa: exige código nos três endereços, confirma que o PoolManager responde `
 e que o POSM está atrelado a **esse** PoolManager (um POSM de outro singleton passaria no
 `!= address(0)` e mintaria liquidez numa pool que ninguém negocia). Coberto por
 `test/DeployPreflight.t.sol`.
+
+### Destravando uma chain sem PositionManager
+
+O v4-periphery é permissionless e imutável, então a saída é **deployar o PositionManager da própria
+Uniswap** (código dela, versionado aqui, sem modificação) via `script/DeployPositionManager.s.sol`.
+
+`WETH9 = address(0)` de propósito: ele chega no PositionManager só pelo `NativeWrapper`, que só as
+ações `WRAP`/`UNWRAP` tocam, e o `seed()` usa apenas `MINT_POSITION` + `SETTLE_PAIR`. O único efeito
+colateral é `tokenURI()` reverter, que é cosmético — a posição fica com o hook pra sempre. Se algum
+dia existir um USDC embrulhado na Arc, passe `WRAPPED_NATIVE` e essas ações passam a funcionar pra
+outros integradores.
+
+Afirmação dessas não vale nada sem teste, então `test/e2e/ArcSelfHostedPosm.t.sol` levanta o cenário
+inteiro localmente — PoolManager de verdade, PositionManager da Uniswap com WETH9 zero — e faz um
+lançamento ponta a ponta, incluindo o swap depois. Ele roda em qualquer máquina (não faz fork):
+
+```bash
+FOUNDRY_PROFILE=v4local forge test --match-contract ArcSelfHostedPosmTest -vv
+```
+
+> **Achado desse teste:** o skim precisa que o PoolManager **já tenha** o gas coin em caixa. O
+> `beforeSwap` chama `take(native, hook, fee)`, que transfere de fato, mas o input do trader só é
+> liquidado no fim do unlock — então o singleton cobre a saída com o que já tem, e o `settle` depois
+> repõe com sobra. Em chain viva isso é invisível (Robinhood tem ~2.163 ETH, a Arc ~14.795 USDC,
+> ambos lidos on-chain). Só morde num singleton **vazio**, que é exatamente o que um PoolManager
+> recém-deployado é — coberto por `test_SkimRequiresNativeAlreadyInTheSingleton`.
+
+### Ordem de deploy numa chain nova
+
+```bash
+# 0. Confira o que já existe (getCode nos endereços de outra chain NÃO é garantia — ver a tabela).
+# 1. Só se faltar PositionManager:
+POOL_MANAGER=0x… PERMIT2=0x000000000022D473030F116dDEE9F6B43aC78BA3 NATIVE_LABEL=USDC \
+FOUNDRY_PROFILE=e2e forge script script/DeployPositionManager.s.sol:DeployPositionManager \
+  --rpc-url $RPC_URL --broadcast --private-key $PK
+# 2. O launchpad, com o POSITION_MANAGER do passo 1 (o preflight recusa se algo não bater).
+# 3. O CoilSwapRouter (independente de periphery — fala com o PoolManager direto).
+```
 
 ## Deploy
 
