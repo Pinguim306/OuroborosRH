@@ -60,7 +60,7 @@ export function LaunchWidget({
   const { coilLaunchpad, coilSwapRouter, swapLive, launchLive } = coilContracts(chainId);
   // Which create signature this chain's launchpad answers to. Same hook the /create form uses to
   // decide whether to show the rate control, so the two can't disagree about what gets sent.
-  const { configurable: feeConfigurable } = useLaunchFee(chainId);
+  const { supportsRate, versionKnown } = useLaunchFee(chainId);
   const nativeSymbol = chainConfig(chainId).nativeSymbol;
   const publicClient = usePublicClient({ chainId });
   const { writeContractAsync } = useWriteContract();
@@ -131,9 +131,19 @@ export function LaunchWidget({
       setErr("Name and symbol are required.");
       return;
     }
-    // Belt and braces: this launchpad takes a rate but none arrived. Sending the older 5-argument
-    // call would hit a selector the contract doesn't have and revert with nothing to explain it.
-    if (feeConfigurable && totalFeeBps === undefined) {
+    // The create signature depends on LAUNCHPAD_VERSION, so a launch fired before that read
+    // settles could carry the wrong arity and revert unexplained. The button below is disabled in
+    // that window too — this is the backstop.
+    if (!versionKnown) {
+      setErr("Still reading this network's launchpad — try again in a second.");
+      return;
+    }
+    // Belt and braces: this launchpad takes a rate but none arrived — either the bounds reads are
+    // still in flight or the form hasn't clamped a value yet. Sending the older 5-argument call
+    // would hit a selector the contract doesn't have and revert with nothing to explain it.
+    // `supportsRate` rather than `configurable`: the latter also waits for the bounds, so it reads
+    // false in exactly the window this guard exists for.
+    if (supportsRate && totalFeeBps === undefined) {
       setErr("Still reading this network's fee range — try again in a second.");
       return;
     }
@@ -152,7 +162,7 @@ export function LaunchWidget({
       //    and therefore in the mined address. The rate used here MUST be the one the transaction
       //    below carries, or the salt points at a contract that never gets deployed. Passing it
       //    through a single local is what guarantees that — `rate` is read once and used twice.
-      const rate = feeConfigurable ? BigInt(totalFeeBps!) : undefined;
+      const rate = supportsRate ? BigInt(totalFeeBps!) : undefined;
       const initCodeHash = (await publicClient.readContract({
         address: coilLaunchpad,
         abi: coilLaunchpadV4Abi,
@@ -270,10 +280,10 @@ export function LaunchWidget({
       ) : (
         <button
           className="btn-primary w-full text-base"
-          disabled={busy || !name.trim() || !symbol.trim()}
+          disabled={busy || !name.trim() || !symbol.trim() || !versionKnown}
           onClick={launch}
         >
-          {label}
+          {versionKnown ? label : "Reading network…"}
         </button>
       )}
 
