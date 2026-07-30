@@ -1,10 +1,11 @@
 "use client";
 
+import { getEventsRanged } from "./logsRanged";
 import { useEffect, useState } from "react";
 import { formatEther } from "viem";
-import { usePublicClient } from "wagmi";
 import { coilPoolId, curveAbi, tokenAbi, v3PoolAbi, v4PoolManagerAbi, LIVE } from "./contracts";
-import { RELAYER_ROUTERS, V4_POOL_MANAGER } from "./useActivity";
+import { RELAYER_ROUTERS, useChainClients } from "./useActivity";
+import { asSupportedChainId, v4PoolManagerOf } from "./chain";
 import { marketKey } from "./chain";
 import type { Address, TokenMarket } from "./types";
 
@@ -33,12 +34,14 @@ interface SwapLegs {
 }
 
 export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, TokenPnl> {
-  const client = usePublicClient();
+  // Values stay in each TOKEN's native coin (they only ever combine with that token's own price);
+  // what must be per-chain is the READS — each token's events live on its own chain.
+  const clients = useChainClients();
   const [data, setData] = useState<Map<string, TokenPnl>>(new Map());
   const key = tokens.map(marketKey).join(",") + (user ?? "");
 
   useEffect(() => {
-    if (!LIVE || !client || !user || tokens.length === 0) {
+    if (!LIVE || !user || tokens.length === 0) {
       setData(new Map());
       return;
     }
@@ -49,13 +52,16 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
       await Promise.all(
         tokens.slice(0, 30).map(async (t) => {
           try {
+            const client = clients[asSupportedChainId(t.chainId)];
+            if (!client) return;
+            const V4_POOL_MANAGER = v4PoolManagerOf(t.chainId);
             const pnl: TokenPnl = { investedEth: 0, receivedEth: 0 };
 
             if (t.mode === "v4") {
               // v4 swaps live in the PoolManager singleton, keyed by PoolId; the token leg moves
               // PoolManager ↔ user, and amount0 is always the ETH leg (currency0 = native ETH).
               const [swaps, buys, sells] = await Promise.all([
-                client.getContractEvents({
+                getEventsRanged(client, {
                   address: V4_POOL_MANAGER,
                   abi: v4PoolManagerAbi,
                   eventName: "Swap",
@@ -65,7 +71,7 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
                 }),
                 // Routers (Coil Swap, UniversalRouter, …) hop the tokens through themselves, so
                 // the user's leg may face the router instead of the PoolManager.
-                client.getContractEvents({
+                getEventsRanged(client, {
                   address: t.address,
                   abi: tokenAbi,
                   eventName: "Transfer",
@@ -73,7 +79,7 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
                   fromBlock: 0n,
                   toBlock: "latest",
                 }),
-                client.getContractEvents({
+                getEventsRanged(client, {
                   address: t.address,
                   abi: tokenAbi,
                   eventName: "Transfer",
@@ -92,7 +98,7 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
             } else if (t.mode === "v3") {
               const pool = t.curve;
               const [swaps, buys, sells] = await Promise.all([
-                client.getContractEvents({
+                getEventsRanged(client, {
                   address: pool,
                   abi: v3PoolAbi,
                   eventName: "Swap",
@@ -101,7 +107,7 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
                 }),
                 // pool/router → user token transfer = the user bought (routers hop the tokens
                 // through themselves, so the user's leg may face the router, not the pool)
-                client.getContractEvents({
+                getEventsRanged(client, {
                   address: t.address,
                   abi: tokenAbi,
                   eventName: "Transfer",
@@ -110,7 +116,7 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
                   toBlock: "latest",
                 }),
                 // user → pool/router token transfer = the user sold
-                client.getContractEvents({
+                getEventsRanged(client, {
                   address: t.address,
                   abi: tokenAbi,
                   eventName: "Transfer",
@@ -145,7 +151,7 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
               for (const l of buys) pnl.investedEth += ethLeg(l.transactionHash, true);
               for (const l of sells) pnl.receivedEth += ethLeg(l.transactionHash, false);
             } else {
-              const logs = await client.getContractEvents({
+              const logs = await getEventsRanged(client, {
                 address: t.curve,
                 abi: curveAbi,
                 eventName: "Trade",
@@ -174,7 +180,7 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, key]);
+  }, [clients, key]);
 
   return data;
 }

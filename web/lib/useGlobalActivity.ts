@@ -1,20 +1,20 @@
 "use client";
 
+import { getEventsRanged } from "./logsRanged";
 import { useEffect, useState } from "react";
 import { formatEther } from "viem";
-import { usePublicClient } from "wagmi";
 import { coilPoolId, curveAbi, v3PoolAbi, v4PoolManagerAbi, LIVE } from "./contracts";
 import { marketKey } from "./chain";
 import {
-  blockClock,
+  chainCtx,
   parseV3Swap,
   parseV4Swap,
   supplyOf,
-  wethOf,
   v3TradersByTx,
+  useChainClients,
   INFRA_ADDRESSES,
-  V4_POOL_MANAGER,
 } from "./useActivity";
+import { asSupportedChainId, v4PoolManagerOf } from "./chain";
 import { isHiddenMarket } from "./useMarkets";
 import type { Address, TokenMarket } from "./types";
 
@@ -34,39 +34,46 @@ export interface GlobalTrade {
   token: TokenMarket;
   trader: Address;
   isBuy: boolean;
+  /** In the TOKEN'S chain's native coin — display it with that chain's symbol. */
   ethAmount: number;
+  /** Same trade in USD — the only unit that may be summed across chains. */
+  usdAmount: number;
   time: number; // unix seconds, estimated from block distance
 }
 
 export interface TraderStat {
   address: Address;
-  volumeEth: number;
+  /** USD. Cross-chain sums of raw native amounts would count a $1 Arc trade as an ETH. */
+  volumeUsd: number;
   trades: number;
 }
 
 export interface CreatorStat {
   address: Address;
   tokens: number;
-  volumeEth: number;
+  /** USD — same reasoning as TraderStat. */
+  volumeUsd: number;
 }
 
 export interface GlobalActivity {
   trades: GlobalTrade[]; // newest first
   traders: TraderStat[]; // by volume, desc
   creators: CreatorStat[]; // by combined volume of their tokens, desc
-  hot?: { token: TokenMarket; vol1hEth: number }; // King of the Hill (top 1h volume)
+  hot?: { token: TokenMarket; vol1hUsd: number }; // King of the Hill (top 1h volume, USD)
   isLoading: boolean;
 }
 
 const EMPTY: GlobalActivity = { trades: [], traders: [], creators: [], isLoading: LIVE };
 
 export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
-  const client = usePublicClient();
+  // The list may span chains (the boards are chain-independent by product decision), so clients,
+  // clocks and USD rates are resolved PER CHAIN and each token uses its own chain's set.
+  const clients = useChainClients();
   const [data, setData] = useState<GlobalActivity>(EMPTY);
-  const key = tokens.map((t) => t.address).join(",");
+  const key = tokens.map(marketKey).join(",");
 
   useEffect(() => {
-    if (!LIVE || !client || tokens.length === 0) {
+    if (!LIVE || tokens.length === 0) {
       setData({ ...EMPTY, isLoading: false });
       return;
     }
@@ -76,26 +83,43 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
       try {
         // Hidden tokens never feed the boards, whatever list the caller passed.
         const visible = tokens.filter((t) => !isHiddenMarket(t));
-        const [clock, weth] = await Promise.all([
-          blockClock(client!),
-          visible.some((t) => t.mode === "v3") ? wethOf(client!) : Promise.resolve(undefined),
-        ]);
-        const hourAgo = clock.latestNum - BigInt(Math.max(1, Math.floor(HOUR / clock.spb)));
 
-        const all: (GlobalTrade & { bn: bigint })[] = [];
-        const volByToken = new Map<string, number>();
-        const vol1hByToken = new Map<string, number>();
+        // One context per chain present in the list: block clock (chains tick at different
+        // speeds), WETH (V3 orientation, where that topology exists), native→USD rate.
+        const chainIds = [...new Set(visible.map((t) => asSupportedChainId(t.chainId)))];
+        const ctxByChain = new Map<number, Awaited<ReturnType<typeof chainCtx>>>();
+        await Promise.all(
+          chainIds.map(async (id) => {
+            const c = clients[id];
+            if (!c) return;
+            ctxByChain.set(
+              id,
+              await chainCtx(c, id, visible.some((t) => t.mode === "v3" && asSupportedChainId(t.chainId) === id)),
+            );
+          }),
+        );
+
+        const all: (GlobalTrade & { bn: bigint; chainId: number })[] = [];
+        const volByToken = new Map<string, number>(); // USD
+        const vol1hByToken = new Map<string, number>(); // USD
 
         await Promise.all(
           visible.slice(0, 40).map(async (t) => {
             try {
+              const tChain = asSupportedChainId(t.chainId);
+              const client = clients[tChain];
+              const ctx = ctxByChain.get(tChain);
+              if (!client || !ctx) return;
+              const { clock, weth, usd } = ctx;
+              const hourAgo = clock.latestNum - BigInt(Math.max(1, Math.floor(HOUR / clock.spb)));
+              const V4_POOL_MANAGER = v4PoolManagerOf(tChain);
               const supply = supplyOf(t);
               const tokenIs0 = weth ? t.address.toLowerCase() < weth.toLowerCase() : true;
               const isV3 = t.mode === "v3";
               const isV4 = t.mode === "v4";
               const [logs, traders] = await Promise.all([
                 isV4
-                  ? client!.getContractEvents({
+                  ? getEventsRanged(client!, {
                       address: V4_POOL_MANAGER,
                       abi: v4PoolManagerAbi,
                       eventName: "Swap",
@@ -104,14 +128,14 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
                       toBlock: "latest",
                     })
                   : isV3
-                    ? client!.getContractEvents({
+                    ? getEventsRanged(client!, {
                         address: t.curve, // the pool
                         abi: v3PoolAbi,
                         eventName: "Swap",
                         fromBlock: 0n,
                         toBlock: "latest",
                       })
-                    : client!.getContractEvents({
+                    : getEventsRanged(client!, {
                         address: t.curve,
                         abi: curveAbi,
                         eventName: "Trade",
@@ -158,9 +182,10 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
                   eth = Number(formatEther(a.nativeAmount ?? 0n));
                 }
                 const k = marketKey(t);
-                volByToken.set(k, (volByToken.get(k) ?? 0) + eth);
+                const usdAmount = eth * usd;
+                volByToken.set(k, (volByToken.get(k) ?? 0) + usdAmount);
                 if (l.blockNumber >= hourAgo) {
-                  vol1hByToken.set(k, (vol1hByToken.get(k) ?? 0) + eth);
+                  vol1hByToken.set(k, (vol1hByToken.get(k) ?? 0) + usdAmount);
                 }
                 all.push({
                   id: `${l.transactionHash}-${l.logIndex}`,
@@ -168,7 +193,9 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
                   trader,
                   isBuy,
                   ethAmount: eth,
+                  usdAmount,
                   bn: l.blockNumber,
+                  chainId: tChain,
                   time: Math.round(clock.latestTs - Number(clock.latestNum - l.blockNumber) * clock.spb),
                 });
               }
@@ -178,8 +205,9 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
           }),
         );
 
-        // Recent feed, newest first.
-        all.sort((a, b) => (a.bn === b.bn ? 0 : a.bn > b.bn ? -1 : 1));
+        // Recent feed, newest first. Estimated TIME, not block number — block heights from
+        // different chains are not comparable (Arc's counter is 12M+ where Robinhood's is lower).
+        all.sort((a, b) => b.time - a.time);
         const trades = all.slice(0, FEED_SIZE);
 
         // Trader leaderboard. Routers/aggregators never make the board, even when
@@ -188,24 +216,24 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
         for (const tr of all) {
           const k = tr.trader.toLowerCase();
           if (INFRA_ADDRESSES.has(k)) continue;
-          const s = byTrader.get(k) ?? { address: tr.trader, volumeEth: 0, trades: 0 };
-          s.volumeEth += tr.ethAmount;
+          const s = byTrader.get(k) ?? { address: tr.trader, volumeUsd: 0, trades: 0 };
+          s.volumeUsd += tr.usdAmount;
           s.trades += 1;
           byTrader.set(k, s);
         }
-        const traders = [...byTrader.values()].sort((a, b) => b.volumeEth - a.volumeEth).slice(0, 10);
+        const traders = [...byTrader.values()].sort((a, b) => b.volumeUsd - a.volumeUsd).slice(0, 10);
 
         // Creator leaderboard: tokens launched + combined volume of those tokens.
         const byCreator = new Map<string, CreatorStat>();
         for (const t of visible) {
           const k = t.creator.toLowerCase();
-          const s = byCreator.get(k) ?? { address: t.creator, tokens: 0, volumeEth: 0 };
+          const s = byCreator.get(k) ?? { address: t.creator, tokens: 0, volumeUsd: 0 };
           s.tokens += 1;
-          s.volumeEth += volByToken.get(marketKey(t)) ?? 0;
+          s.volumeUsd += volByToken.get(marketKey(t)) ?? 0;
           byCreator.set(k, s);
         }
         const creators = [...byCreator.values()]
-          .sort((a, b) => b.volumeEth - a.volumeEth || b.tokens - a.tokens)
+          .sort((a, b) => b.volumeUsd - a.volumeUsd || b.tokens - a.tokens)
           .slice(0, 10);
 
         // King of the Hill: hottest token of the last hour (falls back to all-time
@@ -214,9 +242,9 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
         const pool = vol1hByToken.size > 0 ? vol1hByToken : volByToken;
         for (const [k, vol] of pool) {
           if (vol <= 0) continue;
-          if (!hot || vol > hot.vol1hEth) {
+          if (!hot || vol > hot.vol1hUsd) {
             const token = visible.find((t) => marketKey(t) === k);
-            if (token) hot = { token, vol1hEth: vol };
+            if (token) hot = { token, vol1hUsd: vol };
           }
         }
 
@@ -233,7 +261,7 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
       clearInterval(id);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, key]);
+  }, [clients, key]);
 
   return data;
 }

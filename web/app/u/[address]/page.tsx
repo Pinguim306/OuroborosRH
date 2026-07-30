@@ -6,10 +6,10 @@ import { useParams } from "next/navigation";
 import { formatEther } from "viem";
 import { useAccount, useReadContracts } from "wagmi";
 import { timeAgo, usdFromEth, compact } from "@/lib/format";
-import { chainParam, explorerUrl, marketKey } from "@/lib/chain";
+import { asSupportedChainId, chainConfig, chainParam, explorerUrl, marketKey, robinhoodChain } from "@/lib/chain";
 import { ipfsToHttp, normalizeSocial } from "@/lib/metadata";
 import { LIVE, tokenAbi } from "@/lib/contracts";
-import { useLiveMarkets } from "@/lib/useMarkets";
+import { useAllMarkets } from "@/lib/useMarkets";
 import { useWalletActivity } from "@/lib/useWalletActivity";
 import { usePnL } from "@/lib/usePnL";
 import { useEthPrice } from "@/lib/usePrice";
@@ -38,7 +38,10 @@ export default function PublicProfilePage() {
   const { sessionAddress } = useAuth();
   const { address: connected } = useAccount();
   const isSelf = sessionAddress === address || connected?.toLowerCase() === address;
-  const ethUsd = useEthPrice();
+  // Robinhood's native needs the oracle; stable-gas chains are 1 by definition.
+  const rhUsd = useEthPrice(robinhoodChain.id);
+  const usdRateOf = (chainId?: number) =>
+    chainConfig(chainId).nativeUsd.kind === "stable" ? 1 : rhUsd;
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -53,8 +56,9 @@ export default function PublicProfilePage() {
       .finally(() => setLoaded(true));
   }, [address]);
 
-  // On-chain footprint: volume + trades across every token, PnL, and dev tokens.
-  const { tokens } = useLiveMarkets();
+  // On-chain footprint across EVERY chain's tokens — profiles are chain-independent by product
+  // decision. Amounts summed across chains come back in USD; per-token values stay native.
+  const { tokens } = useAllMarkets();
   const wallet = (address || undefined) as Address | undefined;
   const activity = useWalletActivity(tokens, wallet);
   const pnl = usePnL(tokens, wallet);
@@ -67,21 +71,25 @@ export default function PublicProfilePage() {
           abi: tokenAbi,
           functionName: "balanceOf",
           args: [wallet ?? "0x0000000000000000000000000000000000000000"],
+          chainId: asSupportedChainId(t.chainId),
         }) as const,
     ),
     query: { enabled: LIVE && !!wallet && tokens.length > 0 },
   });
 
   // Trading PnL = current bag value + everything cashed out − everything paid in.
-  const pnlEth = useMemo(() => {
+  // Summed in USD: each token's native figures convert at its OWN chain's rate before adding —
+  // an ETH-chain token and a USDC-chain token cannot share a raw total.
+  const pnlUsd = useMemo(() => {
     let total = 0;
     tokens.forEach((t, i) => {
       const bal = num(balancesQ.data?.[i]?.result);
       const c = pnl.get(marketKey(t));
-      total += bal * t.priceRh + (c ? c.receivedEth - c.investedEth : 0);
+      const native = bal * t.priceRh + (c ? c.receivedEth - c.investedEth : 0);
+      total += native * (chainConfig(t.chainId).nativeUsd.kind === "stable" ? 1 : rhUsd);
     });
     return total;
-  }, [tokens, balancesQ.data, pnl]);
+  }, [tokens, balancesQ.data, pnl, rhUsd]);
 
   const devTokens = useMemo(
     () => tokens.filter((t) => t.creator.toLowerCase() === address),
@@ -166,7 +174,7 @@ export default function PublicProfilePage() {
         <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
           <StatTile
             label="Trade volume"
-            value={activity.isLoading ? "…" : usdFromEth(activity.volumeEth, ethUsd, 0)}
+            value={activity.isLoading ? "…" : usdFromEth(activity.volumeUsd, 1, 0)}
             accent
           />
           <StatTile
@@ -174,7 +182,7 @@ export default function PublicProfilePage() {
             value={
               activity.isLoading
                 ? "…"
-                : `${pnlEth >= 0 ? "+" : "−"}${usdFromEth(Math.abs(pnlEth), ethUsd, 0)}`
+                : `${pnlUsd >= 0 ? "+" : "−"}${usdFromEth(Math.abs(pnlUsd), 1, 0)}`
             }
           />
           <StatTile label="Trades" value={activity.isLoading ? "…" : compact(activity.tradeCount, 0)} />
@@ -210,7 +218,7 @@ export default function PublicProfilePage() {
                     {t.token.name} <span className="text-ink-4">({t.token.symbol})</span>
                   </span>
                   <span className="shrink-0 font-mono text-ink-2">
-                    {usdFromEth(t.ethAmount, ethUsd, 2)}
+                    {usdFromEth(t.usdAmount, 1, 2)}
                   </span>
                   <span className="w-20 shrink-0 text-right text-xs text-ink-4">
                     {t.time ? timeAgo(t.time) : "—"}
@@ -230,7 +238,7 @@ export default function PublicProfilePage() {
           </h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {devTokens.map((t) => (
-              <TokenCard key={t.address} token={t} ethUsd={ethUsd} />
+              <TokenCard key={marketKey(t)} token={t} ethUsd={usdRateOf(t.chainId)} />
             ))}
           </div>
         </div>

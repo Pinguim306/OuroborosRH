@@ -1,5 +1,6 @@
 "use client";
 
+import { getEventsRanged } from "./logsRanged";
 import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient, useReadContract } from "wagmi";
@@ -70,7 +71,7 @@ export function useV4RewardsPoolEth(token?: TokenMarket): number {
     let alive = true;
     (async () => {
       try {
-        const logs = await client.getContractEvents({
+        const logs = await getEventsRanged(client, {
           address: addr,
           abi: coilHookAbi,
           eventName: "FeeTaken",

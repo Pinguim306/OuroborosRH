@@ -30,8 +30,10 @@ Coil is multi-chain, and **every endpoint takes an optional chain selector**:
 | GET endpoints | `?chain=<id>` |
 | POST endpoints | `"chain": <id>` in the JSON body |
 
-**Omitting it means the default chain (`4663`, Robinhood Chain)** — exactly what the API did
-before it was multi-chain, so an existing integration needs no changes at all.
+**Omitting it means the site's default chain — `5042`, Arc** (changed 2026-07-30, when Arc became
+the flagship network; it was `4663`, Robinhood Chain, before). An integration that wants a
+specific chain should always pass the selector explicitly rather than lean on the default — the
+default follows the product, and this line is the proof it can move.
 
 `GET /api/v1` lists every chain this deployment serves, each with its `chainId`, `nativeSymbol`
 and whether Coil is `live` there. An **unknown** chain id is rejected with `400` rather than

@@ -21,6 +21,15 @@ nativo pra 18 casas), curva 4500/2500, **burn 0** (não há $COIL na Arc; o rest
 criador — ex.: taxa de 2% divide 0,8% protocolo / 1,2% criador). Supply 1 bi por launch.
 Router: interface fee 20 bps, teto 100.
 
+**LaunchConfig (preço de lançamento)** — retunado via `setLaunchConfig` em 2026-07-30 para espelhar
+a economia do launchpad da Robinhood (launch ~$7,7k, span 991,9×), ancorado em **$4k**:
+`tickLower 55200`, `tickUpper 124200`, `sqrtPriceX96 39419714714836218817262574961159`,
+`liquidity 2075769374731673079631915` → mcap inicial **$4.039** (247.553 tokens/USDC), teto ~$4M.
+Valores gerados por `contracts-v4/script/PrintLaunchConfig.s.sol` (TickMath exato, não float) e
+verificados com um launch no fork lendo o slot0 da pool. O deploy original usara os defaults do
+script (`-6000/0`), que precificavam o launch em $1B — o primeiro token (TEST) ficou nessa pool,
+imutável por design.
+
 ### Infra Uniswap v4 na Arc
 
 | Contrato | Endereço | Origem |

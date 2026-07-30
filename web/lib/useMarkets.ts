@@ -22,7 +22,7 @@ import {
   v4PriceFromPackedSlot0,
   type CoilMarket,
 } from "./contracts";
-import { CHAIN_ID, DEFAULT_CHAIN_ID, v4PoolManagerOf, type SupportedChainId } from "./chain";
+import { arcChain, CHAIN_ID, DEFAULT_CHAIN_ID, robinhoodChain, v4PoolManagerOf, type SupportedChainId } from "./chain";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -345,6 +345,22 @@ export function useLiveMarkets(chainId: SupportedChainId = DEFAULT_CHAIN_ID): {
   };
 }
 
+/**
+ * Every chain's live markets, merged — for the surfaces the user decided are chain-independent:
+ * leaderboard, profiles, portfolio. One hook call per supported chain, statically (the registry is
+ * a fixed tuple, so this cannot violate the rules of hooks), tokens concatenated. Each token
+ * carries its chainId, which is what lets everything downstream (clients, clocks, USD rates,
+ * explorer links) stay per-chain while the LIST is one.
+ */
+export function useAllMarkets(): { tokens: TokenMarket[]; isLoading: boolean } {
+  const rh = useLiveMarkets(robinhoodChain.id);
+  const arc = useLiveMarkets(arcChain.id);
+  return useMemo(
+    () => ({ tokens: [...rh.tokens, ...arc.tokens], isLoading: rh.isLoading || arc.isLoading }),
+    [rh.tokens, arc.tokens, rh.isLoading, arc.isLoading],
+  );
+}
+
 /** Read a single token/curve by token address, searching every launchpad. */
 export function useLiveToken(tokenAddress?: Address): {
   token: TokenMarket | undefined;
@@ -418,9 +434,9 @@ export function useLiveToken(tokenAddress?: Address): {
 
   const mapped = useMemo(() => {
     if (!tuple || !found || !statsQ.data) return undefined;
-    // Curve/v3 markets only exist on the default chain (that topology is Robinhood-Chain's);
+    // Curve/v3 markets only exist on Robinhood Chain (CHAIN_ID — the legacy topology's home);
     // every other chain is v4-only and resolves through useLiveTokenV4.
-    return fromStats(tuple, found.launchpad, statsQ.data, 0, DEFAULT_CHAIN_ID, weth);
+    return fromStats(tuple, found.launchpad, statsQ.data, 0, CHAIN_ID, weth);
   }, [tuple, found, statsQ.data, weth]);
 
   return {
