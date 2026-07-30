@@ -19,7 +19,7 @@ import {
   coilPoolId,
   v4PoolManagerAbi,
 } from "./contracts";
-import { CHAIN_ID, marketKey, uniswapContracts, v4PoolManagerOf } from "./chain";
+import { asSupportedChainId, CHAIN_ID, marketKey, uniswapContracts, v4PoolManagerOf } from "./chain";
 import { isHiddenMarket } from "./useMarkets";
 import type { Address, Holder, TokenMarket, Trade } from "./types";
 
@@ -336,7 +336,9 @@ const EMPTY: Activity = {
 };
 
 export function useTokenActivity(token?: TokenMarket): Activity {
-  const client = usePublicClient();
+  // The token names its chain; reading its logs anywhere else returns silence, not an error — an
+  // Arc token page against the default client renders an empty chart and zero trades.
+  const client = usePublicClient({ chainId: asSupportedChainId(token?.chainId) });
   const [data, setData] = useState<Activity>(EMPTY);
   const curve = token?.curve;
 
@@ -358,9 +360,10 @@ export function useTokenActivity(token?: TokenMarket): Activity {
         const parsed: { trade: Trade; mcap: number; bn: bigint }[] = [];
 
         if (token.mode === "v4") {
+          const poolManager = v4PoolManagerOf(token.chainId);
           const [logs, traders] = await Promise.all([
             client.getContractEvents({
-              address: V4_POOL_MANAGER,
+              address: poolManager,
               abi: v4PoolManagerAbi,
               eventName: "Swap",
               args: { id: coilPoolId(token.address) },
@@ -369,7 +372,7 @@ export function useTokenActivity(token?: TokenMarket): Activity {
             }),
             // v4 token balances move PoolManager ↔ wallet, so the same Transfer-based wallet
             // resolution used for V3 pools works with the PoolManager as the "pool".
-            v3TradersByTx(client, token.address, V4_POOL_MANAGER),
+            v3TradersByTx(client, token.address, poolManager),
           ]);
           for (const l of logs) {
             const s = parseV4Swap(l, supply);
@@ -510,7 +513,10 @@ export interface MarketStat {
 
 /** Per-token stats for the Discover list + launchpad totals. Polls periodically. */
 export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketStat> {
-  const client = usePublicClient();
+  // Lists are chain-homogeneous — they come from useLiveMarkets(selected chain) — so the first
+  // token's chain is the list's chain. Absent that, the default keeps today's behavior.
+  const listChainId = asSupportedChainId(tokens[0]?.chainId);
+  const client = usePublicClient({ chainId: listChainId });
   const [stats, setStats] = useState<Map<string, MarketStat>>(new Map());
   const key = tokens.map(marketKey).join(",");
 
@@ -535,7 +541,7 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
             const [trades, transfers] = await Promise.all([
               t.mode === "v4"
                 ? client!.getContractEvents({
-                    address: V4_POOL_MANAGER,
+                    address: v4PoolManagerOf(t.chainId ?? listChainId),
                     abi: v4PoolManagerAbi,
                     eventName: "Swap",
                     args: { id: coilPoolId(t.address) },
@@ -630,7 +636,8 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
 }
 
 export function useTokenHolders(token?: TokenMarket): { holders: Holder[]; isLoading: boolean } {
-  const client = usePublicClient();
+  // Same rule as useTokenActivity: the token's Transfer logs live on the token's chain.
+  const client = usePublicClient({ chainId: asSupportedChainId(token?.chainId) });
   const [state, setState] = useState<{ holders: Holder[]; isLoading: boolean }>({
     holders: [],
     isLoading: LIVE,
@@ -663,7 +670,7 @@ export function useTokenHolders(token?: TokenMarket): { holders: Holder[]; isLoa
           DEAD,
           ZERO,
           token.address.toLowerCase(),
-          V4_POOL_MANAGER.toLowerCase(), // holds every v4 pool's liquidity — never a "holder"
+          v4PoolManagerOf(token.chainId).toLowerCase(), // holds every v4 pool's liquidity — never a "holder"
         ]);
         const supply = supplyOf(token);
         const holders: Holder[] = [...bal.entries()]
