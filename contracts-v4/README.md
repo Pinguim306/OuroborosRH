@@ -137,17 +137,32 @@ e que o POSM está atrelado a **esse** PoolManager (um POSM de outro singleton p
 O v4-periphery é permissionless e imutável, então a saída é **deployar o PositionManager da própria
 Uniswap** (código dela, versionado aqui, sem modificação) via `script/DeployPositionManager.s.sol`.
 
-`WETH9 = address(0)` de propósito: ele chega no PositionManager só pelo `NativeWrapper`, que só as
-ações `WRAP`/`UNWRAP` tocam, e o `seed()` usa apenas `MINT_POSITION` + `SETTLE_PAIR`. O único efeito
-colateral é `tokenURI()` reverter, que é cosmético — a posição fica com o hook pra sempre. Se algum
-dia existir um USDC embrulhado na Arc, passe `WRAPPED_NATIVE` e essas ações passam a funcionar pra
-outros integradores.
+Dois argumentos do construtor são `address(0)` de propósito:
+
+- **`weth9`** chega no PositionManager só pelo `NativeWrapper`, que só as ações `WRAP`/`UNWRAP`
+  tocam, e o `seed()` usa apenas `MINT_POSITION` + `SETTLE_PAIR`. Se algum dia existir um USDC
+  embrulhado na Arc, passe `WRAPPED_NATIVE` e essas ações passam a funcionar pra outros integradores.
+- **`tokenDescriptor`** só é lido pelo `tokenURI()`, então zero significa `tokenURI` revertendo e
+  nada mais. Troca deliberada: o descriptor é um contrato de 26 KB de montagem de arte de NFT que o
+  upstream comprime pra **1 optimizer run** pra caber no EIP-170, e a única posição que esse POSM
+  vai segurar é a do launch — do hook pra sempre, renderizada por ninguém.
+
+**O PositionManager em si não cabe no EIP-170 em setting normal de optimizer.** O upstream o pinna
+em 500 runs no próprio foundry.toml; compilado nos 800 deste projeto ele sai grande demais e a chain
+rejeita o deploy. O `foundry.toml` daqui espelha o pin (`compilation_restrictions`), e é por isso que
+o script alcança o contrato via `vm.getCode` em vez de importá-lo — um arquivo pinnado só pode ser
+importado por arquivo pinnado igual, e o force do artefato vive em
+`src/vendor/PositionManagerArtifact.sol`. Consequência prática: **rode `forge build` antes do
+script** (o `forge script` sozinho só compila o grafo do próprio script e o artefato não nasce).
+O script confere o tamanho deployado contra o limite antes de encerrar.
 
 Afirmação dessas não vale nada sem teste, então `test/e2e/ArcSelfHostedPosm.t.sol` levanta o cenário
-inteiro localmente — PoolManager de verdade, PositionManager da Uniswap com WETH9 zero — e faz um
-lançamento ponta a ponta, incluindo o swap depois. Ele roda em qualquer máquina (não faz fork):
+inteiro localmente — PoolManager de verdade, o MESMO artefato do PositionManager que o script
+deploya, WETH9 e descriptor zerados — e faz um lançamento ponta a ponta, incluindo o swap depois.
+Ele roda em qualquer máquina (não faz fork):
 
 ```bash
+FOUNDRY_PROFILE=v4local forge build   # o teste também lê o artefato via vm.getCode
 FOUNDRY_PROFILE=v4local forge test --match-contract ArcSelfHostedPosmTest -vv
 ```
 
@@ -162,8 +177,11 @@ FOUNDRY_PROFILE=v4local forge test --match-contract ArcSelfHostedPosmTest -vv
 
 ```bash
 # 0. Confira o que já existe (getCode nos endereços de outra chain NÃO é garantia — ver a tabela).
-# 1. Só se faltar PositionManager:
-POOL_MANAGER=0x… PERMIT2=0x000000000022D473030F116dDEE9F6B43aC78BA3 NATIVE_LABEL=USDC \
+# 1. Só se faltar PositionManager. O `forge build` antes é OBRIGATÓRIO: o script alcança o
+#    PositionManager via vm.getCode (importá-lo é impossível — o pin de optimizer que o faz caber
+#    no EIP-170 proíbe), e `forge script` sozinho não compila o artefato.
+FOUNDRY_PROFILE=e2e forge build
+POOL_MANAGER=0x… PERMIT2=0x000000000022D473030F116dDEE9F6B43aC78BA3 \
 FOUNDRY_PROFILE=e2e forge script script/DeployPositionManager.s.sol:DeployPositionManager \
   --rpc-url $RPC_URL --broadcast --private-key $PK
 # 2. O launchpad, com o POSITION_MANAGER do passo 1 (o preflight recusa se algo não bater).

@@ -3,8 +3,20 @@ pragma solidity ^0.8.26;
 
 import {Script, console2} from "forge-std/Script.sol";
 
-/// @notice Deploys Uniswap's own v4 PositionManager (+ its PositionDescriptor) on a chain that has
-///   the v4 PoolManager but no periphery.
+// NOTE: PositionManager is deliberately NOT imported here. It cannot be.
+//
+// It does not fit EIP-170 at a normal optimizer setting, so it is pinned to 500 runs by a
+// `compilation_restrictions` entry (see foundry.toml — upstream's own foundry.toml does the same).
+// A file that imports it therefore has to compile at 500 runs too, and this script compiles at the
+// profile's setting, so importing it fails the build outright with "incompatible settings
+// restrictions". Upstream hits the same wall and answers it the same way: reach the contract through
+// its artifact instead. `src/vendor/PositionManagerArtifact.sol` exists to get that artifact built.
+//
+// Consequence: run `forge build` before this script, or run it with a warm `out-*` dir. The script
+// says so if the artifact is missing.
+
+/// @notice Deploys Uniswap's own v4 PositionManager on a chain that has the v4 PoolManager but no
+///   periphery.
 ///
 /// @dev WHY THIS EXISTS. Uniswap deploys v4 chain by chain, and the periphery contracts whose
 ///   constructors need a WETH9 don't land on chains that have no WETH9. Arc (5042) is exactly that:
@@ -17,32 +29,41 @@ import {Script, console2} from "forge-std/Script.sol";
 ///   permissionless and immutable, so the fix is to deploy the standard contract ourselves. This is
 ///   Uniswap's audited source, vendored and unmodified — not a Coil reimplementation.
 ///
-///   WETH9 IS DELIBERATELY THE ZERO ADDRESS. It reaches PositionManager only through
-///   `NativeWrapper`, which is touched exclusively by the `WRAP`/`UNWRAP` actions; `seed()` uses
-///   `MINT_POSITION` + `SETTLE_PAIR` and nothing else. Override with `WRAPPED_NATIVE` if a wrapped
-///   USDC ever ships on Arc and you want those actions to work for other integrators.
+///   TWO CONSTRUCTOR ARGUMENTS ARE DELIBERATELY THE ZERO ADDRESS.
+///
+///   `weth9` reaches PositionManager only through `NativeWrapper`, which is touched exclusively by
+///   the `WRAP`/`UNWRAP` actions; `seed()` uses `MINT_POSITION` + `SETTLE_PAIR` and nothing else.
+///   Override with `WRAPPED_NATIVE` if a wrapped USDC ever ships on Arc and you want those actions to
+///   work for other integrators.
+///
+///   `tokenDescriptor` is only ever read by `tokenURI()`, so a zero here means `tokenURI` reverts and
+///   nothing else changes. That is a deliberate trade: the descriptor is a 26 KB contract of pure
+///   NFT-artwork string building that upstream has to pin to ONE optimizer run to squeeze under
+///   EIP-170, and the only position this POSM will ever hold is the launch position, owned by the
+///   hook forever and rendered by nobody. Deploy one later and pass `TOKEN_DESCRIPTOR` if that
+///   changes — the argument is a constructor parameter, so it needs a fresh POSM.
 ///
 /// @dev Env:
 ///     POOL_MANAGER        — the v4 PoolManager on this chain (required)
 ///     PERMIT2             — canonical 0x000000000022D473030F116dDEE9F6B43aC78BA3 (required)
 ///     WRAPPED_NATIVE      — WETH9-equivalent, default 0 (see above)
-///     NATIVE_LABEL        — the native coin's ticker for NFT metadata, default "USDC"
+///     TOKEN_DESCRIPTOR    — NFT metadata renderer, default 0 (see above)
 ///     UNSUBSCRIBE_GAS_LIMIT — gas budget for subscriber callbacks, default 300000 (Uniswap's value)
-///   Run:
+///   Run (note the `forge build` — see the note above the contract):
+///     FOUNDRY_PROFILE=e2e forge build
 ///     FOUNDRY_PROFILE=e2e forge script script/DeployPositionManager.s.sol:DeployPositionManager \
 ///       --rpc-url $RPC_URL --broadcast --private-key $PK
 contract DeployPositionManager is Script {
-    /// @dev CREATE2 salts. The deployer here is this script contract, so these do not make the
-    ///   address predictable across runs — they only keep the two creations distinct.
-    bytes32 constant DESCRIPTOR_SALT = bytes32(uint256(0x00));
+    /// @dev CREATE2 salt. The deployer is this script contract, whose address varies per run, so this
+    ///   does not make the result predictable — it is just a fixed input.
     bytes32 constant POSM_SALT = bytes32(uint256(0x03));
 
-    function run() external returns (address descriptor, address posm) {
+    function run() external returns (address posm) {
         address poolManager = vm.envAddress("POOL_MANAGER");
         address permit2 = vm.envAddress("PERMIT2");
         address wrappedNative = vm.envOr("WRAPPED_NATIVE", address(0));
+        address tokenDescriptor = vm.envOr("TOKEN_DESCRIPTOR", address(0));
         uint256 unsubscribeGasLimit = vm.envOr("UNSUBSCRIBE_GAS_LIMIT", uint256(300_000));
-        bytes32 nativeLabel = bytes32(bytes(vm.envOr("NATIVE_LABEL", string("USDC"))));
 
         require(poolManager.code.length > 0, "POOL_MANAGER has no code on this chain");
         require(permit2.code.length > 0, "PERMIT2 has no code on this chain");
@@ -51,18 +72,20 @@ contract DeployPositionManager is Script {
         (bool okPm,) = poolManager.staticcall(abi.encodeWithSignature("protocolFeeController()"));
         require(okPm, "POOL_MANAGER is not a v4 PoolManager (protocolFeeController() failed)");
 
+        bytes memory creationCode = vm.getCode("PositionManager.sol:PositionManager");
+        require(creationCode.length > 0, "PositionManager artifact missing - run `forge build` first");
+
         vm.startBroadcast();
-        descriptor = _create2(
-            vm.getCode("PositionDescriptor.sol:PositionDescriptor"),
-            abi.encode(poolManager, wrappedNative, nativeLabel),
-            DESCRIPTOR_SALT
-        );
         posm = _create2(
-            vm.getCode("PositionManager.sol:PositionManager"),
-            abi.encode(poolManager, permit2, unsubscribeGasLimit, descriptor, wrappedNative),
+            creationCode,
+            abi.encode(poolManager, permit2, unsubscribeGasLimit, tokenDescriptor, wrappedNative),
             POSM_SALT
         );
         vm.stopBroadcast();
+
+        // Fail here rather than on-chain if the optimizer pin ever gets lost: over this and the
+        // deployment is rejected by the EVM, which is a confusing place to learn about it.
+        require(posm.code.length <= 24_576, "deployed PositionManager exceeds EIP-170");
 
         // Close the loop: the whole point is a POSM bound to THIS PoolManager, so assert it rather
         // than trust the constructor args we just passed.
@@ -70,14 +93,14 @@ contract DeployPositionManager is Script {
         require(ok && ret.length == 32, "deployed PositionManager does not answer poolManager()");
         require(abi.decode(ret, (address)) == poolManager, "deployed PositionManager bound elsewhere");
 
-        console2.log("PositionDescriptor deployed:", descriptor);
         console2.log("PositionManager deployed:   ", posm);
+        console2.log("  runtime size (bytes):     ", posm.code.length);
         console2.log("  bound to PoolManager:     ", poolManager);
         console2.log("  permit2:                  ", permit2);
         console2.log("  wrappedNative (0 = none): ", wrappedNative);
+        console2.log("  tokenDescriptor (0 = none):", tokenDescriptor);
         console2.log("");
-        console2.log("Next: pass this as POSITION_MANAGER to DeployCoilLaunchpad, and set");
-        console2.log("NEXT_PUBLIC_<CHAIN>_V4_POSITION_MANAGER in the web env if the site needs it.");
+        console2.log("Next: pass this as POSITION_MANAGER to DeployCoilLaunchpad.");
     }
 
     function _create2(bytes memory creationCode, bytes memory args, bytes32 salt)

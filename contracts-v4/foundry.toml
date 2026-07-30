@@ -15,6 +15,16 @@ via_ir = true
 ffi = false
 skip = ["test/e2e/**"]
 fs_permissions = [{ access = "read", path = "./" }]
+# See src/vendor/PositionManagerArtifact.sol — Uniswap's PositionManager only fits EIP-170 at the
+# 500 optimizer runs upstream pins it to, and a pinned file may only be imported by files pinned the
+# same way. Repeated in every profile that compiles src/, because Forge does not inherit these.
+additional_compiler_profiles = [
+  { name = "posm", via_ir = true, optimizer_runs = 500 },
+]
+compilation_restrictions = [
+  { paths = "lib/v4-periphery/src/PositionManager.sol", optimizer_runs = 500 },
+  { paths = "src/vendor/PositionManagerArtifact.sol", optimizer_runs = 500 },
+]
 
 [profile.default.fuzz]
 runs = 256
@@ -40,6 +50,18 @@ gas_limit = "3000000000"
 # Pool.sol's swap path at all.
 skip = ["test/e2e/ArcSelfHostedPosm.t.sol"]
 fs_permissions = [{ access = "read", path = "./" }]
+# Uniswap's periphery does NOT fit EIP-170 at a normal optimizer setting, and upstream's own
+# foundry.toml is where the answer is: they pin PositionManager to 500 runs and PositionDescriptor to
+# 1, per file. Compiled at this profile's 800, the descriptor comes out 26,069 bytes and the deploy
+# is rejected on-chain. Mirroring their restrictions is what makes `DeployPositionManager` produce a
+# deployable contract; do not "simplify" these away.
+additional_compiler_profiles = [
+  { name = "posm", via_ir = true, optimizer_runs = 500 },
+]
+compilation_restrictions = [
+  { paths = "lib/v4-periphery/src/PositionManager.sol", optimizer_runs = 500 },
+  { paths = "src/vendor/PositionManagerArtifact.sol", optimizer_runs = 500 },
+]
 
 [profile.e2e.fuzz]
 runs = 256
@@ -65,6 +87,16 @@ ffi = false
 gas_limit = "3000000000"
 skip = []
 fs_permissions = [{ access = "read", path = "./" }]
+# Same per-file pins as [profile.e2e], so the test deploys the SAME periphery bytecode the deploy
+# script will. Without them the test would happily mint through a 27 KB PositionManager that could
+# never exist on-chain, which is the opposite of what the test is for.
+additional_compiler_profiles = [
+  { name = "posm", via_ir = true, optimizer_runs = 500 },
+]
+compilation_restrictions = [
+  { paths = "lib/v4-periphery/src/PositionManager.sol", optimizer_runs = 500 },
+  { paths = "src/vendor/PositionManagerArtifact.sol", optimizer_runs = 500 },
+]
 
 [profile.v4local.fuzz]
 runs = 64
@@ -84,7 +116,14 @@ ffi = false
 # CoilLaunchpad embeds `new CoilHook{salt}(...)` in a large function; the legacy pipeline goes
 # stack-too-deep on it (it needs via-IR), so it is skipped in this no-via-IR profile. Its logic is
 # covered by CoilLaunchpadUnit under the default (via-IR) profile: `forge test --use ./solc-wrapper.js`.
-skip = ["test/e2e/**", "src/CoilLaunchpad.sol", "test/CoilLaunchpadUnit.t.sol"]
+skip = [
+  "test/e2e/**",
+  "src/CoilLaunchpad.sol",
+  "test/CoilLaunchpadUnit.t.sol",
+  # Uniswap's PositionManager needs via-IR; this profile has none. It is only ever needed to produce
+  # a deploy artifact, which is not what a WASM-compiler fallback is for.
+  "src/vendor/**",
+]
 fs_permissions = [{ access = "read", path = "./" }]
 
 [profile.sandbox.fuzz]
