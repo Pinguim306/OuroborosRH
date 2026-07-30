@@ -23,8 +23,6 @@ const retryTransportOnly = (failureCount: number, error: Error) =>
 /** The rate a creator gets if they never touch the control — 2%, the middle of the allowed range. */
 export const DEFAULT_TOTAL_FEE_BPS = 200;
 
-export type FeeSplit = { protocolBps: number; holderBps: number; burnBps: number };
-
 /**
  * What the launchpad ON THIS CHAIN lets a creator choose.
  *
@@ -86,33 +84,5 @@ export function useLaunchFee(chainId?: number) {
     configurable,
     minBps: configurable ? Number(minBps) : undefined,
     maxBps: configurable ? Number(maxBps) : undefined,
-  };
-}
-
-/**
- * The exact waterfall `totalFeeBps` produces, straight from the contract.
- *
- * Not computed here on purpose: the curve is owner-tunable on-chain, so any copy of the maths in
- * the frontend is one `setFeeCurve` away from showing a creator a split they will not get.
- */
-export function useFeeSplit(totalFeeBps: number, enabled: boolean, chainId?: number): FeeSplit | undefined {
-  const id = asSupportedChainId(chainId);
-  const { coilLaunchpad, launchLive } = coilContracts(id);
-
-  const { data } = useReadContract({
-    chainId: id,
-    address: coilLaunchpad,
-    abi: coilLaunchpadV4Abi,
-    functionName: "resolveFees",
-    args: [BigInt(totalFeeBps)],
-    query: { enabled: enabled && launchLive, retry: retryTransportOnly },
-  });
-
-  if (!data) return undefined;
-  const split = data as { protocolBps: bigint; holderBps: bigint; burnBps: bigint };
-  return {
-    protocolBps: Number(split.protocolBps),
-    holderBps: Number(split.holderBps),
-    burnBps: Number(split.burnBps),
   };
 }
