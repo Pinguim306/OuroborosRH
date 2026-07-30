@@ -74,8 +74,7 @@ contract StandInPermit2 {
 ///     FOUNDRY_PROFILE=v4local forge build
 ///     FOUNDRY_PROFILE=v4local forge test --match-contract ArcSelfHostedPosmTest -vv
 contract ArcSelfHostedPosmTest is Test {
-    /// Same salt and args the deploy script uses.
-    bytes32 constant POSM_SALT = bytes32(uint256(0x03));
+    /// Same args the deploy script uses.
     uint256 constant UNSUBSCRIBE_GAS_LIMIT = 300_000;
     /// The whole point: Arc has no WETH9. And no descriptor is deployed, so `tokenURI` reverts —
     /// both are zero in the real deploy, so both are zero here.
@@ -148,25 +147,24 @@ contract ArcSelfHostedPosmTest is Test {
         // the v4local profile, whose `out` is pinned in foundry.toml.
         bytes memory creationCode = vm.getCode("out-v4local/PositionManager.sol/PositionManager.json");
         require(creationCode.length > 0, "PositionManager artifact missing - run `forge build` first");
-        manager = _create2(
+        manager = _create(
             creationCode,
-            abi.encode(poolManager, PERMIT2, UNSUBSCRIBE_GAS_LIMIT, TOKEN_DESCRIPTOR, WETH9),
-            POSM_SALT
+            abi.encode(poolManager, PERMIT2, UNSUBSCRIBE_GAS_LIMIT, TOKEN_DESCRIPTOR, WETH9)
         );
         // The deploy script asserts this too. A PositionManager over the limit cannot exist on-chain,
         // so a test that mints through one would be testing a fiction.
         require(manager.code.length <= 24_576, "PositionManager exceeds EIP-170");
     }
 
-    function _create2(bytes memory creationCode, bytes memory args, bytes32 salt)
-        internal
-        returns (address addr)
-    {
+    /// @dev Plain CREATE, matching the deploy script. It moved off CREATE2 because a broadcast
+    ///   CREATE2 goes through the canonical deterministic-deployer proxy, which Arc does not have —
+    ///   see the note in DeployPositionManager.s.sol.
+    function _create(bytes memory creationCode, bytes memory args) internal returns (address addr) {
         bytes memory initcode = abi.encodePacked(creationCode, args);
         assembly {
-            addr := create2(0, add(initcode, 0x20), mload(initcode), salt)
+            addr := create(0, add(initcode, 0x20), mload(initcode))
         }
-        require(addr != address(0), "CREATE2 failed");
+        require(addr != address(0), "CREATE failed");
     }
 
     /// The deploy script's own post-condition, and the thing the launchpad preflight checks for.
