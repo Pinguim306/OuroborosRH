@@ -24,6 +24,18 @@ export const robinhoodChain = defineChain({
   blockExplorers: {
     default: { name: "Blockscout", url: "https://robinhoodchain.blockscout.com" },
   },
+  /**
+   * REQUIRED, not an optimization: `lib/server/launchpad.ts` batches its market reads through
+   * `client.multicall`, and viem resolves the batching contract from the chain definition — a chain
+   * without this entry makes every one of those calls throw `ChainDoesNotSupportContract`, which is
+   * a 502 on /api/v1/markets. The gap hid for months because the multicall sits behind an
+   * `if (markets.length === 0) return []`, so a chain with no launches (local dev, Arc at birth)
+   * never reaches it; only production-with-markets does. Canonical Multicall3 address, verified
+   * deployed on this chain (eth_getCode, 3808 bytes).
+   */
+  contracts: {
+    multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" },
+  },
   testnet: false,
 });
 
@@ -85,7 +97,11 @@ export const ROBINHOOD_CONTRACTS = {
  *  NEXT_PUBLIC_* only at *literal* `process.env.X` sites, so each var is spelled out — a computed
  *  `process.env[key]` reads as undefined in the browser bundle. Public defaults ship below, so
  *  nothing has to be configured for reads to work. */
-const ARC_RPC_URL = (process.env.NEXT_PUBLIC_ARC_RPC_URL ?? "").trim() || "https://5042.rpc.thirdweb.com";
+// Blockdaemon rather than thirdweb as the fallback: the thirdweb endpoint rate-limits into hard
+// failure (429s, refused forks, intermittent -32603), and on this chain a dead RPC does not just
+// slow the site down — the /create rate control only appears after LAUNCHPAD_VERSION is read.
+const ARC_RPC_URL =
+  (process.env.NEXT_PUBLIC_ARC_RPC_URL ?? "").trim() || "https://rpc.blockdaemon.mainnet.arc.io";
 
 /**
  * Circle's Arc — gas is paid in USDC. The EVM scales Arc's native USDC to 18 decimals (verified
@@ -101,6 +117,12 @@ export const arcChain = defineChain({
   },
   blockExplorers: {
     default: { name: "Blockscout", url: "https://arcscan.app" },
+  },
+  // Same story as robinhoodChain above: the server's market reads go through `client.multicall`
+  // and viem resolves the batching contract from here. Canonical address, verified deployed on Arc
+  // (eth_getCode, 3808 bytes — byte-identical to Robinhood Chain's).
+  contracts: {
+    multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" },
   },
   testnet: false,
 });

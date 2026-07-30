@@ -1,8 +1,24 @@
 "use client";
 
 import { useReadContract } from "wagmi";
+import { ContractFunctionExecutionError } from "viem";
 import { coilContracts, coilLaunchpadV4Abi } from "./contracts";
 import { asSupportedChainId } from "./chain";
+
+/**
+ * Retry policy for the version/bounds reads. Two very different failures land here and they must
+ * not be treated alike:
+ *
+ * - the CONTRACT failing the call — a v3 launchpad genuinely has no `LAUNCHPAD_VERSION` getter.
+ *   That failure IS the version detection; retrying it would re-ask a question whose answer cannot
+ *   change, so it stops immediately.
+ * - the TRANSPORT failing — a 429, a timeout, a flaky RPC. Giving up on the first one of those
+ *   permanently hides the fee-rate control on a v4 chain (the launch then falls back to the old
+ *   call signature and reverts), which is how a rate-limited public RPC made the control vanish in
+ *   production. Those get retried.
+ */
+const retryTransportOnly = (failureCount: number, error: Error) =>
+  !(error instanceof ContractFunctionExecutionError) && failureCount < 3;
 
 /** The rate a creator gets if they never touch the control — 2%, the middle of the allowed range. */
 export const DEFAULT_TOTAL_FEE_BPS = 200;
@@ -25,14 +41,14 @@ export function useLaunchFee(chainId?: number) {
   const id = asSupportedChainId(chainId);
   const { coilLaunchpad, launchLive } = coilContracts(id);
 
-  // v3 launchpads have none of these getters, so the reads simply fail there. That failure IS the
-  // detection — `retry: false` keeps it to one attempt instead of a background retry storm.
-  const { data: version } = useReadContract({
+  // v3 launchpads have none of these getters, so a CONTRACT failure here is the detection itself;
+  // a TRANSPORT failure is retried — see retryTransportOnly.
+  const { data: version, isFetched: versionSettled } = useReadContract({
     chainId: id,
     address: coilLaunchpad,
     abi: coilLaunchpadV4Abi,
     functionName: "LAUNCHPAD_VERSION",
-    query: { enabled: launchLive, retry: false, staleTime: Infinity },
+    query: { enabled: launchLive, retry: retryTransportOnly, staleTime: Infinity },
   });
 
   const supportsRate = typeof version === "bigint" && version >= 4n;
@@ -42,14 +58,14 @@ export function useLaunchFee(chainId?: number) {
     address: coilLaunchpad,
     abi: coilLaunchpadV4Abi,
     functionName: "MIN_FEE_BPS",
-    query: { enabled: launchLive && supportsRate, retry: false, staleTime: Infinity },
+    query: { enabled: launchLive && supportsRate, retry: retryTransportOnly, staleTime: Infinity },
   });
   const { data: maxBps } = useReadContract({
     chainId: id,
     address: coilLaunchpad,
     abi: coilLaunchpadV4Abi,
     functionName: "MAX_FEE_BPS",
-    query: { enabled: launchLive && supportsRate, retry: false, staleTime: Infinity },
+    query: { enabled: launchLive && supportsRate, retry: retryTransportOnly, staleTime: Infinity },
   });
 
   const configurable = supportsRate && minBps !== undefined && maxBps !== undefined;
@@ -57,6 +73,15 @@ export function useLaunchFee(chainId?: number) {
   return {
     /** Undefined until the read lands; 3 or lower means a fixed, deploy-time split. */
     version,
+    /**
+     * False while the version is still being read on a live chain. The launch flow MUST hold until
+     * this settles: the create signature depends on the version, and firing the pre-v4 call at a
+     * v4 launchpad while the read is in flight produces a revert with nothing to explain it. On a
+     * chain with no launchpad there is nothing to wait for.
+     */
+    versionKnown: !launchLive || versionSettled,
+    /** The launchpad takes a rate (version >= 4) — even if its bounds are still being read. */
+    supportsRate,
     /** True once we know this chain's launchpad takes a creator-chosen rate AND what its limits are. */
     configurable,
     minBps: configurable ? Number(minBps) : undefined,
@@ -80,7 +105,7 @@ export function useFeeSplit(totalFeeBps: number, enabled: boolean, chainId?: num
     abi: coilLaunchpadV4Abi,
     functionName: "resolveFees",
     args: [BigInt(totalFeeBps)],
-    query: { enabled: enabled && launchLive, retry: false },
+    query: { enabled: enabled && launchLive, retry: retryTransportOnly },
   });
 
   if (!data) return undefined;
