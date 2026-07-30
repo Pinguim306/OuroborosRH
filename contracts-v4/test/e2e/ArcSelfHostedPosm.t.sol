@@ -88,7 +88,7 @@ contract ArcSelfHostedPosmTest is Test {
     int24 constant TICK_LOWER = -6000;
     int24 constant TICK_UPPER = 0;
     uint256 constant SUPPLY = 1_000_000_000 ether;
-    uint256 constant CREATION_FEE = 2e18; // 2 USDC on Arc — native, 18 decimals
+    uint256 constant CREATION_FEE = 1e18; // 1 USDC on Arc — native, 18 decimals
 
     PoolManager pm;
     address posm;
