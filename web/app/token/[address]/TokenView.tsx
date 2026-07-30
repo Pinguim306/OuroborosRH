@@ -14,12 +14,13 @@ import type { Address } from "@/lib/types";
 import { StatTile } from "@/components/StatTile";
 import { ProgressBar } from "@/components/ProgressBar";
 import { TradeWidget } from "@/components/TradeWidget";
+import { ArcV3TradeWidget } from "@/components/ArcV3TradeWidget";
 import { V4TradeWidget } from "@/components/V4TradeWidget";
 import { RewardsPanel } from "@/components/RewardsPanel";
 import { MarketcapChart } from "@/components/MarketcapChart";
 import { CandleChart } from "@/components/CandleChart";
 import { DexScreenerChart } from "@/components/DexScreenerChart";
-import { chainConfig, dexscreenerEmbedUrl, explorerUrl } from "@/lib/chain";
+import { chainConfig, dexscreenerEmbedUrl, explorerUrl, v3QuoteOf } from "@/lib/chain";
 import { useSelectedChainId } from "@/lib/useSelectedChain";
 import { ChainBadge } from "@/components/ChainBadge";
 import { TokenAvatar } from "@/components/TokenAvatar";
@@ -45,12 +46,12 @@ export function TokenView() {
 
   // `?chain=` on the URL is what identifies WHICH chain's token this page is (addresses collide
   // across chains by design — the hook flags are mined into them). It MUST feed the resolvers
-  // below: useLiveTokenV4's chainId defaults to the default chain, so leaving it off asks the
-  // wrong network's launchpad — an Arc token then 404s on its own page while the launches list
-  // (which does pass the chain) happily shows it. The curve reader stays chain-less because the
-  // curve topology only exists on the default chain.
+  // below: each hook's chainId defaults to the default chain, so leaving it off asks the wrong
+  // network's launchpad — an Arc token then 404s on its own page while the launches list (which
+  // does pass the chain) happily shows it. The curve/V3 reader takes it too now that instant-V3
+  // launchpads exist on more than one chain.
   const chainId = useSelectedChainId();
-  const live = useLiveToken(hidden ? undefined : (address as Address | undefined));
+  const live = useLiveToken(hidden ? undefined : (address as Address | undefined), chainId);
   // v4 (CoilHook) tokens live in a different launchpad the v3 reader can't see — fall back to it.
   const liveV4 = useLiveTokenV4(hidden ? undefined : (address as Address | undefined), chainId);
   const token = hidden
@@ -239,6 +240,13 @@ export function TokenView() {
               <V4TradeWidget token={token} ethUsd={ethUsd} />
               <RewardsPanel token={token} />
             </>
+          ) : token.mode === "v3" && v3QuoteOf(token.chainId) ? (
+            // Instant-V3 on a facade-quoted chain (Arc): ERC20 approve + ArcSwapRouter, no
+            // wrap/unwrap legs — a different enough flow to deserve its own widget.
+            <>
+              <ArcV3TradeWidget token={token} />
+              <RewardsPanel token={token} />
+            </>
           ) : (
             <>
               <TradeWidget token={token} />
@@ -307,7 +315,11 @@ export function TokenView() {
                   <thead className="sticky top-0 bg-obsidian-850/90 text-left text-xs text-ink-4">
                     <tr>
                       <th className="px-5 py-2 font-medium">Type</th>
-                      <th className="px-5 py-2 font-medium">{NATIVE_SYMBOL}</th>
+                      {/* The TOKEN'S chain's coin, not the legacy global (which is Robinhood's
+                          ETH — wrong on a USDC-gas chain's trades table). */}
+                      <th className="px-5 py-2 font-medium">
+                        {chainConfig(token.chainId ?? chainId).nativeSymbol}
+                      </th>
                       <th className="px-5 py-2 font-medium">{token.symbol}</th>
                       <th className="px-5 py-2 font-medium">Trader</th>
                       <th className="px-5 py-2 text-right font-medium">Time</th>

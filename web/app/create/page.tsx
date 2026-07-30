@@ -2,12 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { formatEther, parseEther, parseEventLogs } from "viem";
+import { formatUnits, parseEther, parseEventLogs, parseUnits, zeroAddress } from "viem";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { copy } from "@/lib/copy";
-import { chainConfig, dexscreenerPageUrl, explorerUrl } from "@/lib/chain";
+import { chainConfig, dexscreenerPageUrl, explorerUrl, v3QuoteOf } from "@/lib/chain";
 import { useSelectedChainId } from "@/lib/useSelectedChain";
-import { coilContracts, launchpadAbi, coilLaunchpadV4Abi } from "@/lib/contracts";
+import {
+  arcTokenLaunchedV3Abi,
+  coilContracts,
+  coilLaunchpadV4Abi,
+  erc20Abi,
+  launchpadAbi,
+} from "@/lib/contracts";
 import { DEFAULT_TOTAL_FEE_BPS, useLaunchFee } from "@/lib/useLaunchFee";
 import { ProgressBar } from "@/components/ProgressBar";
 import { LaunchWidget } from "@/components/LaunchWidget";
@@ -16,14 +22,16 @@ import { IconCrown, IconImage, IconRewards, IconWarning } from "@/components/Ico
 import { IconBolt, IconCoin, IconExternal } from "@/components/Icon";
 
 export default function CreatePage() {
-  const { isConnected } = useAccount();
+  const { isConnected, address: account } = useAccount();
   // Launches go to the network the picker is on; LaunchWidget resolves the same id for the write.
   const chainId = useSelectedChainId();
   const NATIVE_SYMBOL = chainConfig(chainId).nativeSymbol;
-  // The launchpad is v4-only: every launch goes through the Uniswap-v4 CoilHook, so its native
-  // per-swap fee always feeds the $COIL buy&burn. The legacy instant-V3 path is retired, but `mode`
-  // stays a union type so the (now single-branch) conditionals below remain valid.
-  const [mode] = useState<"v3" | "v4">("v4");
+  // Launch mode is a CHAIN fact now: a chain with a facade-quoted instant-V3 launchpad (Arc)
+  // launches straight into a routable Uniswap V3 pool — that's the whole point of that
+  // deployment: external terminals can trade the token from block one. Chains without one keep
+  // the v4 CoilHook flow. The facade flag only flips once the chain's V3 launchpad env is set,
+  // so the site never leads the deployment.
+  const v3Quote = v3QuoteOf(chainId);
   const [form, setForm] = useState({
     name: "",
     symbol: "",
@@ -74,6 +82,8 @@ export default function CreatePage() {
     live: LIVE,
     launchLive: LAUNCH_LIVE,
   } = coilContracts(chainId);
+  const arcV3 = !!v3Quote && LIVE; // facade-quoted chain WITH its V3 launchpad deployed
+  const mode: "v3" | "v4" = arcV3 ? "v3" : "v4";
 
   const { data: creationFee } = useReadContract({
     chainId,
@@ -105,10 +115,11 @@ export default function CreatePage() {
 
   const liveForMode = mode === "v4" ? LAUNCH_LIVE : LIVE;
   const activeFeeRaw = mode === "v4" ? creationFeeV4 : creationFee;
-  // Live creation fee (owner-configurable on-chain; 0 = free, gas only).
+  // Live creation fee (owner-configurable on-chain; 0 = free, gas only). On the facade chain the
+  // launchpad counts in the facade's 6-decimal units, not 18.
   const feeEth = liveForMode
     ? activeFeeRaw !== undefined
-      ? Number(formatEther(activeFeeRaw as bigint))
+      ? Number(formatUnits(activeFeeRaw as bigint, arcV3 ? v3Quote!.decimals : 18))
       : undefined
     : mode === "v4"
       ? 0
@@ -116,11 +127,40 @@ export default function CreatePage() {
 
   const devBuyNum = parseFloat(devBuy) || 0;
   const devBuyWei = devBuyNum > 0 ? parseEther(devBuyNum.toFixed(18)) : 0n;
-  const { writeContract, data: hash, isPending, error } = useWriteContract();
+  // Facade-chain amounts (creation fee + dev buy) are ERC20 pulls in 6-decimal units — the
+  // launchpad takes no msg.value there; the user approves the facade once instead.
+  const devBuyUnits =
+    arcV3 && devBuyNum > 0 ? parseUnits(devBuyNum.toFixed(v3Quote!.decimals), v3Quote!.decimals) : 0n;
+  const arcNeeded = arcV3 ? ((activeFeeRaw as bigint | undefined) ?? 1_000_000n) + devBuyUnits : 0n;
+  const arcAllowanceQ = useReadContract({
+    chainId,
+    address: v3Quote?.address,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: [account ?? zeroAddress, curveLaunchpad],
+    query: { enabled: arcV3 && !!account },
+  });
+  const arcNeedsApproval =
+    arcV3 && ((arcAllowanceQ.data as bigint | undefined) ?? 0n) < arcNeeded;
+  // Which transaction the in-flight write is: the facade approval or the launch itself. The
+  // shared isSuccess must not flip the page to "done" when it was only the approval confirming.
+  const [stage, setStage] = useState<"idle" | "approving" | "launching">("idle");
+
+  const { writeContract, data: hash, isPending, error, reset } = useWriteContract();
   const { data: receipt, isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
-  // Pull the freshly deployed token address out of the TokenLaunched event so we
-  // can link the creator straight to its launchpad page.
+  // An approval confirming re-arms the button as "Launch" — it never completes the flow.
+  useEffect(() => {
+    if (!isSuccess || stage !== "approving") return;
+    arcAllowanceQ.refetch?.();
+    reset();
+    setStage("idle");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuccess, stage]);
+
+  // Pull the freshly deployed token address out of the launch event so we can link the creator
+  // straight to its page. Two shapes: the curve stack's TokenLaunched, and the Arc V3
+  // launchpad's TokenLaunchedV3 (token, pool, creator).
   const newTokenAddress = useMemo(() => {
     if (!receipt) return undefined;
     try {
@@ -129,7 +169,14 @@ export default function CreatePage() {
         eventName: "TokenLaunched",
         logs: receipt.logs,
       });
-      return (logs[0]?.args as { token?: string } | undefined)?.token;
+      const fromCurve = (logs[0]?.args as { token?: string } | undefined)?.token;
+      if (fromCurve) return fromCurve;
+      const arcLogs = parseEventLogs({
+        abi: arcTokenLaunchedV3Abi,
+        eventName: "TokenLaunchedV3",
+        logs: receipt.logs,
+      });
+      return (arcLogs[0]?.args as { token?: string } | undefined)?.token;
     } catch {
       return undefined;
     }
@@ -158,7 +205,9 @@ export default function CreatePage() {
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const busy = uploading || (LIVE ? isPending || confirming : status === "deploying");
-  const done = LIVE ? isSuccess : status === "done";
+  // On the facade chain the approval tx also reports isSuccess — only the LAUNCH tx finishes the
+  // flow (the approving→idle effect above resets the write state in between).
+  const done = LIVE ? isSuccess && (!arcV3 || stage === "launching") : status === "done";
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     setImageError(null);
@@ -242,6 +291,20 @@ export default function CreatePage() {
       return;
     }
 
+    // Facade chain, step 1 of 2: approve the launchpad on the USDC facade for exactly the
+    // creation fee + dev buy. No metadata upload yet — that belongs to the launch click.
+    if (arcV3 && arcNeedsApproval) {
+      setStage("approving");
+      writeContract({
+        chainId,
+        address: v3Quote!.address,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [curveLaunchpad, arcNeeded],
+      });
+      return;
+    }
+
     let metadataURI = "";
     try {
       metadataURI = await buildMetadataURI();
@@ -250,10 +313,23 @@ export default function CreatePage() {
       return;
     }
 
+    if (arcV3) {
+      // Facade chain, step 2: the launch itself. Amounts ride the approval — no msg.value.
+      setStage("launching");
+      writeContract({
+        chainId,
+        address: curveLaunchpad,
+        abi: launchpadAbi,
+        functionName: "createTokenV3",
+        args: [form.name, form.symbol, metadataURI, devBuyUnits, rewards === "creator"],
+      });
+      return;
+    }
+
     const fee = (creationFee as bigint | undefined) ?? parseEther("0.01"); // excess is refunded on-chain
 
-    // Every launch goes straight into a Uniswap V3 pool. v2 launchpads take the
-    // rewards-mode flag; v1 keeps the legacy 4-arg call.
+    // Legacy payable path (Robinhood curve stack). v2 launchpads take the rewards-mode flag;
+    // v1 keeps the 4-arg call.
     const args = supportsRewardsMode
       ? ([form.name, form.symbol, metadataURI, devBuyWei, rewards === "creator"] as const)
       : ([form.name, form.symbol, metadataURI, devBuyWei] as const);
@@ -584,7 +660,13 @@ export default function CreatePage() {
                   disabled={!form.name || !form.symbol || busy || (LIVE && !isConnected)}
                   className="btn-primary mt-6 w-full text-base"
                 >
-                  {uploading ? "Uploading image…" : busy ? copy.create.submitting : copy.create.submit}
+                  {uploading
+                    ? "Uploading image…"
+                    : busy
+                      ? copy.create.submitting
+                      : arcV3 && arcNeedsApproval
+                        ? `Approve ${((feeEth ?? 0) + devBuyNum).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${NATIVE_SYMBOL}`
+                        : copy.create.submit}
                 </button>
               )}
 

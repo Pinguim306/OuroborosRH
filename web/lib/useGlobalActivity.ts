@@ -110,7 +110,7 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
               const client = clients[tChain];
               const ctx = ctxByChain.get(tChain);
               if (!client || !ctx) return;
-              const { clock, weth, usd } = ctx;
+              const { clock, weth, v3Scale, usd } = ctx;
               const hourAgo = clock.latestNum - BigInt(Math.max(1, Math.floor(HOUR / clock.spb)));
               const V4_POOL_MANAGER = v4PoolManagerOf(tChain);
               const supply = supplyOf(t);
@@ -164,7 +164,7 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
                       ? traders?.buyerByTx.get(l.transactionHash)
                       : traders?.sellerByTx.get(l.transactionHash)) ?? s.trader;
                 } else if (isV3) {
-                  const s = parseV3Swap(l, tokenIs0, supply);
+                  const s = parseV3Swap(l, tokenIs0, supply, v3Scale);
                   isBuy = s.isBuy;
                   eth = s.ethAmount;
                   trader =

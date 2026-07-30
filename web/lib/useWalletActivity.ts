@@ -86,7 +86,7 @@ export function useWalletActivity(tokens: TokenMarket[], wallet?: Address): Wall
               const client = clients[tChain];
               const ctx = ctxByChain.get(tChain);
               if (!client || !ctx) return;
-              const { clock, weth, usd } = ctx;
+              const { clock, weth, v3Scale, usd } = ctx;
               const V4_POOL_MANAGER = v4PoolManagerOf(tChain);
               const supply = supplyOf(t);
               const tokenIs0 = weth ? t.address.toLowerCase() < weth.toLowerCase() : true;
@@ -128,7 +128,7 @@ export function useWalletActivity(tokens: TokenMarket[], wallet?: Address): Wall
                 let isBuy: boolean;
                 let eth: number;
                 if (isV4 || isV3) {
-                  const s = isV4 ? parseV4Swap(l, supply) : parseV3Swap(l, tokenIs0, supply);
+                  const s = isV4 ? parseV4Swap(l, supply) : parseV3Swap(l, tokenIs0, supply, v3Scale);
                   isBuy = s.isBuy;
                   eth = s.ethAmount;
                   trader =

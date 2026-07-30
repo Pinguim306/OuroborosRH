@@ -56,6 +56,14 @@ PRIVATE_KEY=$PK forge script script/DeployArc.s.sol \
 | ArcPoolLocker | _(preencher pós-deploy)_ | |
 | ArcSwapRouter | _(preencher pós-deploy)_ | |
 
+Depois do deploy, apontar o site (Vercel) — o create da Arc troca para o fluxo v3 assim que a
+primeira var existir; sem ela o site continua no v4 (o front nunca lidera o contrato):
+
+```
+NEXT_PUBLIC_ARC_LAUNCHPAD_ADDRESS   = <ArcLaunchpad>
+NEXT_PUBLIC_ARC_COIL_SWAP_ROUTER_V3 = <ArcSwapRouter>
+```
+
 ### Stack v4 (geração anterior — tokens existentes seguem nela)
 
 Deploy de 2026-07-30, carteira `0xd2bb88dccf3835b5dc24d08e6bf40578a5889265`. Custo total ≈ 0,41 USDC.

@@ -58,6 +58,13 @@ contract ArcLaunchpad is Ownable, ReentrancyGuard, IUniswapV3SwapCallback {
     /// @notice The canonical native-USDC ERC20 facade every pool pairs against.
     address public immutable usdc;
 
+    /// @notice WETH-role getter, for frontend parity: the site's V3 readers orient
+    ///         every pool by `launchpad.weth()`, and on Arc that role — the quote
+    ///         currency all pools pair against — is played by the USDC facade.
+    function weth() external view returns (address) {
+        return usdc;
+    }
+
     V3Params public v3Params;
     /// @notice Permanent vault holding every launch's pool-level position.
     ArcPoolLocker public feeLocker;
