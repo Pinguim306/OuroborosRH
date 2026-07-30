@@ -462,14 +462,17 @@ export default function CreatePage() {
             <div className="mb-2 font-semibold text-ink-2">Launch parameters</div>
             <ul className="grid grid-cols-2 gap-y-1">
               <li>Supply: <span className="text-ink-2">1,000,000,000</span></li>
+              {/* The pool's LP fee IS zero (POOL_FEE = 0 on the hook — no double charge), but
+                  leading with "0% LP" made a creator parse protocol internals to find their own
+                  number. The summary states just the fee they chose. */}
               <li>
-                Pool fee:{" "}
+                Swap fee:{" "}
                 <span className="text-ink-2">
                   {mode !== "v4"
                     ? "1% (Uniswap V3)"
                     : totalFeeBps !== undefined
-                      ? `0% LP + ${totalFeeBps / 100}% per swap`
-                      : "0% LP + native per-swap fee"}
+                      ? `${totalFeeBps / 100}% per swap`
+                      : "per-swap, split on-chain"}
                 </span>
               </li>
               <li>Liquidity: <span className="text-ink-2">locked forever</span></li>
