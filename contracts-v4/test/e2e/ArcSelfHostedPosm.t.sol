@@ -12,36 +12,15 @@ import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
-// Imported for their TYPES only, which is also what pulls them into this test's compilation unit so
-// `vm.getCode` can find the artifacts. They are deployed via CREATE2 rather than `new` because
-// PositionManager is ~24 KB and embedding it in this test contract's creation code blows EIP-170.
+// PositionManager itself is deliberately NOT imported — it is pinned to 500 optimizer runs (the only
+// setting it fits EIP-170 at), and a pinned file may only be imported by files pinned the same way.
+// It is reached through its artifact instead, built by src/vendor/PositionManagerArtifact.sol, and
+// deployed here exactly as the deploy script does it. Only the interface is safe to import.
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
-import {PositionManager} from "@uniswap/v4-periphery/src/PositionManager.sol";
-import {PositionDescriptor} from "@uniswap/v4-periphery/src/PositionDescriptor.sol";
 
 import {CoilHook} from "../../src/CoilHook.sol";
 import {CoilLaunchpad} from "../../src/CoilLaunchpad.sol";
 
-/// @notice Can Coil launch on a chain that has the v4 PoolManager but no PositionManager, if we
-///   deploy Uniswap's PositionManager there ourselves?
-///
-/// This is the Arc question, made runnable. Arc (5042) has the PoolManager, StateView and Quoter at
-/// Robinhood Chain's addresses with byte-identical code, and no PositionManager or UniversalRouter —
-/// the two whose constructors take a WETH9 that Arc, with native USDC gas, does not have. Since
-/// `CoilHook.seed()` mints the permanently-locked launch position through the POSM, no POSM means no
-/// launches.
-///
-/// So this test stands the whole thing up locally the way `DeployPositionManager.s.sol` would on Arc:
-/// real v4-core PoolManager, real vendored Permit2, and Uniswap's own PositionManager deployed with
-/// **`weth9 = address(0)`** — the load-bearing detail. The claim being tested is that a zero WETH9 is
-/// harmless because it reaches PositionManager only via `NativeWrapper`, which only the
-/// `WRAP`/`UNWRAP` actions touch, and `seed()` uses `MINT_POSITION` + `SETTLE_PAIR`. A claim like
-/// that is worth nothing unasserted, so: launch a token end to end, then trade it.
-///
-/// Lives under test/e2e because it pulls v4-core's Pool.sol (needs the e2e profile), but it forks
-/// nothing — it runs anywhere:
-///
-///     FOUNDRY_PROFILE=e2e forge test --match-contract ArcSelfHostedPosmTest -vv
 interface IERC20Minimal {
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
 }
@@ -71,13 +50,37 @@ contract StandInPermit2 {
     }
 }
 
+
+/// @notice Can Coil launch on a chain that has the v4 PoolManager but no PositionManager, if we
+///   deploy Uniswap's PositionManager there ourselves?
+///
+/// This is the Arc question, made runnable. Arc (5042) has the PoolManager, StateView and Quoter at
+/// Robinhood Chain's addresses with byte-identical code, and no PositionManager or UniversalRouter —
+/// the two whose constructors take a WETH9 that Arc, with native USDC gas, does not have. Since
+/// `CoilHook.seed()` mints the permanently-locked launch position through the POSM, no POSM means no
+/// launches.
+///
+/// So this test stands the whole thing up locally the way `DeployPositionManager.s.sol` would on Arc:
+/// real v4-core PoolManager, real vendored Permit2, and Uniswap's own PositionManager deployed with
+/// **`weth9 = address(0)`** — the load-bearing detail. The claim being tested is that a zero WETH9 is
+/// harmless because it reaches PositionManager only via `NativeWrapper`, which only the
+/// `WRAP`/`UNWRAP` actions touch, and `seed()` uses `MINT_POSITION` + `SETTLE_PAIR`. A claim like
+/// that is worth nothing unasserted, so: launch a token end to end, then trade it.
+///
+/// Lives under test/e2e because it pulls v4-core's Pool.sol, but it forks nothing — it runs
+/// anywhere. It needs the v4local profile (see foundry.toml) and a prior build, because the
+/// PositionManager comes from an artifact rather than an import:
+///
+///     FOUNDRY_PROFILE=v4local forge build
+///     FOUNDRY_PROFILE=v4local forge test --match-contract ArcSelfHostedPosmTest -vv
 contract ArcSelfHostedPosmTest is Test {
-    /// Same salts and args the deploy script uses.
-    bytes32 constant DESCRIPTOR_SALT = bytes32(uint256(0x00));
+    /// Same salt and args the deploy script uses.
     bytes32 constant POSM_SALT = bytes32(uint256(0x03));
     uint256 constant UNSUBSCRIBE_GAS_LIMIT = 300_000;
-    /// The whole point: Arc has no WETH9.
+    /// The whole point: Arc has no WETH9. And no descriptor is deployed, so `tokenURI` reverts —
+    /// both are zero in the real deploy, so both are zero here.
     address constant WETH9 = address(0);
+    address constant TOKEN_DESCRIPTOR = address(0);
 
     /// Permit2 is at the same address on every chain, Arc included (verified on-chain).
     address constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
@@ -92,7 +95,6 @@ contract ArcSelfHostedPosmTest is Test {
 
     PoolManager pm;
     address posm;
-    address descriptor;
     CoilLaunchpad pad;
     PoolSwapTest swapRouter;
 
@@ -108,7 +110,7 @@ contract ArcSelfHostedPosmTest is Test {
         // to a real place (see StandInPermit2 for why it isn't the upstream contract).
         vm.etch(PERMIT2, address(new StandInPermit2()).code);
 
-        (descriptor, posm) = _deployPeriphery(address(pm));
+        posm = _deployPosm(address(pm));
 
         // Arc's curve: no $COIL on the chain, so nothing to buy and burn — the burn share is 0 and
         // the whole remainder after the protocol cut goes to the creator/holders.
@@ -135,18 +137,25 @@ contract ArcSelfHostedPosmTest is Test {
         swapRouter = new PoolSwapTest(IPoolManager(address(pm)));
     }
 
-    /// @dev Mirrors `DeployPositionManager.s.sol` exactly, including `weth9 = 0`.
-    function _deployPeriphery(address poolManager) internal returns (address desc, address manager) {
-        desc = _create2(
-            vm.getCode("PositionDescriptor.sol:PositionDescriptor"),
-            abi.encode(poolManager, WETH9, bytes32(bytes("USDC"))),
-            DESCRIPTOR_SALT
-        );
+    /// @dev Mirrors `DeployPositionManager.s.sol` exactly, down to the zero WETH9 and descriptor and
+    ///   the same artifact — so whatever this test proves is a property of the contract that will
+    ///   actually be deployed, not of a differently-compiled twin.
+    function _deployPosm(address poolManager) internal returns (address manager) {
+        // By artifact PATH, not "PositionManager.sol:PositionManager". The name form resolves
+        // against the artifacts of the test's own compilation units, and the per-file optimizer
+        // restriction puts PositionManager in a separate unit — the name lookup comes back empty
+        // even though the file is on disk. The path is stable because this test only runs under
+        // the v4local profile, whose `out` is pinned in foundry.toml.
+        bytes memory creationCode = vm.getCode("out-v4local/PositionManager.sol/PositionManager.json");
+        require(creationCode.length > 0, "PositionManager artifact missing - run `forge build` first");
         manager = _create2(
-            vm.getCode("PositionManager.sol:PositionManager"),
-            abi.encode(poolManager, PERMIT2, UNSUBSCRIBE_GAS_LIMIT, desc, WETH9),
+            creationCode,
+            abi.encode(poolManager, PERMIT2, UNSUBSCRIBE_GAS_LIMIT, TOKEN_DESCRIPTOR, WETH9),
             POSM_SALT
         );
+        // The deploy script asserts this too. A PositionManager over the limit cannot exist on-chain,
+        // so a test that mints through one would be testing a fiction.
+        require(manager.code.length <= 24_576, "PositionManager exceeds EIP-170");
     }
 
     function _create2(bytes memory creationCode, bytes memory args, bytes32 salt)
