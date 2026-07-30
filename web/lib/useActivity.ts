@@ -20,7 +20,16 @@ import {
   coilPoolId,
   v4PoolManagerAbi,
 } from "./contracts";
-import { asSupportedChainId, CHAIN_ID, marketKey, uniswapContracts, v4PoolManagerOf } from "./chain";
+import {
+  arcChain,
+  asSupportedChainId,
+  CHAIN_ID,
+  marketKey,
+  robinhoodChain,
+  uniswapContracts,
+  v4PoolManagerOf,
+} from "./chain";
+import { nativeUsdOf } from "./nativeUsd";
 import { isHiddenMarket } from "./useMarkets";
 import type { Address, Holder, TokenMarket, Trade } from "./types";
 
@@ -289,6 +298,41 @@ export async function blockClock(
   const n = Number(sample);
   const spb = n > 0 && dt > 0 ? dt / n : 2;
   return { latestNum, latestTs: Number(latest.timestamp), spb };
+}
+
+/**
+ * One read client per supported chain, statically (the registry is a fixed pair, so the hook calls
+ * are unconditional). The merged surfaces group tokens by `token.chainId` and pick from here —
+ * a single default client would read the wrong chain for half the list.
+ */
+export function useChainClients(): Record<number, PublicClient | undefined> {
+  const rh = usePublicClient({ chainId: robinhoodChain.id });
+  const arc = usePublicClient({ chainId: arcChain.id });
+  return useMemo(
+    () => ({ [robinhoodChain.id]: rh as PublicClient, [arcChain.id]: arc as PublicClient }),
+    [rh, arc],
+  );
+}
+
+/** Everything a per-chain aggregation pass needs, resolved once per chain, not once per token:
+ *  the block clock (chains tick at different speeds, so time estimates and "1h ago" cutoffs are
+ *  strictly per-chain), WETH (only where a chain has V3 topology), and the native coin's USD rate
+ *  (what makes cross-chain SUMS comparable — see nativeUsd.ts). */
+export async function chainCtx(
+  client: PublicClient,
+  chainId: number,
+  needsWeth: boolean,
+): Promise<{
+  clock: Awaited<ReturnType<typeof blockClock>>;
+  weth: string | undefined;
+  usd: number;
+}> {
+  const [clock, weth, usd] = await Promise.all([
+    blockClock(client),
+    needsWeth ? wethOf(client) : Promise.resolve(undefined),
+    nativeUsdOf(chainId),
+  ]);
+  return { clock, weth, usd };
 }
 
 /** Round a raw seconds span to a "nice" candle interval. */

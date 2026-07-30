@@ -11,9 +11,9 @@ import {
   useWriteContract,
 } from "wagmi";
 import { coilHookAbi, tokenAbi } from "@/lib/contracts";
-import { asSupportedChainId, chainParam, marketKey } from "@/lib/chain";
+import { asSupportedChainId, chainConfig, chainParam, marketKey, robinhoodChain } from "@/lib/chain";
 import { useSelectedChainId } from "@/lib/useSelectedChain";
-import { useLiveMarkets } from "@/lib/useMarkets";
+import { useAllMarkets } from "@/lib/useMarkets";
 import { usePnL, type TokenPnl } from "@/lib/usePnL";
 import type { TokenMarket } from "@/lib/types";
 import { copy } from "@/lib/copy";
@@ -33,8 +33,12 @@ interface Position {
 /** Live portfolio: the user's holdings + claimable fees across all launched tokens. */
 export function LivePortfolio() {
   const { address, isConnected } = useAccount();
-  const { tokens, isLoading } = useLiveMarkets();
-  const ethUsd = useEthPrice();
+  // Every chain's tokens — the portfolio is chain-independent by product decision. Per-token
+  // native values convert at their OWN chain's rate before any cross-token total.
+  const { tokens, isLoading } = useAllMarkets();
+  const rhUsd = useEthPrice(robinhoodChain.id);
+  const usdRateOf = (chainId?: number) =>
+    chainConfig(chainId).nativeUsd.kind === "stable" ? 1 : rhUsd;
 
   // Pending-rewards getter differs by mode: v3/curve dividend tokens expose `claimableRewardOf`
   // (ETH only); v4 hooks expose `pendingOf` (ETH + token side). `claim()` is the same on both.
@@ -45,18 +49,21 @@ export function LivePortfolio() {
           abi: coilHookAbi,
           functionName: "pendingOf",
           args: [address ?? "0x0000000000000000000000000000000000000000"],
+          chainId: asSupportedChainId(t.chainId),
         } as const)
       : ({
           address: t.address,
           abi: tokenAbi,
           functionName: "claimableRewardOf",
           args: [address ?? "0x0000000000000000000000000000000000000000"],
+          chainId: asSupportedChainId(t.chainId),
         } as const),
     {
       address: t.address,
       abi: tokenAbi,
       functionName: "balanceOf",
       args: [address ?? "0x0000000000000000000000000000000000000000"],
+      chainId: asSupportedChainId(t.chainId),
     } as const,
   ]);
 
@@ -101,8 +108,8 @@ export function LivePortfolio() {
     contracts: myCreatorTokens.flatMap(
       (t) =>
         [
-          { address: t.address, abi: coilHookAbi, functionName: "creatorAccruedETH" },
-          { address: t.address, abi: coilHookAbi, functionName: "creatorAccruedTOKEN" },
+          { address: t.address, abi: coilHookAbi, functionName: "creatorAccruedETH", chainId: asSupportedChainId(t.chainId) },
+          { address: t.address, abi: coilHookAbi, functionName: "creatorAccruedTOKEN", chainId: asSupportedChainId(t.chainId) },
         ] as const,
     ),
     query: { enabled: !!address && myCreatorTokens.length > 0, refetchInterval: 30_000 },
@@ -113,12 +120,17 @@ export function LivePortfolio() {
     accruedTok: num(creatorQ.data?.[i * 2 + 1]?.result),
   }));
 
-  const totalClaimable = positions.reduce((s, p) => s + p.claimableRh, 0);
-  const totalValue = positions.reduce((s, p) => s + p.balance * p.token.priceRh, 0);
+  // Totals cross chains, so they're USD: each position converts at its own chain's rate.
+  const totalClaimable = positions.reduce((s, p) => s + p.claimableRh * usdRateOf(p.token.chainId), 0);
+  const totalValue = positions.reduce(
+    (s, p) => s + p.balance * p.token.priceRh * usdRateOf(p.token.chainId),
+    0,
+  );
   const totalNetPnl = positions.reduce((s, p) => {
     const c = pnl.get(marketKey(p.token));
     if (!c) return s;
-    return s + p.balance * p.token.priceRh + c.receivedEth - c.investedEth;
+    const native = p.balance * p.token.priceRh + c.receivedEth - c.investedEth;
+    return s + native * usdRateOf(p.token.chainId);
   }, 0);
 
   if (!isConnected) {
@@ -132,11 +144,11 @@ export function LivePortfolio() {
   return (
     <>
       <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile label="Total claimable" value={usdFromEth(totalClaimable, ethUsd, 2)} accent />
-        <StatTile label="Portfolio value" value={usdFromEth(totalValue, ethUsd, 2)} />
+        <StatTile label="Total claimable" value={usdFromEth(totalClaimable, 1, 2)} accent />
+        <StatTile label="Portfolio value" value={usdFromEth(totalValue, 1, 2)} />
         <StatTile
           label="Trading PnL"
-          value={`${totalNetPnl >= 0 ? "+" : "−"}${usdFromEth(Math.abs(totalNetPnl), ethUsd, 2)}`}
+          value={`${totalNetPnl >= 0 ? "+" : "−"}${usdFromEth(Math.abs(totalNetPnl), 1, 2)}`}
           sub={totalNetPnl >= 0 ? "in profit" : "underwater"}
         />
         <StatTile label="Tokens held" value={String(positions.length)} />
@@ -150,9 +162,9 @@ export function LivePortfolio() {
         <div className="mt-8 space-y-3">
           {positions.map((p) => (
             <PositionRow
-              key={p.token.address}
+              key={marketKey(p.token)}
               position={p}
-              ethUsd={ethUsd}
+              ethUsd={usdRateOf(p.token.chainId)}
               pnl={pnl.get(marketKey(p.token))}
             />
           ))}
@@ -171,7 +183,7 @@ export function LivePortfolio() {
           </p>
           <div className="mt-4 space-y-3">
             {creatorRows.map((r) => (
-              <CreatorRow key={r.token.address} row={r} ethUsd={ethUsd} onCollected={() => creatorQ.refetch()} />
+              <CreatorRow key={marketKey(r.token)} row={r} ethUsd={usdRateOf(r.token.chainId)} onCollected={() => creatorQ.refetch()} />
             ))}
           </div>
         </div>

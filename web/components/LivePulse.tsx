@@ -61,7 +61,7 @@ export function LivePulse({ tokens }: { tokens: TokenMarket[] }) {
             <div className="mt-4 flex items-center justify-between rounded-xl bg-obsidian-900/60 p-3">
               <span className="text-xs text-ink-3">1h volume</span>
               <span className="font-mono text-sm font-bold text-coil-400">
-                {usdFromEth(hot.vol1hEth, ethUsd, 0)}
+                {usdFromEth(hot.vol1hUsd, 1, 0)}
               </span>
             </div>
           </Link>
@@ -83,7 +83,7 @@ export function LivePulse({ tokens }: { tokens: TokenMarket[] }) {
                     {t.isBuy ? "BUY" : "SELL"}
                   </span>
                   <span className="w-20 shrink-0 font-mono text-ink-2">
-                    {usdFromEth(t.ethAmount, ethUsd, 2)}
+                    {usdFromEth(t.usdAmount, 1, 2)}
                   </span>
                   <span className="min-w-0 flex-1 truncate font-medium text-ink-2">
                     ${t.token.symbol}

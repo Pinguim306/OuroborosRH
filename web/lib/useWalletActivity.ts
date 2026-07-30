@@ -3,17 +3,16 @@
 import { getEventsRanged } from "./logsRanged";
 import { useEffect, useState } from "react";
 import { formatEther } from "viem";
-import { usePublicClient } from "wagmi";
 import { coilPoolId, curveAbi, v3PoolAbi, v4PoolManagerAbi, LIVE } from "./contracts";
 import {
-  blockClock,
+  chainCtx,
   parseV3Swap,
   parseV4Swap,
   supplyOf,
-  wethOf,
   v3TradersByTx,
-  V4_POOL_MANAGER,
+  useChainClients,
 } from "./useActivity";
+import { asSupportedChainId, marketKey, v4PoolManagerOf } from "./chain";
 import { isHiddenMarket } from "./useMarkets";
 import type { Address, TokenMarket } from "./types";
 
@@ -28,27 +27,33 @@ export interface WalletTrade {
   id: string;
   token: TokenMarket;
   isBuy: boolean;
+  /** In the TOKEN'S chain's native coin. */
   ethAmount: number;
+  /** Same trade in USD — the only unit summable across chains. */
+  usdAmount: number;
   time: number; // unix seconds, estimated from block distance
 }
 
 export interface WalletActivity {
-  volumeEth: number;
+  /** USD — profiles span chains, so the lifetime figure must not add ETH to USDC raw. */
+  volumeUsd: number;
   tradeCount: number;
   trades: WalletTrade[]; // newest first, capped
   isLoading: boolean;
 }
 
-const EMPTY: WalletActivity = { volumeEth: 0, tradeCount: 0, trades: [], isLoading: LIVE };
+const EMPTY: WalletActivity = { volumeUsd: 0, tradeCount: 0, trades: [], isLoading: LIVE };
 const TRADES_SHOWN = 10;
 
 export function useWalletActivity(tokens: TokenMarket[], wallet?: Address): WalletActivity {
-  const client = usePublicClient();
+  // Profiles are chain-independent: tokens may span chains, so each uses its own chain's client,
+  // clock and USD rate (see useChainClients/chainCtx).
+  const clients = useChainClients();
   const [data, setData] = useState<WalletActivity>(EMPTY);
-  const key = tokens.map((t) => t.address).join(",") + (wallet ?? "");
+  const key = tokens.map(marketKey).join(",") + (wallet ?? "");
 
   useEffect(() => {
-    if (!LIVE || !client || !wallet || tokens.length === 0) {
+    if (!LIVE || !wallet || tokens.length === 0) {
       setData({ ...EMPTY, isLoading: false });
       return;
     }
@@ -59,15 +64,30 @@ export function useWalletActivity(tokens: TokenMarket[], wallet?: Address): Wall
       try {
         // Hidden tokens never count toward a profile's footprint either.
         const visible = tokens.filter((t) => !isHiddenMarket(t));
-        const [clock, weth] = await Promise.all([
-          blockClock(client),
-          visible.some((t) => t.mode === "v3") ? wethOf(client) : Promise.resolve(undefined),
-        ]);
+
+        const chainIds = [...new Set(visible.map((t) => asSupportedChainId(t.chainId)))];
+        const ctxByChain = new Map<number, Awaited<ReturnType<typeof chainCtx>>>();
+        await Promise.all(
+          chainIds.map(async (id) => {
+            const c = clients[id];
+            if (!c) return;
+            ctxByChain.set(
+              id,
+              await chainCtx(c, id, visible.some((t) => t.mode === "v3" && asSupportedChainId(t.chainId) === id)),
+            );
+          }),
+        );
 
         const all: (WalletTrade & { bn: bigint })[] = [];
         await Promise.all(
           visible.slice(0, 40).map(async (t) => {
             try {
+              const tChain = asSupportedChainId(t.chainId);
+              const client = clients[tChain];
+              const ctx = ctxByChain.get(tChain);
+              if (!client || !ctx) return;
+              const { clock, weth, usd } = ctx;
+              const V4_POOL_MANAGER = v4PoolManagerOf(tChain);
               const supply = supplyOf(t);
               const tokenIs0 = weth ? t.address.toLowerCase() < weth.toLowerCase() : true;
               const isV3 = t.mode === "v3";
@@ -127,6 +147,7 @@ export function useWalletActivity(tokens: TokenMarket[], wallet?: Address): Wall
                   token: t,
                   isBuy,
                   ethAmount: eth,
+                  usdAmount: eth * usd,
                   bn: l.blockNumber,
                   time: Math.round(
                     clock.latestTs - Number(clock.latestNum - l.blockNumber) * clock.spb,
@@ -139,10 +160,11 @@ export function useWalletActivity(tokens: TokenMarket[], wallet?: Address): Wall
           }),
         );
 
-        all.sort((a, b) => (a.bn === b.bn ? 0 : a.bn > b.bn ? -1 : 1));
+        // Estimated time, not block number — heights from different chains don't compare.
+        all.sort((a, b) => b.time - a.time);
         if (alive)
           setData({
-            volumeEth: all.reduce((s, t) => s + t.ethAmount, 0),
+            volumeUsd: all.reduce((s, t) => s + t.usdAmount, 0),
             tradeCount: all.length,
             trades: all.slice(0, TRADES_SHOWN),
             isLoading: false,
@@ -156,7 +178,7 @@ export function useWalletActivity(tokens: TokenMarket[], wallet?: Address): Wall
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, key]);
+  }, [clients, key]);
 
   return data;
 }

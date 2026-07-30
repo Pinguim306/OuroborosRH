@@ -65,8 +65,10 @@ export function BurnTicker() {
   });
 
   // Burn-slice fees still sitting INSIDE each v4 hook, waiting for a (permissionless)
-  // sweepTreasury push into the burner. Read across every listed v4 token.
-  const { tokens } = useLiveMarkets();
+  // sweepTreasury push into the burner. Read across every listed v4 token — of the SELECTED
+  // chain, explicitly: every other read here follows `chainId`, and after Arc became the site
+  // default the no-arg call would list Arc tokens under a Robinhood burner.
+  const { tokens } = useLiveMarkets(chainId);
   const v4Tokens = tokens.filter((t) => t.mode === "v4");
   const accruedQ = useReadContracts({
     contracts: v4Tokens.map(

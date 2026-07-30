@@ -22,7 +22,7 @@ import {
   v4PriceFromPackedSlot0,
   type CoilMarket,
 } from "./contracts";
-import { CHAIN_ID, DEFAULT_CHAIN_ID, v4PoolManagerOf, type SupportedChainId } from "./chain";
+import { arcChain, CHAIN_ID, DEFAULT_CHAIN_ID, robinhoodChain, v4PoolManagerOf, type SupportedChainId } from "./chain";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -343,6 +343,22 @@ export function useLiveMarkets(chainId: SupportedChainId = DEFAULT_CHAIN_ID): {
     tokens,
     isLoading: marketsQ.isLoading || statsQ.isLoading || v4MarketsQ.isLoading || v4StatsQ.isLoading,
   };
+}
+
+/**
+ * Every chain's live markets, merged — for the surfaces the user decided are chain-independent:
+ * leaderboard, profiles, portfolio. One hook call per supported chain, statically (the registry is
+ * a fixed tuple, so this cannot violate the rules of hooks), tokens concatenated. Each token
+ * carries its chainId, which is what lets everything downstream (clients, clocks, USD rates,
+ * explorer links) stay per-chain while the LIST is one.
+ */
+export function useAllMarkets(): { tokens: TokenMarket[]; isLoading: boolean } {
+  const rh = useLiveMarkets(robinhoodChain.id);
+  const arc = useLiveMarkets(arcChain.id);
+  return useMemo(
+    () => ({ tokens: [...rh.tokens, ...arc.tokens], isLoading: rh.isLoading || arc.isLoading }),
+    [rh.tokens, arc.tokens, rh.isLoading, arc.isLoading],
+  );
 }
 
 /** Read a single token/curve by token address, searching every launchpad. */

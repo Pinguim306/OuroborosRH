@@ -3,9 +3,9 @@
 import { getEventsRanged } from "./logsRanged";
 import { useEffect, useState } from "react";
 import { formatEther } from "viem";
-import { usePublicClient } from "wagmi";
 import { coilPoolId, curveAbi, tokenAbi, v3PoolAbi, v4PoolManagerAbi, LIVE } from "./contracts";
-import { RELAYER_ROUTERS, V4_POOL_MANAGER } from "./useActivity";
+import { RELAYER_ROUTERS, useChainClients } from "./useActivity";
+import { asSupportedChainId, v4PoolManagerOf } from "./chain";
 import { marketKey } from "./chain";
 import type { Address, TokenMarket } from "./types";
 
@@ -34,12 +34,14 @@ interface SwapLegs {
 }
 
 export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, TokenPnl> {
-  const client = usePublicClient();
+  // Values stay in each TOKEN's native coin (they only ever combine with that token's own price);
+  // what must be per-chain is the READS — each token's events live on its own chain.
+  const clients = useChainClients();
   const [data, setData] = useState<Map<string, TokenPnl>>(new Map());
   const key = tokens.map(marketKey).join(",") + (user ?? "");
 
   useEffect(() => {
-    if (!LIVE || !client || !user || tokens.length === 0) {
+    if (!LIVE || !user || tokens.length === 0) {
       setData(new Map());
       return;
     }
@@ -50,6 +52,9 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
       await Promise.all(
         tokens.slice(0, 30).map(async (t) => {
           try {
+            const client = clients[asSupportedChainId(t.chainId)];
+            if (!client) return;
+            const V4_POOL_MANAGER = v4PoolManagerOf(t.chainId);
             const pnl: TokenPnl = { investedEth: 0, receivedEth: 0 };
 
             if (t.mode === "v4") {
@@ -175,7 +180,7 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, key]);
+  }, [clients, key]);
 
   return data;
 }

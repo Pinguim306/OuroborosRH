@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { MOCK_TOKENS } from "@/lib/mock/data";
 import { ANY_LIVE } from "@/lib/contracts";
-import { useLiveMarkets } from "@/lib/useMarkets";
+import { useAllMarkets } from "@/lib/useMarkets";
 import { useGlobalActivity } from "@/lib/useGlobalActivity";
-import { useEthPrice } from "@/lib/usePrice";
 import { usdFromEth, shortAddr, compact } from "@/lib/format";
 import type { TokenMarket } from "@/lib/types";
 import { IconSparkle, IconTrophy, IconVolume } from "@/components/Icon";
@@ -37,8 +36,9 @@ function Rank({ i }: { i: number }) {
  * lifetime volume and the creators whose tokens moved the most.
  */
 export default function LeaderboardPage() {
-  const ethUsd = useEthPrice();
-  const { tokens: liveTokens, isLoading: marketsLoading } = useLiveMarkets();
+  // Chain-independent by product decision: every chain's markets feed the same boards, and the
+  // hook returns USD so volumes from ETH-gas and USDC-gas chains sum honestly.
+  const { tokens: liveTokens, isLoading: marketsLoading } = useAllMarkets();
   const all: TokenMarket[] = ANY_LIVE ? liveTokens : MOCK_TOKENS;
   const { traders, creators, isLoading } = useGlobalActivity(all);
 
@@ -95,7 +95,7 @@ export default function LeaderboardPage() {
                   </span>
                   <span className="tabular shrink-0 text-xs text-ink-3">{compact(t.trades, 0)} trades</span>
                   <span className="tabular w-24 shrink-0 text-right font-semibold text-coil-400">
-                    {usdFromEth(t.volumeEth, ethUsd, 0)}
+                    {usdFromEth(t.volumeUsd, 1, 0)}
                   </span>
                 </Link>
               ))}
@@ -127,7 +127,7 @@ export default function LeaderboardPage() {
                     {c.tokens} {c.tokens === 1 ? "token" : "tokens"}
                   </span>
                   <span className="tabular w-24 shrink-0 text-right font-semibold text-coil-400">
-                    {usdFromEth(c.volumeEth, ethUsd, 0)}
+                    {usdFromEth(c.volumeUsd, 1, 0)}
                   </span>
                 </Link>
               ))}
