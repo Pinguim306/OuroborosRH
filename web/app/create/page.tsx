@@ -431,8 +431,6 @@ export default function CreatePage() {
                 onChange={setFeeChoice}
                 minBps={minBps!}
                 maxBps={maxBps!}
-                creatorRewards={rewards === "creator"}
-                chainId={chainId}
               />
             )}
 
