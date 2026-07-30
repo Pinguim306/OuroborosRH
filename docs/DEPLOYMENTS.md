@@ -6,6 +6,58 @@ novo, registre aqui no mesmo PR.
 
 ## Arc (5042) — mainnet da Circle, gas em USDC nativo
 
+> **Geração atual: instant-V3** (seção abaixo). O stack v4 segue registrado mais adiante — os
+> tokens já lançados nele continuam funcionando, mas novos lançamentos saem pelo v3.
+
+### Instant-V3 (geração atual) — lançamentos roteáveis por terminais externos
+
+Motivo da troca: pools v4 com hook custom (flags `BEFORE_SWAP_RETURNS_DELTA`) não são roteados
+por terminais/agregadores — na prática, "No route available" no GMGN. Os terminais da Arc roteiam
+os pools **Uniswap V3 do factory da DYOR** (`0xf0db7b58379503491d857dB50AC9ece64c653918` —
+`createPool` permissionless, verificado; tier 1% habilitado, spacing 200), então a geração atual
+lança direto num pool V3 desse factory contra a **fachada ERC20 do USDC nativo**
+(`0x3600000000000000000000000000000000000000`, 6 casas — saldo da fachada É o saldo nativo; ela
+faz o papel do WETH sem wrap). A taxa do protocolo passa a ser o próprio tier de 1% do pool:
+somos 100% da liquidez (posição travada no ArcPoolLocker, sem função de saque de principal), o
+`collect` permissionless colhe e divide **60% criador-ou-holders / 40% protocolo**. Volume de
+QUALQUER origem (nosso site, GMGN, agregadores) paga essa taxa.
+
+Contratos em `contracts/src/Arc*.sol`. Sem dependência de periferia de terceiros: mint e swap
+direto no pool via callbacks; o único código externo é o factory/pool (imutável). Risco aceito e
+documentado: o dono do factory DYOR pode um dia ligar o protocol fee do V3 (desvia 10–25% das LP
+fees); se acontecer, migramos lançamentos novos para factory próprio.
+
+Config de preço (`PrintArcV3Config`, `TICK_UPPER1=400600 SPAN=69000 TOKEN_SUPPLY=1e27`): mcap de
+abertura **$4.009** (espelha o $4k do v4), span 991,9×, nas duas orientações de ordenação
+token/fachada. Economia: creation fee **1 USDC** (`1e6` — unidades da fachada, 6 casas!), supply
+1 bi, dev-buy opcional como primeiro swap do pool, modos Loop/Creator Rewards. Router do site:
+interface fee 20 bps, teto 100. `LAUNCHPAD_VERSION 5`.
+
+Fluxo de aprovação (novidade vs. v4): usuário **aprova a fachada USDC** como um ERC20 comum
+(creation fee/compras) — o mesmo padrão que o router do GMGN usa. Nada de `msg.value`.
+
+Verificação: `ARC_RPC_URL=https://rpc.blockdaemon.mainnet.arc.io forge test -mc ArcV3Fork`
+(em `contracts/`) roda 11 testes contra o factory REAL num fork — launch a $4.009, trades com 1%
++ 0,2%, splits exatos, claim de dividendos, griefer de pré-init bloqueado, as duas orientações e
+trade externo sem nosso router. A fachada é a única coisa mockada (contrato de sistema; anvil
+vanilla não executa transfer dela — `test/mocks/MockUSDCFacade.sol` explica).
+
+**Deploy (rodar na máquina do dono):**
+
+```bash
+cd contracts
+PRIVATE_KEY=$PK forge script script/DeployArc.s.sol \
+  --rpc-url https://rpc.blockdaemon.mainnet.arc.io --broadcast
+```
+
+| Contrato | Endereço | Tx / bloco |
+| --- | --- | --- |
+| ArcLaunchpad | _(preencher pós-deploy)_ | |
+| ArcPoolLocker | _(preencher pós-deploy)_ | |
+| ArcSwapRouter | _(preencher pós-deploy)_ | |
+
+### Stack v4 (geração anterior — tokens existentes seguem nela)
+
 Deploy de 2026-07-30, carteira `0xd2bb88dccf3835b5dc24d08e6bf40578a5889265`. Custo total ≈ 0,41 USDC.
 
 ### Contratos do Coil

@@ -16,6 +16,12 @@ interface Vm {
     function addr(uint256 privateKey) external pure returns (address keyAddr);
     function envUint(string calldata name) external view returns (uint256 value);
     function envOr(string calldata name, address defaultValue) external view returns (address value);
+    function envOr(string calldata name, string calldata defaultValue)
+        external
+        view
+        returns (string memory value);
+    function createSelectFork(string calldata urlOrAlias) external returns (uint256 forkId);
+    function etch(address target, bytes calldata newRuntimeBytecode) external;
     function startBroadcast(uint256 privateKey) external;
     function stopBroadcast() external;
     function label(address account, string calldata newLabel) external;

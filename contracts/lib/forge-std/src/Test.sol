@@ -73,4 +73,47 @@ abstract contract Test {
         uint256 delta = a > b ? a - b : b - a;
         require(delta <= maxDelta, err);
     }
+
+    /// @dev Relative tolerance, 1e18-scaled like forge-std (0.01e18 = 1%).
+    function assertApproxEqRel(uint256 a, uint256 b, uint256 maxPercentDelta, string memory err)
+        internal
+        pure
+    {
+        if (b == 0) {
+            require(a == 0, err);
+            return;
+        }
+        uint256 delta = a > b ? a - b : b - a;
+        require((delta * 1e18) / b <= maxPercentDelta, err);
+    }
+
+    function assertGt(int256 a, int256 b, string memory err) internal pure {
+        require(a > b, err);
+    }
+
+    function assertEq(int256 a, int256 b, string memory err) internal pure {
+        require(a == b, err);
+    }
+
+    function assertEq(address a, address b, string memory err) internal pure {
+        require(a == b, err);
+    }
+
+    /// @dev forge-std's makeAddr, minus the label (the vendored Vm keeps labels optional).
+    function makeAddr(string memory name) internal pure returns (address a) {
+        a = vm.addr(uint256(keccak256(abi.encodePacked(name))));
+    }
+
+    /// @dev CREATE address for (deployer, nonce) — RLP for nonces a fresh contract
+    ///      actually uses (1..127 covers every case in these tests).
+    function computeCreateAddress(address deployer, uint256 nonce) internal pure returns (address) {
+        require(nonce > 0 && nonce < 128, "nonce out of shim range");
+        return address(
+            uint160(
+                uint256(
+                    keccak256(abi.encodePacked(bytes1(0xd6), bytes1(0x94), deployer, bytes1(uint8(nonce))))
+                )
+            )
+        );
+    }
 }
