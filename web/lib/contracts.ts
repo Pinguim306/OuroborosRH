@@ -123,7 +123,7 @@ const COIL_CONTRACTS: Record<number, CoilContracts> = {
     hookVersion: process.env.NEXT_PUBLIC_COIL_HOOK_VERSION,
     defaultHookVersion: 1,
   }),
-  // Arc mainnet: nothing deployed yet — env-only until it is.
+  // Arc mainnet (launchpad 0x2BB9…7B2b, deployed 2026-07-30 — see docs/DEPLOYMENTS.md).
   [arcChain.id]: coilContractsFrom({
     launchpadAddress: process.env.NEXT_PUBLIC_ARC_LAUNCHPAD_ADDRESS,
     coilSwapRouter: process.env.NEXT_PUBLIC_ARC_COIL_SWAP_ROUTER,
@@ -132,7 +132,14 @@ const COIL_CONTRACTS: Record<number, CoilContracts> = {
     coilBurner: process.env.NEXT_PUBLIC_ARC_COIL_BURNER,
     coilToken: process.env.NEXT_PUBLIC_ARC_COIL_TOKEN,
     hookVersion: process.env.NEXT_PUBLIC_ARC_COIL_HOOK_VERSION,
-    defaultHookVersion: LATEST_HOOK_VERSION,
+    // 1, NOT LATEST_HOOK_VERSION. Arc's deployed launchpad embeds the contracts-v4 CoilHook, whose
+    // address flags are v1 (0x88) — and this default is exactly the rule the block above spells
+    // out: the web must never lead the contract. Defaulting to "latest" here made mineSalt target
+    // 0x2088 (BEFORE_INITIALIZE, which the hook doesn't have), so every Arc launch mined an
+    // address the hook's own constructor rejects and createTokenV4 reverted HookAddressNotValid —
+    // verified both ways against the deployed launchpad on a fork. Bump via env when (and only
+    // when) a launchpad embedding a v2 hook is live on this chain.
+    defaultHookVersion: 1,
   }),
 };
 
