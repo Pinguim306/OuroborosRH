@@ -42,9 +42,17 @@ export function TokenView() {
   const params = useParams();
   const address = Array.isArray(params.address) ? params.address[0] : params.address;
   const hidden = isHiddenToken(address); // internal/test tokens resolve to "not found" everywhere
+
+  // `?chain=` on the URL is what identifies WHICH chain's token this page is (addresses collide
+  // across chains by design — the hook flags are mined into them). It MUST feed the resolvers
+  // below: useLiveTokenV4's chainId defaults to the default chain, so leaving it off asks the
+  // wrong network's launchpad — an Arc token then 404s on its own page while the launches list
+  // (which does pass the chain) happily shows it. The curve reader stays chain-less because the
+  // curve topology only exists on the default chain.
+  const chainId = useSelectedChainId();
   const live = useLiveToken(hidden ? undefined : (address as Address | undefined));
   // v4 (CoilHook) tokens live in a different launchpad the v3 reader can't see — fall back to it.
-  const liveV4 = useLiveTokenV4(hidden ? undefined : (address as Address | undefined));
+  const liveV4 = useLiveTokenV4(hidden ? undefined : (address as Address | undefined), chainId);
   const token = hidden
     ? undefined
     : LIVE
@@ -54,10 +62,6 @@ export function TokenView() {
         : undefined;
   const isV4 = token?.mode === "v4";
   const [shareOpen, setShareOpen] = useState(false);
-
-  // `?chain=` on the URL is what identifies WHICH chain's token this page is (addresses collide
-  // across chains by design — the hook flags are mined into them).
-  const chainId = useSelectedChainId();
   const ethUsd = useEthPrice(chainId);
   const activity = useTokenActivity(token);
   const holdersData = useTokenHolders(token);

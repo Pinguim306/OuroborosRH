@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient, useReadContract } from "wagmi";
+import { asSupportedChainId } from "./chain";
 import { CONTRACTS, LIVE, coilHookAbi, launchpadAbi, feeLockerAbi } from "./contracts";
 import type { Address, TokenMarket } from "./types";
 
@@ -54,7 +55,8 @@ export function totalFeesEth(token: TokenMarket, holderShare?: number): number {
  * Rewards the same slice routes to the creator, but it is still the fee earmarked as rewards.
  */
 export function useV4RewardsPoolEth(token?: TokenMarket): number {
-  const client = usePublicClient();
+  // FeeTaken events live on the token's own chain.
+  const client = usePublicClient({ chainId: asSupportedChainId(token?.chainId) });
   const [total, setTotal] = useState(0);
   const isV4 = token?.mode === "v4";
   const addr = token?.address;
