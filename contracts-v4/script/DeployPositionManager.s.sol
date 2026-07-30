@@ -54,10 +54,6 @@ import {Script, console2} from "forge-std/Script.sol";
 ///     FOUNDRY_PROFILE=e2e forge script script/DeployPositionManager.s.sol:DeployPositionManager \
 ///       --rpc-url $RPC_URL --broadcast --private-key $PK
 contract DeployPositionManager is Script {
-    /// @dev CREATE2 salt. The deployer is this script contract, whose address varies per run, so this
-    ///   does not make the result predictable — it is just a fixed input.
-    bytes32 constant POSM_SALT = bytes32(uint256(0x03));
-
     function run() external returns (address posm) {
         address poolManager = vm.envAddress("POOL_MANAGER");
         address permit2 = vm.envAddress("PERMIT2");
@@ -76,10 +72,9 @@ contract DeployPositionManager is Script {
         require(creationCode.length > 0, "PositionManager artifact missing - run `forge build` first");
 
         vm.startBroadcast();
-        posm = _create2(
+        posm = _create(
             creationCode,
-            abi.encode(poolManager, permit2, unsubscribeGasLimit, tokenDescriptor, wrappedNative),
-            POSM_SALT
+            abi.encode(poolManager, permit2, unsubscribeGasLimit, tokenDescriptor, wrappedNative)
         );
         vm.stopBroadcast();
 
@@ -103,14 +98,18 @@ contract DeployPositionManager is Script {
         console2.log("Next: pass this as POSITION_MANAGER to DeployCoilLaunchpad.");
     }
 
-    function _create2(bytes memory creationCode, bytes memory args, bytes32 salt)
-        internal
-        returns (address addr)
-    {
+    /// @dev Plain CREATE, deliberately not CREATE2. An EOA cannot execute CREATE2 itself, so a
+    ///   broadcast CREATE2 is rewritten by Forge into a call through the canonical deterministic
+    ///   deployer proxy (0x4e59b44847b379578588920cA78FbF26c0B4956C) — and Arc does not have it
+    ///   (`eth_getCode` returns empty; verified 2026-07-30). The gap is invisible until the real
+    ///   broadcast: simulation injects the proxy in memory, and anvil predeploys it at genesis, so
+    ///   both lie. Nothing here wants a deterministic address anyway — the POSM's address is plain
+    ///   config — so a regular deployment transaction from the broadcaster is strictly simpler.
+    function _create(bytes memory creationCode, bytes memory args) internal returns (address addr) {
         bytes memory initcode = abi.encodePacked(creationCode, args);
         assembly {
-            addr := create2(0, add(initcode, 0x20), mload(initcode), salt)
+            addr := create(0, add(initcode, 0x20), mload(initcode))
         }
-        require(addr != address(0), "CREATE2 failed");
+        require(addr != address(0), "CREATE failed");
     }
 }
