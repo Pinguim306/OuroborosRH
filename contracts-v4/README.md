@@ -180,8 +180,11 @@ FOUNDRY_PROFILE=e2e forge script script/DeployCoilLaunchpad.s.sol:DeployCoilLaun
 ```
 
 `CREATION_FEE` é no gas coin da chain e **sempre em 18 casas**: Robinhood Chain 0,001 ETH = `1e15`;
-Arc 2 USDC = `2e18`, porque a EVM escala o USDC nativo da Arc pra 18 casas (não as 6 do ERC-20) —
-`2e6` cobraria 0,000000000002. `BURN_SHARE_OF_REMAINDER_BPS=0` em chain sem $COIL pra comprar e
+Arc 1 USDC = `1e18`, porque a EVM escala o USDC nativo da Arc pra 18 casas (não as 6 do ERC-20) —
+`1e6` cobraria 0,000000000001. `BURN_SHARE_OF_REMAINDER_BPS=0` em chain sem $COIL pra comprar e
 queimar; a fatia inteira restante vai pro criador/holders.
+
+O valor é ajustável depois do deploy pelo owner (`setCreationFee`), então não precisa de redeploy pra
+mudar de ideia.
 
 Plano completo da migração em `../docs/COIL-V4-PLANO.md`.

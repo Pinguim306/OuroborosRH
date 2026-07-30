@@ -64,7 +64,7 @@ export default function CreatePage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // Creation fees differ per network (e.g. 2 USDC on Arc vs 0.001 ETH on Robinhood Chain), so
+  // Creation fees differ per network (e.g. 1 USDC on Arc vs 0.001 ETH on Robinhood Chain), so
   // these reads must follow the selected chain — LaunchWidget already sends the per-chain fee as
   // the transaction's `value`, and a display sourced from the default chain would quote a number
   // the user is not actually about to pay.
@@ -275,8 +275,9 @@ export default function CreatePage() {
         <p className="mt-3 text-ink-3">{copy.create.subtitle}</p>
       </div>
 
-      {/* The "nothing else" promise has to follow the actual fee. Arc charges 2 USDC to launch, and
-          this line used to claim there was no creation fee directly above a summary quoting one. */}
+      {/* The "nothing else" promise has to follow the actual fee, which is read on-chain and is
+          owner-adjustable — so no number is written here. This line used to claim there was no
+          creation fee at all, directly above a summary quoting one. */}
       <p className="mx-auto mt-4 max-w-lg text-center text-sm leading-relaxed text-ink-3">
         {feeEth
           ? `No presale, no team allocation — a ${feeEth} ${NATIVE_SYMBOL} creation fee plus network gas, and nothing else.`

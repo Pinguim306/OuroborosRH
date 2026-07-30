@@ -19,8 +19,8 @@ import {CoilLaunchpad} from "../src/CoilLaunchpad.sol";
 ///     PLATFORM_TREASURY — COIL buy&burn treasury (burn cut)
 ///     CREATION_FEE      — native fee per launch (wei), default 0. Denominated in the CHAIN'S
 ///                         gas coin, always 18 decimals here: Robinhood Chain 0.001 ETH = 1e15;
-///                         Arc 2 USDC = 2e18, because Arc's native USDC is scaled to 18 decimals
-///                         by the EVM (NOT the ERC-20's 6) — using 2e6 would charge 0.000000000002.
+///                         Arc 1 USDC = 1e18, because Arc's native USDC is scaled to 18 decimals
+///                         by the EVM (NOT the ERC-20's 6) — using 1e6 would charge 0.000000000001.
 ///     TOKEN_SUPPLY      — supply per launch (wei)
 ///     TICK_LOWER, TICK_UPPER — one-sided range (defaults -6000 / 0)
 ///     PROTOCOL_SHARE_AT_MIN_BPS / PROTOCOL_SHARE_AT_MAX_BPS — the protocol's share of the fee at
