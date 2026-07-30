@@ -1,5 +1,5 @@
 import { createPool, sql as defaultSql } from "@vercel/postgres";
-import { DEFAULT_CHAIN_ID } from "./chain";
+import { CHAIN_ID } from "./chain";
 
 /** First available Postgres connection string. `@vercel/postgres`'s default `sql` only reads
  *  `POSTGRES_URL`, but Vercel's Postgres (now Neon-backed) integrations often inject the URL under a
@@ -58,7 +58,9 @@ export function ensureSchema(): Promise<void> {
       // and CREATE2 salt mining makes that more than theoretical. Added after the table shipped:
       // rows written before this column predate multi-chain, so the default backfills them (and any
       // insert from an old instance still mid-rollout) to the default chain.
-      await ddl(`alter table messages add column if not exists chain_id bigint not null default ${DEFAULT_CHAIN_ID}`);
+      await ddl(// Rows that predate the chain_id column were all written when the site was Robinhood-only,
+      // so the backfill default is CHAIN_ID — a fact about history, not about the current default.
+      `alter table messages add column if not exists chain_id bigint not null default ${CHAIN_ID}`);
       await sql`create index if not exists messages_chain_token_id_idx on messages (chain_id, token, id desc)`;
       await sql`drop index if exists messages_token_id_idx`; // subsumed by the chain-first index
     })().catch((e) => {

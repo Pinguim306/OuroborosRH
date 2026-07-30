@@ -1,5 +1,5 @@
 import { createPublicClient, http, type PublicClient } from "viem";
-import { chainConfig, DEFAULT_CHAIN_ID, arcChain } from "@/lib/chain";
+import { chainConfig, robinhoodChain, arcChain } from "@/lib/chain";
 
 /**
  * Server-side read clients, one per chain. The /api/* routes run on Vercel, where the browser's
@@ -8,7 +8,9 @@ import { chainConfig, DEFAULT_CHAIN_ID, arcChain } from "@/lib/chain";
  * follow <PREFIX>_RPC_URL. Unset falls through to the chain's public RPC.
  */
 const SERVER_RPC: Record<number, string | undefined> = {
-  [DEFAULT_CHAIN_ID]: process.env.RH_RPC_URL,
+  // RH_RPC_URL keeps its historical name and stays Robinhood's — keyed explicitly so the
+  // site's default-chain choice can never re-point it.
+  [robinhoodChain.id]: process.env.RH_RPC_URL,
   [arcChain.id]: process.env.ARC_RPC_URL,
 };
 

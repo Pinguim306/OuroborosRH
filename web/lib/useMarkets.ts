@@ -418,9 +418,9 @@ export function useLiveToken(tokenAddress?: Address): {
 
   const mapped = useMemo(() => {
     if (!tuple || !found || !statsQ.data) return undefined;
-    // Curve/v3 markets only exist on the default chain (that topology is Robinhood-Chain's);
+    // Curve/v3 markets only exist on Robinhood Chain (CHAIN_ID — the legacy topology's home);
     // every other chain is v4-only and resolves through useLiveTokenV4.
-    return fromStats(tuple, found.launchpad, statsQ.data, 0, DEFAULT_CHAIN_ID, weth);
+    return fromStats(tuple, found.launchpad, statsQ.data, 0, CHAIN_ID, weth);
   }, [tuple, found, statsQ.data, weth]);
 
   return {

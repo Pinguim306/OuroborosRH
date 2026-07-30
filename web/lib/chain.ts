@@ -39,7 +39,12 @@ export const robinhoodChain = defineChain({
   testnet: false,
 });
 
-/** Chain id every transaction is pinned to (wagmi auto-prompts a network switch). */
+/**
+ * The chain the LEGACY curve/V3 stack lives on. Every curve launchpad, FeeLocker, graduated V3
+ * pool and their write paths exist only on Robinhood Chain, so the modules that serve that
+ * topology (TradeWidget, the curve readers, the fee globals below in contracts.ts) pin here.
+ * This is NOT the site's default view — that's DEFAULT_CHAIN_ID, which now points elsewhere.
+ */
 export const CHAIN_ID = robinhoodChain.id;
 
 /** The native coin ticker shown throughout the UI. */
@@ -92,8 +97,9 @@ export const ROBINHOOD_CONTRACTS = {
  * Multi-chain registry (additive — the default chain above is unchanged).
  * ------------------------------------------------------------------------- */
 
-/** Per-chain RPC override. The default chain keeps the unprefixed NEXT_PUBLIC_RPC_URL it has
- *  always used; every other chain takes the same name behind its chain prefix. Next.js inlines
+/** Per-chain RPC override. Robinhood Chain keeps the unprefixed NEXT_PUBLIC_RPC_URL it has
+ *  always used (historical convention, independent of which chain is the default view); every
+ *  other chain takes the same name behind its chain prefix. Next.js inlines
  *  NEXT_PUBLIC_* only at *literal* `process.env.X` sites, so each var is spelled out — a computed
  *  `process.env[key]` reads as undefined in the browser bundle. Public defaults ship below, so
  *  nothing has to be configured for reads to work. */
@@ -215,11 +221,24 @@ export const CHAINS: Record<number, ChainConfig> = {
   },
 };
 
-/** The chain everything falls back to — identical to CHAIN_ID, which stays the pinned tx chain. */
-export const DEFAULT_CHAIN_ID = CHAIN_ID;
+/**
+ * The site's default chain — what a URL without `?chain=` means, where the API points when the
+ * selector is omitted, and the network the picker opens on. Arc, by request: it is the flagship
+ * launch surface now.
+ *
+ * Deliberately DECOUPLED from CHAIN_ID above. The default is a product choice that can move;
+ * the curve topology's home cannot. Everything keyed to a *chain* references one of the two
+ * explicitly — nothing but view-level fallbacks may reference the default.
+ *
+ * Known cost of the flip, accepted: bare token links shared before it (all Robinhood) now need
+ * `?chain=4663`, which every link the site generates carries automatically. The old bare ones
+ * fall back to Arc and show "not found" with a "may live on another network" hint.
+ */
+export const DEFAULT_CHAIN_ID = arcChain.id;
 
-/** Every chain the app knows about, default first (wagmi treats chains[0] as the fallback). */
-export const SUPPORTED_CHAINS = [robinhoodChain, arcChain] as const;
+/** Every chain the app knows about, default first (wagmi treats chains[0] as the fallback, and
+ *  the network picker lists them in this order). */
+export const SUPPORTED_CHAINS = [arcChain, robinhoodChain] as const;
 
 /** Narrow chain id — what wagmi's `switchChain`/`chainId` options accept. */
 export type SupportedChainId = (typeof SUPPORTED_CHAINS)[number]["id"];

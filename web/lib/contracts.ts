@@ -1,5 +1,5 @@
 import { encodeAbiParameters, keccak256 } from "viem";
-import { arcChain, DEFAULT_CHAIN_ID } from "./chain";
+import { arcChain, CHAIN_ID, DEFAULT_CHAIN_ID, robinhoodChain } from "./chain";
 import type { Address } from "./types";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
@@ -102,15 +102,20 @@ function coilContractsFrom(env: {
 }
 
 /**
- * Per-chain Coil deployments. ENV CONVENTION: the default chain keeps the unprefixed
- * NEXT_PUBLIC_* names it has always used (nothing to re-configure); every other chain takes the
- * same name behind a chain prefix — NEXT_PUBLIC_<PREFIX>_<NAME>, e.g.
- * NEXT_PUBLIC_ARC_COIL_LAUNCHPAD. Prefix: ARC (5042).
+ * Per-chain Coil deployments. ENV CONVENTION: Robinhood Chain keeps the unprefixed NEXT_PUBLIC_*
+ * names it has always used (a historical fact, NOT "the default chain's" — the default is a view
+ * choice and has moved); every other chain takes the same name behind a chain prefix —
+ * NEXT_PUBLIC_<PREFIX>_<NAME>, e.g. NEXT_PUBLIC_ARC_COIL_LAUNCHPAD. Prefix: ARC (5042).
  * Next.js inlines NEXT_PUBLIC_* only at *literal* `process.env.X` sites, so every var is spelled
  * out below — a computed `process.env[key]` reads as undefined in the browser bundle.
  */
 const COIL_CONTRACTS: Record<number, CoilContracts> = {
-  [DEFAULT_CHAIN_ID]: coilContractsFrom({
+  // Keyed to Robinhood Chain EXPLICITLY, not to DEFAULT_CHAIN_ID: the unprefixed env names hold
+  // Robinhood's addresses by historical convention, and the site's default chain is a view-level
+  // choice that must never re-attribute them. (When the default was Robinhood the two were
+  // indistinguishable; the day it moved to Arc, this key being "default" would have handed
+  // Robinhood's contract addresses to Arc.)
+  [robinhoodChain.id]: coilContractsFrom({
     launchpadAddress: process.env.NEXT_PUBLIC_LAUNCHPAD_ADDRESS,
     coilSwapRouter: process.env.NEXT_PUBLIC_COIL_SWAP_ROUTER,
     coilSwapRouterV3: process.env.NEXT_PUBLIC_COIL_SWAP_ROUTER_V3,
@@ -148,7 +153,11 @@ export function coilContracts(chainId?: number): CoilContracts {
   return (chainId != null ? COIL_CONTRACTS[chainId] : undefined) ?? COIL_CONTRACTS[DEFAULT_CHAIN_ID];
 }
 
-const DEFAULT_COIL = COIL_CONTRACTS[DEFAULT_CHAIN_ID];
+/** The legacy module-level globals below (LIVE, CONTRACTS, COIL_SWAP_ROUTER…) predate multichain
+ *  and are consumed by the curve/V3 stack, which exists only on Robinhood Chain — so they pin to
+ *  CHAIN_ID, not to the site's default view. LIVE doubles as the app-wide "demo mode off" switch,
+ *  which must not flip just because the default chain moved to one without a curve launchpad. */
+const DEFAULT_COIL = COIL_CONTRACTS[CHAIN_ID];
 
 /**
  * Deployed contract addresses on the DEFAULT chain. NEXT_PUBLIC_LAUNCHPAD_ADDRESS accepts a comma-
