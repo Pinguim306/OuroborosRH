@@ -1,5 +1,6 @@
 "use client";
 
+import { getEventsRanged } from "./logsRanged";
 import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
@@ -95,7 +96,7 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
               const isV4 = t.mode === "v4";
               const [logs, traders] = await Promise.all([
                 isV4
-                  ? client!.getContractEvents({
+                  ? getEventsRanged(client!, {
                       address: V4_POOL_MANAGER,
                       abi: v4PoolManagerAbi,
                       eventName: "Swap",
@@ -104,14 +105,14 @@ export function useGlobalActivity(tokens: TokenMarket[]): GlobalActivity {
                       toBlock: "latest",
                     })
                   : isV3
-                    ? client!.getContractEvents({
+                    ? getEventsRanged(client!, {
                         address: t.curve, // the pool
                         abi: v3PoolAbi,
                         eventName: "Swap",
                         fromBlock: 0n,
                         toBlock: "latest",
                       })
-                    : client!.getContractEvents({
+                    : getEventsRanged(client!, {
                         address: t.curve,
                         abi: curveAbi,
                         eventName: "Trade",

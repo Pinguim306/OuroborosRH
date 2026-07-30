@@ -1,5 +1,6 @@
 "use client";
 
+import { getEventsRanged } from "@/lib/logsRanged";
 import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
@@ -37,14 +38,14 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
     let alive = true;
     (async () => {
       try {
-        const logs = await client.getContractEvents({
+        const logs = await getEventsRanged(client, {
           address: locker,
           abi: feeLockerAbi,
           eventName: "PositionLocked",
           args: { token: token.address },
           fromBlock: 0n,
           toBlock: "latest",
-        });
+        }) as { args?: Record<string, unknown> }[];
         const id = (logs[0]?.args as { tokenId?: bigint } | undefined)?.tokenId;
         if (alive && typeof id === "bigint") setPositionId(id);
       } catch {

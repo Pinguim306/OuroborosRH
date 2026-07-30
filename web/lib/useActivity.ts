@@ -1,5 +1,6 @@
 "use client";
 
+import { getEventsRanged } from "./logsRanged";
 import { useEffect, useMemo, useState } from "react";
 import { formatEther } from "viem";
 import { usePublicClient } from "wagmi";
@@ -165,7 +166,7 @@ export async function v3TradersByTx(
   const sellerByTx = new Map<string, Address>();
   try {
     const [outOfPool, intoPool] = await Promise.all([
-      client.getContractEvents({
+      getEventsRanged(client, {
         address: token,
         abi: tokenAbi,
         eventName: "Transfer",
@@ -173,7 +174,7 @@ export async function v3TradersByTx(
         fromBlock: 0n,
         toBlock: "latest",
       }),
-      client.getContractEvents({
+      getEventsRanged(client, {
         address: token,
         abi: tokenAbi,
         eventName: "Transfer",
@@ -195,7 +196,7 @@ export async function v3TradersByTx(
     // (user → router → pool), so the pool-side Transfer names the router. The same-tx Transfer
     // into/out of the router names the real wallet — use it wherever the direct pass drew a blank.
     const [intoRouter, outOfRouter] = await Promise.all([
-      client.getContractEvents({
+      getEventsRanged(client, {
         address: token,
         abi: tokenAbi,
         eventName: "Transfer",
@@ -203,7 +204,7 @@ export async function v3TradersByTx(
         fromBlock: 0n,
         toBlock: "latest",
       }),
-      client.getContractEvents({
+      getEventsRanged(client, {
         address: token,
         abi: tokenAbi,
         eventName: "Transfer",
@@ -362,7 +363,7 @@ export function useTokenActivity(token?: TokenMarket): Activity {
         if (token.mode === "v4") {
           const poolManager = v4PoolManagerOf(token.chainId);
           const [logs, traders] = await Promise.all([
-            client.getContractEvents({
+            getEventsRanged(client, {
               address: poolManager,
               abi: v4PoolManagerAbi,
               eventName: "Swap",
@@ -394,7 +395,7 @@ export function useTokenActivity(token?: TokenMarket): Activity {
           }
         } else if (token.mode === "v3") {
           const [logs, wethAddr, traders] = await Promise.all([
-            client.getContractEvents({
+            getEventsRanged(client, {
               address: curve, // the pool
               abi: v3PoolAbi,
               eventName: "Swap",
@@ -426,7 +427,7 @@ export function useTokenActivity(token?: TokenMarket): Activity {
             });
           }
         } else {
-          const logs = await client.getContractEvents({
+          const logs = await getEventsRanged(client, {
             address: curve,
             abi: curveAbi,
             eventName: "Trade",
@@ -540,7 +541,7 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
             // singleton, whose Swap events are filtered by the token's PoolId.
             const [trades, transfers] = await Promise.all([
               t.mode === "v4"
-                ? client!.getContractEvents({
+                ? getEventsRanged(client!, {
                     address: v4PoolManagerOf(t.chainId ?? listChainId),
                     abi: v4PoolManagerAbi,
                     eventName: "Swap",
@@ -549,21 +550,21 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
                     toBlock: "latest",
                   })
                 : t.mode === "v3"
-                  ? client!.getContractEvents({
+                  ? getEventsRanged(client!, {
                       address: t.curve,
                       abi: v3PoolAbi,
                       eventName: "Swap",
                       fromBlock: 0n,
                       toBlock: "latest",
                     })
-                  : client!.getContractEvents({
+                  : getEventsRanged(client!, {
                       address: t.curve,
                       abi: curveAbi,
                       eventName: "Trade",
                       fromBlock: 0n,
                       toBlock: "latest",
                     }),
-              client!.getContractEvents({
+              getEventsRanged(client!, {
                 address: t.address,
                 abi: tokenAbi,
                 eventName: "Transfer",
@@ -652,7 +653,7 @@ export function useTokenHolders(token?: TokenMarket): { holders: Holder[]; isLoa
     let alive = true;
     (async () => {
       try {
-        const logs = await client.getContractEvents({
+        const logs = await getEventsRanged(client, {
           address: addr,
           abi: tokenAbi,
           eventName: "Transfer",
