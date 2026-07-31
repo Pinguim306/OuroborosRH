@@ -1137,3 +1137,101 @@ export const feeLockerAbi = [
     ],
   },
 ] as const;
+
+/** ArcPoolLocker — the Arc generation's FeeLocker sibling. Positions are held at POOL level and
+ *  keyed by TOKEN (no NFT ids), so `collect` takes the token address directly. Amount units on the
+ *  USDC side are the facade's 6 decimals. */
+export const arcPoolLockerAbi = [
+  {
+    type: "function",
+    name: "holderShareBps",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "collect",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "token", type: "address" }],
+    outputs: [
+      { name: "usdcSide", type: "uint256" },
+      { name: "tokenSide", type: "uint256" },
+    ],
+  },
+  {
+    type: "event",
+    name: "FeesCollected",
+    inputs: [
+      { name: "token", type: "address", indexed: true },
+      { name: "usdcToHolders", type: "uint256", indexed: false },
+      { name: "usdcToProtocol", type: "uint256", indexed: false },
+      { name: "tokenSide", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
+
+/** ArcSwapRouter — the site's exact-in router for Arc's V3 pools. USDC amounts in facade units
+ *  (6 dec), token amounts 18 dec; `buy` = USDC → token. */
+export const arcSwapRouterAbi = [
+  {
+    type: "function",
+    name: "swapExactIn",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "fee", type: "uint24" },
+      { name: "buy", type: "bool" },
+      { name: "amountIn", type: "uint256" },
+      { name: "minAmountOut", type: "uint256" },
+      { name: "recipient", type: "address" },
+      { name: "deadline", type: "uint256" },
+    ],
+    outputs: [{ name: "amountOut", type: "uint256" }],
+  },
+] as const;
+
+/** The Arc launchpad's launch event — same name as the legacy one but a different third arg
+ *  (creator, not an NFT position id), hence its own ABI entry for log parsing. */
+export const arcTokenLaunchedV3Abi = [
+  {
+    type: "event",
+    name: "TokenLaunchedV3",
+    inputs: [
+      { name: "token", type: "address", indexed: true },
+      { name: "pool", type: "address", indexed: true },
+      { name: "creator", type: "address", indexed: true },
+    ],
+  },
+] as const;
+
+/** Plain ERC20 slice for the USDC facade (approve/allowance/balance — 6-decimal units). */
+export const erc20Abi = [
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "allowance",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+] as const;

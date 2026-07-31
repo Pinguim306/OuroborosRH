@@ -2,10 +2,10 @@
 
 import { getEventsRanged } from "@/lib/logsRanged";
 import { useEffect, useState } from "react";
-import { formatEther } from "viem";
+import { formatEther, formatUnits } from "viem";
 import { usePublicClient, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
-import { CONTRACTS, launchpadAbi, feeLockerAbi } from "@/lib/contracts";
-import { asSupportedChainId } from "@/lib/chain";
+import { CONTRACTS, arcPoolLockerAbi, launchpadAbi, feeLockerAbi } from "@/lib/contracts";
+import { asSupportedChainId, v3QuoteOf } from "@/lib/chain";
 import { usdFromEth } from "@/lib/format";
 import { useEthPrice } from "@/lib/usePrice";
 import type { Address, TokenMarket } from "@/lib/types";
@@ -13,28 +13,36 @@ import type { Address, TokenMarket } from "@/lib/types";
 /**
  * Harvest a V3 token's accrued pool fees. In V3 mode the 1% pool fee accrues
  * INSIDE the Uniswap position; it only becomes protocol revenue + holder rewards
- * when someone cranks FeeLocker.collect() — which is permissionless, so we let
+ * when someone cranks the locker's collect() — which is permissionless, so we let
  * anyone do it right from the token page.
+ *
+ * Two locker generations answer here: Robinhood's FeeLocker custodies position
+ * NFTs (collect by tokenId, resolved from its PositionLocked event) and Arc's
+ * ArcPoolLocker holds pool-level positions keyed by token (collect by address,
+ * USDC side in the facade's 6-decimal units).
  */
 export function HarvestFees({ token }: { token: TokenMarket }) {
-  const client = usePublicClient();
-  const ethUsd = useEthPrice();
+  const chainId = asSupportedChainId(token.chainId);
+  const client = usePublicClient({ chainId });
+  const ethUsd = useEthPrice(chainId);
+  const arcStyle = !!v3QuoteOf(chainId); // facade-quoted chain → ArcPoolLocker semantics
+  const quoteDecimals = v3QuoteOf(chainId)?.decimals ?? 18;
   const [positionId, setPositionId] = useState<bigint | undefined>();
   const [pending, setPending] = useState<{ eth: number; tok: number } | undefined>();
 
-  // The position NFT lives in the FeeLocker of the launchpad that CREATED this
-  // token — for legacy tokens that is not the current primary launchpad.
+  // The position lives in the locker of the launchpad that CREATED this token —
+  // for legacy tokens that is not the current primary launchpad.
   const lockerQ = useReadContract({
     address: token.launchpad ?? CONTRACTS.launchpad,
     abi: launchpadAbi,
     functionName: "feeLocker",
+    chainId,
   });
   const locker = lockerQ.data as Address | undefined;
 
-
-  // Resolve the token's locked position id from the locker's PositionLocked event.
+  // Legacy locker only: resolve the token's position NFT id from PositionLocked.
   useEffect(() => {
-    if (!client || !locker) return;
+    if (!client || !locker || arcStyle) return;
     let alive = true;
     (async () => {
       try {
@@ -55,7 +63,7 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
     return () => {
       alive = false;
     };
-  }, [client, locker, token.address]);
+  }, [client, locker, token.address, arcStyle]);
 
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
@@ -64,19 +72,30 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
   // Quote the uncollected fees by SIMULATING collect() (eth_call — nothing is
   // executed): the return values are exactly what a harvest would pay out now.
   useEffect(() => {
-    if (!client || !locker || positionId === undefined) return;
+    if (!client || !locker) return;
+    if (!arcStyle && positionId === undefined) return;
     let alive = true;
     (async () => {
       try {
-        const { result } = await client.simulateContract({
-          address: locker,
-          abi: feeLockerAbi,
-          functionName: "collect",
-          args: [positionId],
-        });
-        const [ethSide, tokSide] = result as readonly [bigint, bigint];
+        const { result } = arcStyle
+          ? await client.simulateContract({
+              address: locker,
+              abi: arcPoolLockerAbi,
+              functionName: "collect",
+              args: [token.address],
+            })
+          : await client.simulateContract({
+              address: locker,
+              abi: feeLockerAbi,
+              functionName: "collect",
+              args: [positionId!],
+            });
+        const [quoteSide, tokSide] = result as readonly [bigint, bigint];
         if (alive)
-          setPending({ eth: Number(formatEther(ethSide)), tok: Number(formatEther(tokSide)) });
+          setPending({
+            eth: Number(formatUnits(quoteSide, quoteDecimals)),
+            tok: Number(formatEther(tokSide)),
+          });
       } catch {
         if (alive) setPending(undefined);
       }
@@ -84,9 +103,9 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
     return () => {
       alive = false;
     };
-  }, [client, locker, positionId, isSuccess]);
+  }, [client, locker, positionId, isSuccess, arcStyle, token.address, quoteDecimals]);
 
-  if (!locker || positionId === undefined) return null;
+  if (!locker || (!arcStyle && positionId === undefined)) return null;
 
   return (
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-obsidian-900/50 p-3">
@@ -103,13 +122,21 @@ export function HarvestFees({ token }: { token: TokenMarket }) {
       </div>
       <button
         onClick={() =>
-          writeContract({
-            chainId: asSupportedChainId(token.chainId),
-            address: locker,
-            abi: feeLockerAbi,
-            functionName: "collect",
-            args: [positionId],
-          })
+          arcStyle
+            ? writeContract({
+                chainId,
+                address: locker,
+                abi: arcPoolLockerAbi,
+                functionName: "collect",
+                args: [token.address],
+              })
+            : writeContract({
+                chainId,
+                address: locker,
+                abi: feeLockerAbi,
+                functionName: "collect",
+                args: [positionId!],
+              })
         }
         disabled={busy}
         className="btn-ghost shrink-0"

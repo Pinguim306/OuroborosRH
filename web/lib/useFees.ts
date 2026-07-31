@@ -9,18 +9,28 @@ import { CONTRACTS, LIVE, coilHookAbi, launchpadAbi, feeLockerAbi } from "./cont
 import type { Address, TokenMarket } from "./types";
 
 /**
- * The FeeLocker's holder share as a fraction (holderShareBps / 10000), or
+ * The fee locker's holder share as a fraction (holderShareBps / 10000), or
  * undefined while loading / when not needed. Pass `enabled: false` to skip the
  * reads entirely (e.g. no V3 tokens on screen). `launchpad` picks whose locker
  * to read — pass the token's own launchpad for legacy tokens; defaults to the
- * primary.
+ * primary. `chainId` pins the reads to the token's chain (both locker
+ * generations — Robinhood's FeeLocker and Arc's ArcPoolLocker — answer the same
+ * two getters).
  */
-export function useHolderShare(enabled = true, launchpad?: Address): number | undefined {
+export function useHolderShare(
+  enabled = true,
+  launchpad?: Address,
+  chainId?: number,
+): number | undefined {
+  const id = asSupportedChainId(chainId);
   const lockerQ = useReadContract({
     address: launchpad ?? CONTRACTS.launchpad,
     abi: launchpadAbi,
     functionName: "feeLocker",
-    query: { enabled: LIVE && enabled },
+    chainId: id,
+    // A caller-supplied launchpad is a live token's own; the primary-launchpad fallback stays
+    // behind the demo-mode switch like before.
+    query: { enabled: enabled && (!!launchpad || LIVE) },
   });
   const locker = lockerQ.data as Address | undefined;
 
@@ -28,7 +38,8 @@ export function useHolderShare(enabled = true, launchpad?: Address): number | un
     address: locker,
     abi: feeLockerAbi,
     functionName: "holderShareBps",
-    query: { enabled: LIVE && enabled && !!locker },
+    chainId: id,
+    query: { enabled: enabled && !!locker },
   });
   return typeof shareQ.data === "bigint" ? Number(shareQ.data) / 10_000 : undefined;
 }
@@ -102,7 +113,7 @@ export function useV4RewardsPoolEth(token?: TokenMarket): number {
 /** Single-token convenience wrapper around useHolderShare + totalFeesEth (v4 uses the hook's
  *  FeeTaken events instead — the v3/curve getters don't exist there). */
 export function useTotalFeesEth(token?: TokenMarket): number {
-  const share = useHolderShare(token?.mode === "v3", token?.launchpad);
+  const share = useHolderShare(token?.mode === "v3", token?.launchpad, token?.chainId);
   const v4Pool = useV4RewardsPoolEth(token);
   if (!token) return 0;
   return token.mode === "v4" ? v4Pool : totalFeesEth(token, share);

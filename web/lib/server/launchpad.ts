@@ -3,6 +3,8 @@ import {
   chainConfig,
   DEFAULT_CHAIN_ID,
   robinhoodChain,
+  v3QuoteOf,
+  v3QuoteScaleOf,
   v4PoolManagerOf,
   type SupportedChainId,
 } from "@/lib/chain";
@@ -12,6 +14,7 @@ import {
   launchpadAbi,
   curveAbi,
   tokenAbi,
+  v3PoolAbi,
   coilLaunchpadV4Abi,
   coilSwapRouterAbi,
   coilPoolKey,
@@ -51,9 +54,10 @@ export function normalizeAddress(a: string | undefined | null): Address | null {
 
 /** A market as exposed by the API. All amounts are strings to stay JSON-safe. */
 export interface ApiMarket {
-  /** Present (as "v4") for Uniswap-v4 hook tokens — they trade through the CoilSwapRouter, not a
-   *  bonding curve; `curve` then just mirrors the token address. Absent for curve/V3 markets. */
-  mode?: "v4";
+  /** "v4" for Uniswap-v4 hook tokens (they trade through the CoilSwapRouter; `curve` mirrors the
+   *  token address); "v3" for instant-V3 tokens (`curve` is the Uniswap V3 pool — on Arc, routed
+   *  by external terminals too). Absent for bonding-curve markets. */
+  mode?: "v4" | "v3";
   /** Which chain this market lives on; undefined = the default chain. */
   chainId?: number;
   token: Address;
@@ -84,7 +88,11 @@ interface RawMarket {
   createdAt: bigint;
 }
 
-function curveStatsCalls(m: RawMarket) {
+/** Per-market stats batch — curve getters (fail harmlessly on V3 pools), plus the V3 fork's own
+ *  reads: the launchpad's isV3Token flag and the pool's slot0. Each mode trusts only its reads. */
+const CURVE_STATS_PER_MARKET = 8;
+
+function curveStatsCalls(m: RawMarket, launchpad: Address) {
   return [
     { address: m.curve, abi: curveAbi, functionName: "currentPrice" },
     { address: m.curve, abi: curveAbi, functionName: "graduationProgress" },
@@ -92,16 +100,39 @@ function curveStatsCalls(m: RawMarket) {
     { address: m.curve, abi: curveAbi, functionName: "realNativeRaised" },
     { address: m.token, abi: tokenAbi, functionName: "totalSupply" },
     { address: m.curve, abi: curveAbi, functionName: "pair" },
+    { address: launchpad, abi: launchpadAbi, functionName: "isV3Token", args: [m.token] },
+    { address: m.curve, abi: v3PoolAbi, functionName: "slot0" },
   ] as const;
 }
 
-function toApiMarket(m: RawMarket, r: readonly { result?: unknown }[], chainId: ApiChainId): ApiMarket {
-  const price = (r[0]?.result as bigint) ?? 0n;
+/** Token price in the chain's native coin from a V3 pool's slot0 tuple, quote-decimals rescaled. */
+function v3PriceFrom(slot0: unknown, tokenIs0: boolean, quoteScale: number): number {
+  const sq = (slot0 as readonly [bigint, ...unknown[]] | undefined)?.[0];
+  if (typeof sq !== "bigint" || sq === 0n) return 0;
+  const ratio = Number(sq) / 2 ** 96;
+  const p10 = ratio * ratio;
+  return (tokenIs0 ? p10 : p10 > 0 ? 1 / p10 : 0) * quoteScale;
+}
+
+function toApiMarket(
+  m: RawMarket,
+  r: readonly { result?: unknown }[],
+  chainId: ApiChainId,
+  weth?: Address,
+): ApiMarket {
   const supply = (r[4]?.result as bigint) ?? 0n;
-  const priceEth = Number(formatEther(price));
   const supplyNum = Number(formatEther(supply));
+  const isV3 = Boolean(r[6]?.result);
+  const priceEth = isV3
+    ? v3PriceFrom(
+        r[7]?.result,
+        weth ? m.token.toLowerCase() < weth.toLowerCase() : true,
+        v3QuoteScaleOf(chainId),
+      )
+    : Number(formatEther((r[0]?.result as bigint) ?? 0n));
   const pairRaw = r[5]?.result as Address | undefined;
   return {
+    ...(isV3 ? { mode: "v3" as const } : {}),
     chainId,
     token: m.token,
     curve: m.curve,
@@ -114,10 +145,27 @@ function toApiMarket(m: RawMarket, r: readonly { result?: unknown }[], chainId: 
     marketCapEth: String(priceEth * supplyNum),
     totalSupply: String(supplyNum),
     realNativeRaisedEth: formatEther((r[3]?.result as bigint) ?? 0n),
-    graduationProgress: Number((r[1]?.result as bigint) ?? 0n) / 1e18,
+    graduationProgress: isV3 ? 1 : Number((r[1]?.result as bigint) ?? 0n) / 1e18,
     graduated: Boolean(r[2]?.result),
-    pair: pairRaw && pairRaw !== ZERO ? pairRaw : null,
+    pair: isV3 ? m.curve : pairRaw && pairRaw !== ZERO ? pairRaw : null,
   };
+}
+
+/** The chain's V3 quote address (WETH role): a declared constant (Arc's facade) or the
+ *  launchpad's live `weth` read; undefined when neither resolves. */
+async function wethForChain(chainId: ApiChainId, launchpad: Address): Promise<Address | undefined> {
+  const declared = v3QuoteOf(chainId)?.address;
+  if (declared) return declared;
+  try {
+    const w = await publicClientFor(chainId).readContract({
+      address: launchpad,
+      abi: launchpadAbi,
+      functionName: "weth",
+    });
+    return typeof w === "string" ? (w as Address) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 const V4_DEADLINE_SECONDS = 20 * 60;
@@ -329,7 +377,7 @@ export async function fetchMarkets(
   }
 
   const client = publicClientFor(chainId);
-  const [raw, v4Markets] = await Promise.all([
+  const [raw, v4Markets, weth] = await Promise.all([
     live
       ? (client.readContract({
           address: launchpad,
@@ -339,16 +387,19 @@ export async function fetchMarkets(
         }) as Promise<readonly RawMarket[]>)
       : Promise.resolve([] as readonly RawMarket[]),
     fetchV4Markets(limit, chainId).catch(() => [] as ApiMarket[]),
+    live ? wethForChain(chainId, launchpad) : Promise.resolve(undefined),
   ]);
 
   let markets: ApiMarket[] = [];
   if (raw.length > 0) {
-    const calls = raw.flatMap(curveStatsCalls);
+    const calls = raw.flatMap((m) => curveStatsCalls(m, launchpad));
     const results = (await client.multicall({
       contracts: calls as never,
     })) as { result?: unknown }[];
-    const per = 6;
-    markets = raw.map((m, i) => toApiMarket(m, results.slice(i * per, i * per + per), chainId));
+    const per = CURVE_STATS_PER_MARKET;
+    markets = raw.map((m, i) =>
+      toApiMarket(m, results.slice(i * per, i * per + per), chainId, weth),
+    );
   }
 
   const merged = [...markets, ...v4Markets]
@@ -399,10 +450,13 @@ export async function fetchMarket(
     metadataURI: m[5],
     createdAt: m[6],
   };
-  const results = (await client.multicall({
-    contracts: curveStatsCalls(raw) as never,
-  })) as { result?: unknown }[];
-  return toApiMarket(raw, results, chainId);
+  const [results, weth] = await Promise.all([
+    client.multicall({ contracts: curveStatsCalls(raw, launchpad) as never }) as Promise<
+      { result?: unknown }[]
+    >,
+    wethForChain(chainId, launchpad),
+  ]);
+  return toApiMarket(raw, results, chainId, weth);
 }
 
 export async function quoteBuy(

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { formatEther } from "viem";
 import { coilPoolId, curveAbi, tokenAbi, v3PoolAbi, v4PoolManagerAbi, LIVE } from "./contracts";
 import { RELAYER_ROUTERS, useChainClients } from "./useActivity";
-import { asSupportedChainId, v4PoolManagerOf } from "./chain";
+import { asSupportedChainId, v3QuoteScaleOf, v4PoolManagerOf } from "./chain";
 import { marketKey } from "./chain";
 import type { Address, TokenMarket } from "./types";
 
@@ -140,12 +140,14 @@ export function usePnL(tokens: TokenMarket[], user?: Address): Map<string, Token
 
               // The token leg's sign matches the transfer direction (a buy pulls the
               // token OUT of the pool → its delta is the negative one). Whichever
-              // side that is, the other side is the ETH leg.
+              // side that is, the other side is the quote leg — rescaled where the
+              // quote is sub-18-decimal (Arc's USDC facade).
+              const v3Scale = v3QuoteScaleOf(t.chainId);
               const ethLeg = (tx: string, tokenLeftPool: boolean): number => {
                 const legs = legsByTx.get(tx);
                 if (!legs) return 0;
                 const tokenIsAmount0 = legs.amount0Negative === tokenLeftPool;
-                return tokenIsAmount0 ? legs.abs1 : legs.abs0;
+                return (tokenIsAmount0 ? legs.abs1 : legs.abs0) * v3Scale;
               };
 
               for (const l of buys) pnl.investedEth += ethLeg(l.transactionHash, true);

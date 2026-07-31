@@ -22,7 +22,14 @@ import {
   v4PriceFromPackedSlot0,
   type CoilMarket,
 } from "./contracts";
-import { arcChain, CHAIN_ID, DEFAULT_CHAIN_ID, robinhoodChain, v4PoolManagerOf, type SupportedChainId } from "./chain";
+import {
+  arcChain,
+  DEFAULT_CHAIN_ID,
+  robinhoodChain,
+  v3QuoteScaleOf,
+  v4PoolManagerOf,
+  type SupportedChainId,
+} from "./chain";
 import type { Address, TokenMarket } from "./types";
 
 /**
@@ -86,14 +93,17 @@ function imageFrom(metadataURI: string): string {
   return "🪙";
 }
 
-/** Price of the launched token in ETH from a V3 pool's slot0 (both sides 18 dec). */
-function v3PriceFromSlot0(slot0: unknown, tokenIs0: boolean): number {
+/** Price of the launched token in the chain's native coin from a V3 pool's slot0. `quoteScale`
+ *  lifts a sub-18-decimal quote side into native math — 10^(18-6) where the quote is Arc's USDC
+ *  facade, 1 on WETH chains (see v3QuoteScaleOf). */
+function v3PriceFromSlot0(slot0: unknown, tokenIs0: boolean, quoteScale = 1): number {
   const arr = slot0 as readonly [bigint, ...unknown[]] | undefined;
   const sq = arr?.[0];
   if (typeof sq !== "bigint" || sq === 0n) return 0;
   const ratio = Number(sq) / 2 ** 96; // sqrt(token1/token0)
   const price1per0 = ratio * ratio;
-  return tokenIs0 ? price1per0 : price1per0 > 0 ? 1 / price1per0 : 0;
+  const raw = tokenIs0 ? price1per0 : price1per0 > 0 ? 1 / price1per0 : 0;
+  return raw * quoteScale;
 }
 
 /* v4 pools live inside the singleton PoolManager — pricing comes from an extsload read of the
@@ -211,7 +221,7 @@ function fromStats(
     t.mode = "v3";
     t.pair = m.curve; // the pool doubles as the DexScreener pair
     const tokenIs0 = weth ? m.token.toLowerCase() < weth.toLowerCase() : true;
-    t.priceRh = v3PriceFromSlot0(r[b + 8]?.result, tokenIs0);
+    t.priceRh = v3PriceFromSlot0(r[b + 8]?.result, tokenIs0, v3QuoteScaleOf(chainId));
     const supplyN = num(bn(r[b + 5]?.result));
     t.marketCapRh = t.priceRh * supplyN;
   } else {
@@ -361,25 +371,31 @@ export function useAllMarkets(): { tokens: TokenMarket[]; isLoading: boolean } {
   );
 }
 
-/** Read a single token/curve by token address, searching every launchpad. */
-export function useLiveToken(tokenAddress?: Address): {
+/** Read a single token/curve by token address, searching every curve/V3-style launchpad ON THE
+ *  GIVEN CHAIN. Robinhood's curve stack and Arc's instant-V3 launchpad both answer this ABI. */
+export function useLiveToken(
+  tokenAddress?: Address,
+  chainId: SupportedChainId = DEFAULT_CHAIN_ID,
+): {
   token: TokenMarket | undefined;
   isLoading: boolean;
   notFound: boolean;
 } {
   const zero = "0x0000000000000000000000000000000000000000" as Address;
+  const { launchpads, launchpad: primary, live } = coilContracts(chainId);
 
   const idxQ = useReadContracts({
-    contracts: LAUNCHPADS.map(
+    contracts: launchpads.map(
       (lp) =>
         ({
           address: lp,
           abi: launchpadAbi,
           functionName: "marketIndexByToken",
           args: [tokenAddress ?? zero],
+          chainId,
         }) as const,
     ),
-    query: { enabled: LIVE && !!tokenAddress },
+    query: { enabled: live && !!tokenAddress },
   });
 
   // First launchpad that knows this token wins.
@@ -387,27 +403,31 @@ export function useLiveToken(tokenAddress?: Address): {
     const rs = idxQ.data ?? [];
     for (let i = 0; i < rs.length; i++) {
       const idx = bn(rs[i]?.result);
-      if (idx > 0n) return { launchpad: LAUNCHPADS[i], idx };
+      if (idx > 0n) return { launchpad: launchpads[i], idx };
     }
     return undefined;
-  }, [idxQ.data]);
+  }, [idxQ.data, launchpads]);
 
   const marketQ = useReadContract({
     address: found?.launchpad ?? zero,
     abi: launchpadAbi,
     functionName: "markets",
     args: [found ? found.idx - 1n : 0n],
-    query: { enabled: LIVE && !!found },
+    chainId,
+    query: { enabled: live && !!found },
   });
   const market = marketQ.data as
     | readonly [Address, Address, Address, string, string, string, bigint]
     | undefined;
 
+  // The quote address orienting this chain's V3 pools: the launchpad's `weth` — which on Arc is
+  // the launchpad's own WETH-role alias for the USDC facade, so one read serves both topologies.
   const wethQ = useReadContract({
-    address: CONTRACTS.launchpad,
+    address: primary,
     abi: launchpadAbi,
     functionName: "weth",
-    query: { enabled: LIVE },
+    chainId,
+    query: { enabled: live },
   });
   const weth = asAddr(wethQ.data);
 
@@ -428,21 +448,20 @@ export function useLiveToken(tokenAddress?: Address): {
   );
 
   const statsQ = useReadContracts({
-    contracts: tuple && found ? statsCalls(tuple, found.launchpad) : [],
-    query: { enabled: LIVE && !!tuple && !!found },
+    contracts:
+      tuple && found ? statsCalls(tuple, found.launchpad).map((c) => ({ ...c, chainId })) : [],
+    query: { enabled: live && !!tuple && !!found },
   });
 
   const mapped = useMemo(() => {
     if (!tuple || !found || !statsQ.data) return undefined;
-    // Curve/v3 markets only exist on Robinhood Chain (CHAIN_ID — the legacy topology's home);
-    // every other chain is v4-only and resolves through useLiveTokenV4.
-    return fromStats(tuple, found.launchpad, statsQ.data, 0, CHAIN_ID, weth);
-  }, [tuple, found, statsQ.data, weth]);
+    return fromStats(tuple, found.launchpad, statsQ.data, 0, chainId, weth);
+  }, [tuple, found, statsQ.data, weth, chainId]);
 
   return {
     token: mapped,
     isLoading: idxQ.isLoading || marketQ.isLoading || statsQ.isLoading,
-    notFound: LIVE && !idxQ.isLoading && !found,
+    notFound: live && !idxQ.isLoading && !found,
   };
 }
 

@@ -17,6 +17,7 @@ import {
   COIL_SWAP_ROUTER,
   COIL_SWAP_ROUTER_V3,
   COIL_BURNER,
+  coilContracts,
   coilPoolId,
   v4PoolManagerAbi,
 } from "./contracts";
@@ -27,6 +28,8 @@ import {
   marketKey,
   robinhoodChain,
   uniswapContracts,
+  v3QuoteOf,
+  v3QuoteScaleOf,
   v4PoolManagerOf,
 } from "./chain";
 import { nativeUsdOf } from "./nativeUsd";
@@ -60,13 +63,16 @@ export interface ParsedSwap {
 
 /**
  * Decode a Uniswap V3 Swap log. Amounts are the pool's deltas (negative = out of
- * the pool): a buy pulls tokens out (token delta < 0) and pushes ETH in.
+ * the pool): a buy pulls tokens out (token delta < 0) and pushes the quote coin in.
  * sqrtPriceX96 gives the post-swap price, oriented by token0/token1 sort order.
+ * `quoteScale` lifts a sub-18-decimal quote side (Arc's 6-dec USDC facade) into the
+ * site's 18-dec native math — both the notional and the implied price need it.
  */
 export function parseV3Swap(
   l: { args: unknown; blockNumber: bigint; transactionHash: string; logIndex: number },
   tokenIs0: boolean,
   supply: number,
+  quoteScale = 1,
 ): ParsedSwap {
   const a = l.args as {
     sender?: Address;
@@ -79,10 +85,10 @@ export function parseV3Swap(
   const amtEth = (tokenIs0 ? a.amount1 : a.amount0) ?? 0n;
   const ratio = Number(a.sqrtPriceX96 ?? 0n) / 2 ** 96;
   const p10 = ratio * ratio; // token1-per-token0 after the swap
-  const price = tokenIs0 ? p10 : p10 > 0 ? 1 / p10 : 0;
+  const price = (tokenIs0 ? p10 : p10 > 0 ? 1 / p10 : 0) * quoteScale;
   return {
     bn: l.blockNumber,
-    ethAmount: Number(formatEther(amtEth < 0n ? -amtEth : amtEth)),
+    ethAmount: Number(formatEther(amtEth < 0n ? -amtEth : amtEth)) * quoteScale,
     tokenAmount: Number(formatEther(amtTok < 0n ? -amtTok : amtTok)),
     mcap: price * supply,
     isBuy: amtTok < 0n,
@@ -136,15 +142,22 @@ export const INFRA_ADDRESSES = new Set(
     "0xCaf681a66D020601342297493863E78C959E5cb2", // Uniswap SwapRouter02 (chain 4663)
     "0x8876789976dEcBfCbBbe364623C63652db8C0904", // Uniswap UniversalRouter (chain 4663)
     "0x65050A9b7E5075A2bA5cED7b1b64EE66262c40Dc", // router/aggregator seen relaying user swaps
+    "0x53DeA4F7783C1DE84cecC5c989BC37a557154827", // GMGN's Arc router (relays user trades)
+    "0xB8159ba378904F803639d274CEc79F788931C9c8", // GMGN's Arc fee wallet
     ZERO,
     DEAD,
-    // Coil platform contracts — routers relay user swaps, the rest custody funds.
+    // Coil platform contracts — routers relay user swaps, the rest custody funds. Both chains'
+    // deployments, because the merged surfaces (boards, profiles) score trades from every chain.
     COIL_SWAP_ROUTER,
     COIL_SWAP_ROUTER_V3,
     COIL_LAUNCHPAD,
     COIL_BURNER,
     ...LAUNCHPADS,
     ...Object.values(uniswapContracts(CHAIN_ID)),
+    ...[arcChain.id].flatMap((id) => {
+      const c = coilContracts(id);
+      return [c.coilSwapRouter, c.coilSwapRouterV3, c.coilLaunchpad, c.coilBurner, ...c.launchpads];
+    }),
   ]
     .map((a) => String(a).toLowerCase())
     .filter((a) => a.startsWith("0x")),
@@ -242,8 +255,11 @@ export async function v3TradersByTx(
   return { buyerByTx, sellerByTx };
 }
 
-/** The launchpad's WETH address — needed to orient V3 pool swaps. */
-export async function wethOf(client: PublicClient): Promise<string | undefined> {
+/** The quote address orienting a chain's V3 pool swaps. A constant where the chain declares one
+ *  (Arc's USDC facade — no RPC round-trip); otherwise the Robinhood launchpad's live WETH read. */
+export async function wethOf(client: PublicClient, chainId?: number): Promise<string | undefined> {
+  const declared = v3QuoteOf(chainId ?? CHAIN_ID)?.address;
+  if (declared) return declared;
   try {
     const w = await client.readContract({
       address: CONTRACTS.launchpad,
@@ -316,8 +332,9 @@ export function useChainClients(): Record<number, PublicClient | undefined> {
 
 /** Everything a per-chain aggregation pass needs, resolved once per chain, not once per token:
  *  the block clock (chains tick at different speeds, so time estimates and "1h ago" cutoffs are
- *  strictly per-chain), WETH (only where a chain has V3 topology), and the native coin's USD rate
- *  (what makes cross-chain SUMS comparable — see nativeUsd.ts). */
+ *  strictly per-chain), WETH-role quote (only where a chain has V3 topology), the quote-decimals
+ *  rescale for that chain's V3 amounts, and the native coin's USD rate (what makes cross-chain
+ *  SUMS comparable — see nativeUsd.ts). */
 export async function chainCtx(
   client: PublicClient,
   chainId: number,
@@ -325,14 +342,15 @@ export async function chainCtx(
 ): Promise<{
   clock: Awaited<ReturnType<typeof blockClock>>;
   weth: string | undefined;
+  v3Scale: number;
   usd: number;
 }> {
   const [clock, weth, usd] = await Promise.all([
     blockClock(client),
-    needsWeth ? wethOf(client) : Promise.resolve(undefined),
+    needsWeth ? wethOf(client, chainId) : Promise.resolve(undefined),
     nativeUsdOf(chainId),
   ]);
-  return { clock, weth, usd };
+  return { clock, weth, v3Scale: v3QuoteScaleOf(chainId), usd };
 }
 
 /** Round a raw seconds span to a "nice" candle interval. */
@@ -446,12 +464,13 @@ export function useTokenActivity(token?: TokenMarket): Activity {
               fromBlock: 0n,
               toBlock: "latest",
             }),
-            wethOf(client),
+            wethOf(client, token.chainId),
             v3TradersByTx(client, token.address, curve),
           ]);
           const tokenIs0 = wethAddr ? token.address.toLowerCase() < wethAddr.toLowerCase() : true;
+          const v3Scale = v3QuoteScaleOf(token.chainId);
           for (const l of logs) {
-            const s = parseV3Swap(l, tokenIs0, supply);
+            const s = parseV3Swap(l, tokenIs0, supply, v3Scale);
             // The Swap event names the router; the token Transfer in the same tx
             // names the actual wallet — prefer it.
             const wallet = s.isBuy
@@ -571,11 +590,14 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
     async function load() {
       // Hidden tokens contribute nothing to per-token stats or the launchpad totals.
       const visible = tokens.filter((t) => !isHiddenMarket(t));
-      // WETH is only needed to orient V3 pool swaps (token0 vs token1 sort order).
+      // The WETH-role quote is only needed to orient V3 pool swaps (token0/token1 sort order).
       const [cutoff, wethAddr] = await Promise.all([
         cutoffBlock(client!, DAY),
-        visible.some((t) => t.mode === "v3") ? wethOf(client!) : Promise.resolve(undefined),
+        visible.some((t) => t.mode === "v3")
+          ? wethOf(client!, listChainId)
+          : Promise.resolve(undefined),
       ]);
+      const v3Scale = v3QuoteScaleOf(listChainId);
       const next = new Map<string, MarketStat>();
       await Promise.all(
         visible.slice(0, 40).map(async (t) => {
@@ -630,7 +652,7 @@ export function useMarketsActivity(tokens: TokenMarket[]): Map<string, MarketSta
                 nat = s.ethAmount;
                 mcap = s.mcap;
               } else if (t.mode === "v3") {
-                const s = parseV3Swap(l, tokenIs0, supply);
+                const s = parseV3Swap(l, tokenIs0, supply, v3Scale);
                 nat = s.ethAmount;
                 mcap = s.mcap;
               } else {

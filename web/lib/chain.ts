@@ -182,6 +182,14 @@ export type ChainConfig = {
    * the chain offers.
    */
   loopRewards: boolean;
+  /**
+   * The quote currency of this chain's instant-V3 pools, when that topology exists here. Robinhood
+   * leaves it unset — its pools pair against WETH (18 dec), read live from the launchpad. Arc's
+   * pools pair against the native-USDC ERC20 facade: a system contract mirroring native balances
+   * at 6 decimals, so every quote-side amount and price off a V3 pool needs the 10^(18-6) rescale
+   * before it can join the site's 18-decimal native math.
+   */
+  v3Quote?: { address: Address; decimals: number };
   uniswap: UniswapContracts;
 };
 
@@ -209,8 +217,11 @@ export const CHAINS: Record<number, ChainConfig> = {
     nativeUsd: { kind: "stable" },
     explorerBase: arcChain.blockExplorers.default.url,
     dexscreenerSlug: null,
-    // Arc launches are Creator Rewards only.
-    loopRewards: false,
+    // The v4 generation was Creator Rewards only; the instant-V3 generation streams harvested
+    // pool fees through the token's dividend machinery, so both modes are on the menu again.
+    loopRewards: true,
+    // Canonical native-USDC ERC20 facade — the quote side of every Arc V3 pool (see the type doc).
+    v3Quote: { address: "0x3600000000000000000000000000000000000000", decimals: 6 },
     uniswap: {
       uniswapV2Router: optAddr(process.env.NEXT_PUBLIC_ARC_UNISWAP_V2_ROUTER),
       uniswapV2Factory: optAddr(process.env.NEXT_PUBLIC_ARC_UNISWAP_V2_FACTORY),
@@ -295,6 +306,19 @@ export function uniswapContracts(chainId?: number): UniswapContracts {
  *  come back empty, which is exactly how the callers already treat a pool that doesn't exist. */
 export function v4PoolManagerOf(chainId?: number): Address {
   return chainConfig(chainId).uniswap.v4PoolManager ?? (ZERO_ADDR as Address);
+}
+
+/** The chain's V3 quote currency when it's a KNOWN constant (Arc's USDC facade). Undefined means
+ *  "resolve it live from the launchpad" — Robinhood's WETH — not "no v3 here". */
+export function v3QuoteOf(chainId?: number): { address: Address; decimals: number } | undefined {
+  return chainConfig(chainId).v3Quote;
+}
+
+/** Multiplier that lifts a chain's V3 quote-side amounts/prices into the site's 18-decimal native
+ *  math: 10^(18 - quote decimals). 1 wherever the quote is already 18-dec (WETH chains). */
+export function v3QuoteScaleOf(chainId?: number): number {
+  const q = chainConfig(chainId).v3Quote;
+  return q ? 10 ** (18 - q.decimals) : 1;
 }
 
 /** Explorer deep link. Every chain here runs Blockscout, which shares the /tx /address /token
